@@ -1,1 +1,11 @@
+obj/
+build/
+bin/
+*.d
 *.o
+*.a
+*.out
+*.dSYM/
+.DS_STORE
+tags
+tmp
