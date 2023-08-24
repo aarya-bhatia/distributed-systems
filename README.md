@@ -3,23 +3,29 @@
 ## Server Architecture
 
 Main thread:
-- Listen for tcp connections
-- fork() a process for each connection
+- Listen for tcp connections on a specified port
+- fork() a process for each connection and start worker
 
-Child process:
-- Read the request from client
-- fork() and run the grep program
-- Pipe the output to the socket
+Worker process:
+- Read the request from client socket
+- Run the requested shell command in a new process
+- Pipe the output of the command to the client socket
 
 ## Client Architecture
 
 Main thread:
-- Creates a thread for each machine and opens tcp connections
-- Blocks while queue is empty
+- Create a blocking message queue
+- Loads the hosts ID, IP address and port from a file called "hosts"
+- Create a thread for each host and open a tcp connection
+- Blocks while message queue is empty
 - When new message in queue, print it to stdout
+- Wait for threads to exit
 
 Worker thread:
-- Sends the request to the server containing the options and query term
-- Receives the logs from the server and pushes them to queue
+- If cannot connect to host, exit worker
+- Sends a request to the server containing the specified shell command
+- Receives messages from the server and pushes them to message queue
+- Messages are split by new line characters
+- On completion, adds a FINISHED message to the queue
 
 
