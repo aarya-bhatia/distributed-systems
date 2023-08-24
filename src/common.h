@@ -25,6 +25,7 @@
 
 #include <list>
 #include <vector>
+#include <string>
 
 #define MAX_MSG_LEN 1024
 #define CRLF "\r\n"
@@ -71,7 +72,7 @@ float calc_duration(struct timespec *start_time, struct timespec *end_time);
 
 char **split_string(const char *str);
 
-std::vector<char *>
+std::vector<std::string>
 readlines(const char *filename); /* Returns a vector of lines in given file */
 size_t word_len(const char *str);
 

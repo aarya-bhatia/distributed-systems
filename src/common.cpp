@@ -73,8 +73,8 @@ char *rstrstr(char *string, char *pattern) {
   return prev;
 }
 
-std::vector<char *> readlines(const char *filename) {
-  std::vector<char *> lines;
+std::vector<std::string> readlines(const char *filename) {
+  std::vector<std::string> lines;
   FILE *file = fopen(filename, "r");
 
   if (!file) {
@@ -86,21 +86,21 @@ std::vector<char *> readlines(const char *filename) {
   size_t len = 0;
   ssize_t nread;
 
-  // Second line contains channel topic
   while ((nread = getline(&line, &len, file)) > 0) {
     assert(line);
 
-    if (strlen(line) == 0) {
-      continue;
-    }
-
     size_t n = strlen(line);
 
-    if (line[n - 1] == '\n') {
+    if (n && line[n - 1] == '\n') {
       line[n - 1] = 0;
     }
 
-    lines.push_back(line);
+    // empty line
+    if (*line == 0) {
+      continue;
+    }
+
+    lines.push_back(std::string(line));
   }
 
   free(line);
