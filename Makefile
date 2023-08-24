@@ -6,13 +6,17 @@ CFLAGS=-DDEBUG -D_GNU_SOURCE -std=c++14 -g \
 LDFLAGS=-Llib -pthread
 # LINKLIBS += -fsanitize=thread
 
-OBJ=obj/main.o obj/common.o
+OBJ=obj/common.o
 
 .PHONY: all clean
 
-all: bin/main
+all: bin/server bin/client
 
-bin/main: $(OBJ)
+bin/server: obj/server.o $(OBJ)
+	mkdir -p $(dir $@);
+	$(CC) $^ -o $@ $(LDFLAGS)
+
+bin/client: obj/client.o $(OBJ)
 	mkdir -p $(dir $@);
 	$(CC) $^ -o $@ $(LDFLAGS)
 
