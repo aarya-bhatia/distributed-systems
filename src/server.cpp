@@ -3,11 +3,12 @@
 #include <fcntl.h>
 #include <sys/wait.h>
 
-#define PORT 6000
 #define READ 0
 #define WRITE 1
 #define SUCCESS 0
 #define FAILURE -1
+
+static int port;
 
 int query(char **command, int client_sock) {
   int pipefd[2];
@@ -50,7 +51,14 @@ int query(char **command, int client_sock) {
   return SUCCESS;
 }
 
-int main() {
+int main(int argc, const char *argv[]) {
+  if (argc == 1) {
+    fprintf(stderr, "Usage: %s port\n", *argv);
+    return 1;
+  }
+
+  port = atoi(argv[1]);
+
   int listen_sock = socket(PF_INET, SOCK_STREAM, 0);
   if (listen_sock == -1) {
     die("socket");
@@ -58,7 +66,7 @@ int main() {
 
   struct sockaddr_in addr;
   addr.sin_family = AF_INET;
-  addr.sin_port = htons(PORT);
+  addr.sin_port = htons(port);
   addr.sin_addr.s_addr = INADDR_ANY;
 
   int yes = 1;
@@ -76,7 +84,7 @@ int main() {
     die("listen");
   }
 
-  log_info("Server is running on port %d", PORT);
+  log_info("Server is running on port %d", port);
 
   while (1) {
     int client_sock = accept(listen_sock, NULL, NULL);
