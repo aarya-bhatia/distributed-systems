@@ -69,6 +69,8 @@ char *rstrstr(char *string,
 
 float calc_duration(struct timespec *start_time, struct timespec *end_time);
 
+char **split_string(const char *str);
+
 std::vector<char *>
 readlines(const char *filename); /* Returns a vector of lines in given file */
 size_t word_len(const char *str);

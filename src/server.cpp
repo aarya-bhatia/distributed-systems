@@ -1,6 +1,54 @@
 #include "common.h"
+#include <cstdlib>
+#include <fcntl.h>
+#include <sys/wait.h>
 
 #define PORT 6000
+#define READ 0
+#define WRITE 1
+#define SUCCESS 0
+#define FAILURE -1
+
+int query(char **command, int client_sock) {
+  int pipefd[2];
+
+  if (pipe(pipefd) < 0) {
+    perror("pipe");
+    return FAILURE;
+  }
+
+  pid_t pid = fork();
+
+  if (pid < 0) {
+    perror("fork");
+    close(pipefd[0]);
+    close(pipefd[1]);
+    exit(1);
+  }
+
+  if (pid == 0) {
+    close(pipefd[READ]);
+    // const char *command[] = {"grep", "", "README.md", NULL};
+    // const char *command[] = {"echo", "Hello", "World", NULL};
+    dup2(pipefd[WRITE], 1);
+    close(pipefd[WRITE]);
+    execvp(command[0], (char **)command);
+    die("execvp");
+  } else {
+    close(pipefd[WRITE]);
+    char buf[1024];
+    ssize_t bytes_read = 0;
+
+    while ((bytes_read = read(pipefd[READ], buf, sizeof buf)) > 0) {
+      write_all(client_sock, buf, bytes_read);
+    }
+
+    close(pipefd[READ]);
+    wait(NULL);
+  }
+
+  return SUCCESS;
+}
 
 int main() {
   int listen_sock = socket(PF_INET, SOCK_STREAM, 0);
@@ -57,8 +105,17 @@ int main() {
 
       printf("Message received on socket %d: %s\n", client_sock, message);
 
-      sprintf(message, "OK");
-      write_all(client_sock, message, strlen(message));
+      char **command = split_string(message);
+      query(command, client_sock);
+
+      for (char **s = command; *s != NULL; s++) {
+        free(*s);
+      }
+
+      free(command);
+
+      // sprintf(message, "OK");
+      // write_all(client_sock, message, strlen(message));
 
       shutdown(client_sock, SHUT_RDWR);
       close(client_sock);

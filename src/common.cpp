@@ -260,3 +260,48 @@ float calc_duration(struct timespec *start_time, struct timespec *end_time) {
   return (end_time->tv_nsec - start_time->tv_nsec) * 1E-6 +
          (end_time->tv_sec - start_time->tv_sec) * 1E3;
 }
+
+/**
+ * Splits a string by whitespace.
+ * Returns a null-terminated array of string tokens.
+ */
+char **split_string(const char *str) {
+  assert(str);
+
+  char **tokens = (char **)calloc(1, sizeof *tokens);
+  size_t cap = 1;
+  size_t len = 0;
+
+  if (*str == 0) {
+    // no tokens
+    return tokens;
+  }
+
+  do {
+    const char *first = str;
+    const char *second = strstr(first, " ");
+
+    // resize array, if required
+    if (len + 1 >= cap) {
+      cap *= 2;
+      tokens = (char **)realloc(tokens, cap * sizeof *tokens);
+    }
+
+    if (second) {
+      tokens[len++] = strndup(first, second - first);
+      str = second + 1;
+    } else {
+      tokens[len++] = strdup(first);
+      break;
+    }
+  } while (str != NULL);
+
+  if (len + 1 >= cap) {
+    cap *= 2;
+    tokens = (char **)realloc(tokens, cap * sizeof *tokens);
+  }
+
+  tokens[len++] = NULL;
+
+  return tokens;
+}
