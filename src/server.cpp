@@ -1,8 +1,4 @@
 #include "common.h"
-#include <list>
-#include <pthread.h>
-#include <unordered_map>
-#include <vector>
 
 #define PORT 6000
 

@@ -1,19 +1,16 @@
 #pragma once
 
-#include <pthread.h>
 #include <list>
+#include <pthread.h>
 
-template<typename T>
-struct Queue
-{
-  std::list<T *> l;
-	pthread_mutex_t m;
-	pthread_cond_t cv;
+struct Queue {
+  std::list<void *> l;
+  pthread_mutex_t m;
+  pthread_cond_t cv;
 
   Queue();
   ~Queue();
 
-  void enqueue(T *data);
-  T *dequeue();
+  void enqueue(void *data);
+  void *dequeue();
 };
-
