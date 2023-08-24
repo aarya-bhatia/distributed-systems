@@ -62,7 +62,7 @@ void *worker(void *args) {
 
       if (s) {
         *s = 0;
-        log_info("Host %s:%s: %s", task->host->hostname, task->host->port,
+        printf("Host %s:%s: %s\n", task->host->hostname, task->host->port,
                  buffer);
         f = 1;
         memmove(buffer, s + 1, strlen(s + 1) + 1);
@@ -71,7 +71,7 @@ void *worker(void *args) {
 
       if ((size_t)n_read < sizeof buffer) {
         if (!f) {
-          log_info("Host %s:%s: %s", task->host->hostname, task->host->port,
+          printf("Host %s:%s: %s\n", task->host->hostname, task->host->port,
                    buffer);
         }
         break;
