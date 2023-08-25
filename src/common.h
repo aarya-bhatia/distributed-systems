@@ -93,3 +93,5 @@ ssize_t read_all(int fd, char *buf,
                  size_t len); /* read all bytes from fd to buffer */
 ssize_t write_all(int fd, char *buf,
                   size_t len); /* write all bytes from fd to buffer */
+
+void logger(FILE *file, char *message);

@@ -1,7 +1,4 @@
 #include "common.h"
-#include <cstdlib>
-#include <fcntl.h>
-#include <sys/wait.h>
 
 char **tokens;
 
@@ -20,4 +17,8 @@ int main() {
   assert(!strcmp(tokens[3], "'hello'"));
   assert(!strcmp(tokens[4], "machine.1.log"));
   assert(tokens[5] == NULL);
+
+  FILE *f = fopen("stderr", "a");
+  logger(f, (char *)"Hello world");
+  fclose(f);
 }
