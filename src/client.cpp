@@ -87,47 +87,39 @@ void *worker(void *args) {
     ssize_t n_read = read(fd, buffer, sizeof buffer);
     if (n_read == -1 && errno == EINTR) {
       continue;
-    } else if (n_read <= 0) {
+    } else if (n_read < 0) {
+      log_error("Thread %ld: read", task->tid);
+      task->status = EXIT_FAILURE;
+      close(fd);
+      msg_queue->enqueue(new Message(Message::TYPE_FINISHED, task));
+      return args;
+    } else if (n_read == 0) {
+      if (off) {
+        char *msg = NULL;
+        asprintf(&msg, "Host %d: %s:%s: %s", task->host->id,
+                 task->host->hostname, task->host->port, buffer);
+        msg_queue->enqueue(new Message(Message::TYPE_DATA, msg));
+      }
       break;
     } else if (n_read > 0) {
       off += n_read;
       buffer[n_read] = 0;
 
       char *s = strstr(buffer, "\n");
-      bool f = false;
-
-      char *msg = NULL;
 
       if (s) {
         *s = 0;
+        char *msg = NULL;
         asprintf(&msg, "Host %d: %s:%s: %s", task->host->id,
                  task->host->hostname, task->host->port, buffer);
         msg_queue->enqueue(new Message(Message::TYPE_DATA, msg));
-
-        f = 1;
         memmove(buffer, s + 1, strlen(s + 1) + 1);
         off = strlen(buffer);
       }
-
-      if ((size_t)n_read < sizeof buffer) {
-        if (!f) {
-          asprintf(&msg, "Host %d: %s:%s: %s", task->host->id,
-                   task->host->hostname, task->host->port, buffer);
-          msg_queue->enqueue(new Message(Message::TYPE_DATA, msg));
-        }
-        break;
-      }
-    } else {
-      log_error("Thread %ld: read", task->tid);
-      task->status = EXIT_FAILURE;
-      close(fd);
-      msg_queue->enqueue(new Message(Message::TYPE_FINISHED, task));
-      return args;
     }
   }
 
   close(fd);
-
   task->status = EXIT_SUCCESS;
   msg_queue->enqueue(new Message(Message::TYPE_FINISHED, task));
   return args;
@@ -184,7 +176,6 @@ int main(int argc, const char *argv[]) {
     delete m;
 
     // sleep(1);
-
   }
 
   size_t count = 0;
