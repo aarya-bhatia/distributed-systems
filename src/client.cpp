@@ -75,8 +75,7 @@ void flush_read_buffer(Task *task, char *buffer, size_t len) {
 
   while (ptr) {
     char *msg = NULL;
-    asprintf(&msg, "Host %d: %s:%s: %s", task->host->id, task->host->hostname,
-             task->host->port, ptr);
+    asprintf(&msg, "%s:%s: %s", task->host->hostname, task->host->port, ptr);
     msg_queue->enqueue(new Message(Message::TYPE_DATA, msg));
     ptr = strtok(NULL, "\n");
   }
