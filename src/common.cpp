@@ -123,8 +123,43 @@ size_t word_len(const char *str) {
 }
 
 /**
- * Attempts to establish tcp connection with a server on given address
- * Returns a socket on success and -1 on failure.
+ * Start a TCP server on the given port.
+ * Returns a socket on success or -1 on failure.
+ */
+int start_server(int port) {
+  int listen_sock = socket(PF_INET, SOCK_STREAM, 0);
+  if (listen_sock == -1) {
+    die("socket");
+  }
+
+  struct sockaddr_in addr;
+  addr.sin_family = AF_INET;
+  addr.sin_port = htons(port);
+  addr.sin_addr.s_addr = INADDR_ANY;
+
+  int yes = 1;
+  if (setsockopt(listen_sock, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof yes) !=
+      0) {
+    die("setsockopt");
+  }
+
+  if (bind(listen_sock, (struct sockaddr *)&addr, sizeof(struct sockaddr_in)) !=
+      0) {
+    die("bind");
+  }
+
+  if (listen(listen_sock, 16) != 0) {
+    die("listen");
+  }
+
+  log_info("Server is running on port %d", port);
+
+  return listen_sock;
+}
+
+/**
+ * Attempts to establish TCP connection with a host
+ * Returns a socket on success or -1 on failure.
  */
 int connect_to_host(const char *hostname, const char *port) {
   struct addrinfo hints, *info = NULL;
@@ -322,4 +357,3 @@ void logger(FILE *file, char *message) {
 
   fprintf(file, "%s@%s: [%s]: %s\n", user, hostname, buf, message);
 }
-

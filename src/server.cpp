@@ -2,6 +2,7 @@
 #include <cstdlib>
 #include <fcntl.h>
 #include <sys/wait.h>
+#include <unistd.h>
 
 #define READ 0
 #define WRITE 1
@@ -42,6 +43,7 @@ int query(char **command, int client_sock) {
 
     while ((bytes_read = read(pipefd[READ], buf, sizeof buf)) > 0) {
       write_all(client_sock, buf, bytes_read);
+      write_all(STDOUT_FILENO, buf, bytes_read);
     }
 
     close(pipefd[READ]);
@@ -57,34 +59,7 @@ int main(int argc, const char *argv[]) {
     return 1;
   }
 
-  port = atoi(argv[1]);
-
-  int listen_sock = socket(PF_INET, SOCK_STREAM, 0);
-  if (listen_sock == -1) {
-    die("socket");
-  }
-
-  struct sockaddr_in addr;
-  addr.sin_family = AF_INET;
-  addr.sin_port = htons(port);
-  addr.sin_addr.s_addr = INADDR_ANY;
-
-  int yes = 1;
-  if (setsockopt(listen_sock, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof yes) !=
-      0) {
-    die("setsockopt");
-  }
-
-  if (bind(listen_sock, (struct sockaddr *)&addr, sizeof(struct sockaddr_in)) !=
-      0) {
-    die("bind");
-  }
-
-  if (listen(listen_sock, 16) != 0) {
-    die("listen");
-  }
-
-  log_info("Server is running on port %d", port);
+  int listen_sock = start_server(atoi(argv[1]));
 
   while (1) {
     int client_sock = accept(listen_sock, NULL, NULL);

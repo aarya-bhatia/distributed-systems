@@ -78,6 +78,11 @@ size_t word_len(const char *str);
 
 // Networking functions
 
+/**
+* Start a TCP server on the given port and return the socket file desc.
+*/
+int start_server(int port);
+
 int connect_to_host(
     const char *hostname,
     const char *port); /* connects to the host and returns a tcp socket */
