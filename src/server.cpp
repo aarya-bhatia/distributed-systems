@@ -9,8 +9,6 @@
 #define SUCCESS 0
 #define FAILURE -1
 
-static int port;
-
 int query(char **command, int client_sock) {
   int pipefd[2];
 
