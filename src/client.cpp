@@ -65,18 +65,20 @@ void flush_read_buffer(Task *task, char *buffer, size_t len) {
   assert(task);
   assert(buffer);
 
+  buffer[len] = 0;
+
   if (len == 0) {
     return;
   }
 
-  buffer[len] = 0;
-
   char *ptr = strtok(buffer, "\n");
 
   while (ptr) {
-    char *msg = NULL;
-    asprintf(&msg, "%s:%s: %s", task->host->hostname, task->host->port, ptr);
-    msg_queue->enqueue(new Message(Message::TYPE_DATA, msg));
+    if (strlen(ptr)) {
+      char *msg = NULL;
+      asprintf(&msg, "%s:%s (%zu bytes): %s", task->host->hostname, task->host->port, strlen(ptr), ptr);
+      msg_queue->enqueue(new Message(Message::TYPE_DATA, msg));
+    }
     ptr = strtok(NULL, "\n");
   }
 }
