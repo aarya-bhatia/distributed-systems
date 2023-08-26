@@ -7,6 +7,7 @@
 #include <vector>
 
 #define SERVER_PORT "6000"
+#define MAX_BUFFER_LEN 1024
 
 struct Host {
   int id;
@@ -60,6 +61,27 @@ void load_hosts(const char *filename) {
   }
 }
 
+void flush_read_buffer(Task *task, char *buffer, size_t len) {
+  assert(task);
+  assert(buffer);
+
+  if (len == 0) {
+    return;
+  }
+
+  buffer[len] = 0;
+
+  char *ptr = strtok(buffer, "\n");
+
+  while (ptr) {
+    char *msg = NULL;
+    asprintf(&msg, "Host %d: %s:%s: %s", task->host->id, task->host->hostname,
+             task->host->port, ptr);
+    msg_queue->enqueue(new Message(Message::TYPE_DATA, msg));
+    ptr = strtok(NULL, "\n");
+  }
+}
+
 void *worker(void *args) {
   Task *task = (Task *)args;
   log_info("Worker thread %ld started", task->tid);
@@ -80,45 +102,35 @@ void *worker(void *args) {
     return args;
   }
 
-  char buffer[1024];
-  size_t off = 0;
+  char buffer[MAX_BUFFER_LEN];
+  size_t off = 0; // stores the number of bytes read into buffer
 
-  while (1) {
-    ssize_t n_read = read(fd, buffer, sizeof buffer);
-    if (n_read == -1 && errno == EINTR) {
-      continue;
-    } else if (n_read < 0) {
+  while (true) {
+    ssize_t n_read = read(fd, buffer + off, sizeof buffer - off);
+    if (n_read == -1) {
+      if (errno == EINTR) {
+        continue;
+      }
       log_error("Thread %ld: read", task->tid);
       task->status = EXIT_FAILURE;
-      close(fd);
       msg_queue->enqueue(new Message(Message::TYPE_FINISHED, task));
+      close(fd);
       return args;
     } else if (n_read == 0) {
-      if (off) {
-        char *msg = NULL;
-        asprintf(&msg, "Host %d: %s:%s: %s", task->host->id,
-                 task->host->hostname, task->host->port, buffer);
-        msg_queue->enqueue(new Message(Message::TYPE_DATA, msg));
-      }
+      // End of stream
       break;
     } else if (n_read > 0) {
+      // Recieved new bytes
       off += n_read;
-      buffer[n_read] = 0;
-
-      char *s = strstr(buffer, "\n");
-
-      if (s) {
-        *s = 0;
-        char *msg = NULL;
-        asprintf(&msg, "Host %d: %s:%s: %s", task->host->id,
-                 task->host->hostname, task->host->port, buffer);
-        msg_queue->enqueue(new Message(Message::TYPE_DATA, msg));
-        memmove(buffer, s + 1, strlen(s + 1) + 1);
-        off = strlen(buffer);
+      buffer[off] = 0;
+      if (off >= sizeof buffer) {
+        flush_read_buffer(task, buffer, off);
+        off = 0;
       }
     }
   }
 
+  flush_read_buffer(task, buffer, off);
   close(fd);
   task->status = EXIT_SUCCESS;
   msg_queue->enqueue(new Message(Message::TYPE_FINISHED, task));
