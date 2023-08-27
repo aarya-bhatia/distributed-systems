@@ -29,3 +29,11 @@ Worker thread:
 - On completion, adds a FINISHED message to the queue
 
 
+
+## TODO
+
+- Refactor server to accept an ID (number) - use ID to create LOG file in directory:
+    `/var/log/cs425/...`
+- Ability to specify another log file to use for testing
+- Add access logs on Server containing the client's request
+
