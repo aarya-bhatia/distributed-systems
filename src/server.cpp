@@ -1,6 +1,7 @@
 #include "common.h"
 #include <cstdlib>
 #include <fcntl.h>
+#include <sys/socket.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -9,7 +10,9 @@
 #define SUCCESS 0
 #define FAILURE -1
 
-int query(char **command, int client_sock) {
+FILE *log_file = NULL;
+
+int send_command_output(char **command, int client_sock) {
   int pipefd[2];
 
   if (pipe(pipefd) < 0) {
@@ -52,21 +55,43 @@ int query(char **command, int client_sock) {
 }
 
 int main(int argc, const char *argv[]) {
-  if (argc == 1) {
-    fprintf(stderr, "Usage: %s port\n", *argv);
+  if (argc < 3) {
+    fprintf(stderr, "Usage: %s id port\n", *argv);
     return 1;
   }
 
+  int server_id = atoi(argv[1]);
+  int port = atoi(argv[2]);
+
   signal(SIGPIPE, SIG_IGN);
 
-  int listen_sock = start_server(atoi(argv[1]));
+  char filename[256];
+  sprintf(filename, "/var/log/cs425/machine.%d.log", server_id);
+  log_file = fopen(filename, "a");
+
+  if (!log_file) {
+    die("fopen");
+  }
+
+  int listen_sock = start_server(port);
+
+  struct sockaddr_storage client_arr;
+  socklen_t client_len = sizeof client_arr;
 
   while (1) {
-    int client_sock = accept(listen_sock, NULL, NULL);
+    int client_sock =
+        accept(listen_sock, (struct sockaddr *)&client_arr, &client_len);
 
     if (client_sock == -1) {
       continue;
     }
+
+    const char *client_addr_str =
+        addr_to_string((struct sockaddr *)&client_arr, client_len);
+
+    char message[256];
+    sprintf(message, "Connected to client: %s", client_addr_str);
+    logger(log_file, message);
 
     int pid = fork();
 
@@ -89,7 +114,7 @@ int main(int argc, const char *argv[]) {
       printf("Message received on socket %d: %s\n", client_sock, message);
 
       char **command = split_string(message);
-      query(command, client_sock);
+      send_command_output(command, client_sock);
 
       for (char **s = command; *s != NULL; s++) {
         free(*s);
@@ -107,4 +132,6 @@ int main(int argc, const char *argv[]) {
   }
 
   close(listen_sock);
+
+  fclose(log_file);
 }
