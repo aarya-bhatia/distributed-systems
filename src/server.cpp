@@ -156,8 +156,8 @@ void *file_logger_start(void *args) {
 }
 
 /**
-* Server accepts an ID and port on start up.
-*/
+ * Server accepts an ID and port on start up.
+ */
 int main(int argc, const char *argv[]) {
   if (argc < 3) {
     fprintf(stderr, "Usage: %s id port\n", *argv);

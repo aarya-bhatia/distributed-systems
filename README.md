@@ -11,11 +11,19 @@
 ## Server Architecture
 
 Main thread:
-- Listen for tcp connections on a specified port
-- fork() a process for each connection and start worker
+- Initializes file logger thread
+- Listens for tcp connections on a specified port
+- Creates a thread for each connection
+
+File logger:
+- Opens the log file using server ID `machine.<ID>.log`
+- Reads messages from queue and blocks while empty
+- Appends a log message to file
 
 Worker process:
 - Read the request from client socket
+- Add log for the request made by the client
+- Add log for establishing connection
 - Run the requested shell command in a new process
 - Pipe the output of the command to the client socket
 
