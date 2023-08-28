@@ -1,5 +1,13 @@
 # MP1
 
+## Setup Instructions
+
+- Compile the code: `make`
+- Run the server: `bin/server <id> <port>`
+- Run the client: `bin/client <command> [...args]`
+- Create log directory: `sudo mkdir -p /var/log/cs425 && sudo chown $USER:$USER /var/log/cs425`
+- Add hosts to file "hosts" with the format: `Server ID, IP Address, Port`
+
 ## Server Architecture
 
 Main thread:
