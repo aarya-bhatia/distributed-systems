@@ -28,8 +28,6 @@ int query(char **command, int client_sock) {
 
   if (pid == 0) {
     close(pipefd[READ]);
-    // const char *command[] = {"grep", "", "README.md", NULL};
-    // const char *command[] = {"echo", "Hello", "World", NULL};
     dup2(pipefd[WRITE], 1);
     close(pipefd[WRITE]);
     execvp(command[0], (char **)command);
@@ -48,6 +46,8 @@ int query(char **command, int client_sock) {
     wait(NULL);
   }
 
+  puts("=============================");
+
   return SUCCESS;
 }
 
@@ -56,6 +56,8 @@ int main(int argc, const char *argv[]) {
     fprintf(stderr, "Usage: %s port\n", *argv);
     return 1;
   }
+
+  signal(SIGPIPE, SIG_IGN);
 
   int listen_sock = start_server(atoi(argv[1]));
 
@@ -79,7 +81,7 @@ int main(int argc, const char *argv[]) {
       ssize_t nread = read(client_sock, message, sizeof message - 1);
 
       if (nread == -1) {
-        die("read_all");
+        die("read");
       }
 
       message[nread] = 0;
@@ -94,9 +96,6 @@ int main(int argc, const char *argv[]) {
       }
 
       free(command);
-
-      // sprintf(message, "OK");
-      // write_all(client_sock, message, strlen(message));
 
       shutdown(client_sock, SHUT_RDWR);
       close(client_sock);

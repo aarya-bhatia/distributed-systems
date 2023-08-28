@@ -76,7 +76,8 @@ void flush_read_buffer(Task *task, char *buffer, size_t len) {
   while (ptr) {
     if (strlen(ptr)) {
       char *msg = NULL;
-      asprintf(&msg, "%s:%s (%zu bytes): %s", task->host->hostname, task->host->port, strlen(ptr), ptr);
+      asprintf(&msg, "%s:%s (%zu bytes): %s", task->host->hostname,
+               task->host->port, strlen(ptr), ptr);
       msg_queue->enqueue(new Message(Message::TYPE_DATA, msg));
     }
     ptr = strtok(NULL, "\n");
@@ -105,6 +106,7 @@ void *worker(void *args) {
 
   char buffer[MAX_BUFFER_LEN];
   size_t off = 0; // stores the number of bytes read into buffer
+  size_t bytes_read = 0;
 
   while (true) {
     ssize_t n_read = read(fd, buffer + off, sizeof buffer - off);
@@ -121,6 +123,7 @@ void *worker(void *args) {
       // End of stream
       break;
     } else if (n_read > 0) {
+      bytes_read += n_read;
       // Recieved new bytes
       off += n_read;
       buffer[off] = 0;
@@ -133,6 +136,8 @@ void *worker(void *args) {
 
   flush_read_buffer(task, buffer, off);
   close(fd);
+  printf("Total bytes read from server %s:%s: %zu\n", task->host->hostname,
+         task->host->port, bytes_read);
   task->status = EXIT_SUCCESS;
   msg_queue->enqueue(new Message(Message::TYPE_FINISHED, task));
   return args;
