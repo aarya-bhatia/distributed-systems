@@ -237,33 +237,6 @@ char *addr_to_string(struct sockaddr *addr, socklen_t len) {
 }
 
 /**
- * Used to read at most len bytes from fd into buffer.
- */
-ssize_t read_all(int fd, char *buf, size_t len) {
-  size_t bytes_read = 0;
-
-  while (bytes_read < len) {
-    errno = 0;
-    ssize_t ret = read(fd, buf + bytes_read, len - bytes_read);
-
-    if (ret >= 0) {
-      bytes_read += ret;
-      buf[bytes_read] = 0;
-
-      if ((size_t)ret < len - bytes_read) {
-        break;
-      }
-    } else if (ret == -1 && errno == EINTR) {
-      continue;
-    } else {
-      return -1;
-    }
-  }
-
-  return bytes_read;
-}
-
-/**
  * Used to write at most len bytes of buf to fd.
  */
 ssize_t write_all(int fd, char *buf, size_t len) {

@@ -1,5 +1,7 @@
+/** A library of common header files, utility and networking functions **/
 #pragma once
 
+// standard
 #include <assert.h>
 #include <ctype.h>
 #include <errno.h>
@@ -13,6 +15,7 @@
 #include <time.h>
 #include <unistd.h>
 
+// networking
 #include <arpa/inet.h>
 #include <errno.h>
 #include <netdb.h>
@@ -21,29 +24,18 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 
+// external
 #include "log.h"
 
+// cpp headers
 #include <list>
-#include <vector>
 #include <string>
-
-#define MAX_MSG_LEN 1024
-#define CRLF "\r\n"
+#include <vector>
 
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 
-// Kill program if status code is less than 0 with message
-#define _CHECK(status, msg)                                                    \
-  if (status < 0) {                                                            \
-    log_error("Failed with status %d: %s", status, msg);                       \
-    exit(1);                                                                   \
-  }
-
-// Kill program if status code is less than 0 (error) with message
-#define CHECK(status, msg) _CHECK(status, msg)
-
-// Kill program with given error message instantly
+/* Exit program with an error message */
 #define die(msg)                                                               \
   {                                                                            \
     perror(msg);                                                               \
@@ -56,7 +48,7 @@
   callback;                                                                    \
   pthread_mutex_unlock(&mutex);
 
-// utility functions
+// Utility functions
 
 char *trimwhitespace(
     char *str); /* erase leading and trailing whitesapce from string and return
@@ -68,35 +60,33 @@ char *rstrstr(char *string,
               char *pattern); /* reverse strstr: returns pointer to last
                                  occurrence of pattern in string */
 
+/* calculates time difference in milliseconds */
 float calc_duration(struct timespec *start_time, struct timespec *end_time);
 
+/* splits a string by whitespace and allocates a string array with the tokens */
 char **split_string(const char *str);
 
 std::vector<std::string>
 readlines(const char *filename); /* Returns a vector of lines in given file */
-size_t word_len(const char *str);
+size_t word_len(const char *str); /* calculates the distance to the next whitespace in the string */
+
+/* Logs the message to the given file with a timestamp */
+void logger(FILE *file, char *message);
 
 // Networking functions
 
-/**
-* Start a TCP server on the given port and return the socket file desc.
-*/
+/* Starts a TCP server on given port and returns the listening socket */
 int start_server(int port);
 
 int connect_to_host(
     const char *hostname,
-    const char *port); /* connects to the host and returns a tcp socket */
+    const char *port); /* Attempts to establish TCP connection with given host
+                          and return socket fd */
 void *get_in_addr(
     struct sockaddr *sa); /* returns the in_addr of ivp4 and ipv6 addresses */
 int get_port(struct sockaddr *sa);
 char *addr_to_string(struct sockaddr *addr,
                      socklen_t len); /* get ip address from sockaddr */
-
-// Note: For non blocking sockets, these fuctions may read/write fewer bytes
-// than requested.
-ssize_t read_all(int fd, char *buf,
-                 size_t len); /* read all bytes from fd to buffer */
 ssize_t write_all(int fd, char *buf,
                   size_t len); /* write all bytes from fd to buffer */
 
-void logger(FILE *file, char *message);
