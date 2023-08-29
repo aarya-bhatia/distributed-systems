@@ -263,8 +263,6 @@ ssize_t write_all(int fd, char *buf, size_t len) {
 
 /* calculates time duration in milliseconds */
 float calc_duration(struct timespec *start_time, struct timespec *end_time) {
-  clock_gettime(CLOCK_MONOTONIC, end_time);
-
   return (end_time->tv_nsec - start_time->tv_nsec) * 1E-6 +
          (end_time->tv_sec - start_time->tv_sec) * 1E3;
 }

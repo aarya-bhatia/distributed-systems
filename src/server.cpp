@@ -1,6 +1,7 @@
 #include "common.h"
 #include "queue.h"
 #include <cstdlib>
+#include <ctime>
 #include <fcntl.h>
 #include <pthread.h>
 #include <sys/socket.h>
@@ -190,8 +191,8 @@ int main(int argc, const char *argv[]) {
     }
 
     Connection *conn = new Connection;
-    conn->client_sock = client_sock;
     conn->tid = tid;
+    conn->client_sock = client_sock;
     conn->client_addr = client_addr;
     conn->client_len = client_len;
 

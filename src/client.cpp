@@ -28,6 +28,8 @@ struct Task {
   Host *host;
   pthread_t tid;
   int status;
+  struct timespec start_time;
+  struct timespec end_time;
 };
 
 struct Message {
@@ -96,6 +98,8 @@ void *worker(void *args) {
     return args;
   }
 
+  clock_gettime(CLOCK_REALTIME, &task->start_time);
+
   if (write_all(fd, command, strlen(command)) == -1) {
     log_error("Thread %ld: write_all", task->tid);
     task->status = EXIT_FAILURE;
@@ -140,6 +144,9 @@ void *worker(void *args) {
          task->host->port, bytes_read);
   task->status = EXIT_SUCCESS;
   msg_queue->enqueue(new Message(Message::TYPE_FINISHED, task));
+
+  clock_gettime(CLOCK_REALTIME, &task->end_time);
+
   return args;
 }
 
@@ -198,14 +205,24 @@ int main(int argc, const char *argv[]) {
 
   size_t count = 0;
 
+  double latency = 0;
+
   for (size_t i = 0; i < hosts.size(); i++) {
     pthread_join(tasks[i].tid, NULL);
     if (tasks[i].status == EXIT_SUCCESS) {
       count++;
+      double time_elapsed_millisecond =
+          calc_duration(&tasks[i].start_time, &tasks[i].end_time);
+      log_debug("Time elapsed for task %ld: %f", i, time_elapsed_millisecond);
+      latency += time_elapsed_millisecond;
     }
   }
 
-  log_info("Got reply from %ld out of %ld hosts.", count, hosts.size());
+  double average_latency = count ? latency / count : 0;
+
+  printf("=== RESULT: Got reply from %ld out of %ld hosts with an average latency of %0.4f "
+         "milliseconds. ===\n",
+         count, hosts.size(), average_latency);
 
   free(tasks);
 
