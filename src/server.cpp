@@ -22,7 +22,7 @@ struct Connection {
   socklen_t client_len;
 };
 
-static Queue *msg_queue = NULL; // Message queue that receives strings
+static Queue<char *> *msg_queue = NULL; // Message queue that receives strings
 static int server_id;
 static int port;
 
@@ -98,7 +98,7 @@ void *worker(void *args) {
 
   message[nread] = 0;
 
-  printf("Message received on socket %d: %s\n", conn->client_sock, message);
+  // printf("Message received on socket %d: %s\n", conn->client_sock, message);
 
   char *log_message = make_string((char *)"Request from client %s: %s",
                                   client_addr_str, message);
@@ -127,7 +127,7 @@ void *worker(void *args) {
  * string.
  */
 void *file_logger_start(void *args) {
-  Queue *msg_queue = (Queue *)args;
+  Queue<char *> *msg_queue = (Queue<char *> *)args;
 
   log_info("Started file logger thread %ld", pthread_self());
 
@@ -146,7 +146,7 @@ void *file_logger_start(void *args) {
     }
     logger(log_file, message);
     fflush(log_file);
-    log_debug("Message received on thread %ld: %s", pthread_self(), message);
+    // log_debug("Message received on thread %ld: %s", pthread_self(), message);
     free(message);
   }
 
@@ -167,7 +167,7 @@ int main(int argc, const char *argv[]) {
   server_id = atoi(argv[1]);
   port = atoi(argv[2]);
 
-  msg_queue = new Queue;
+  msg_queue = new Queue<char *>;
 
   signal(SIGPIPE, SIG_IGN);
 

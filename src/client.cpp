@@ -37,7 +37,7 @@ struct Message {
   Message(MessageType type, void *data) : type(type), data(data) {}
 };
 
-Queue *msg_queue = NULL;
+Queue<Message *> *msg_queue = NULL;
 char command[1024] = {0};
 static std::vector<Host *> hosts;
 
@@ -156,7 +156,7 @@ int main(int argc, const char *argv[]) {
     return 0;
   }
 
-  msg_queue = new Queue();
+  msg_queue = new Queue<Message *>();
 
   Task *tasks = (Task *)calloc(hosts.size(), sizeof *tasks);
 

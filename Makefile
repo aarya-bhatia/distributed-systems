@@ -6,7 +6,7 @@ CFLAGS=-DDEBUG -D_GNU_SOURCE -std=c++14 -g \
 LDFLAGS=-Llib -pthread
 # LINKLIBS += -fsanitize=thread
 
-OBJ=obj/common.o obj/queue.o
+OBJ=obj/common.o
 
 .PHONY: all clean
 
