@@ -83,8 +83,12 @@ int send_command_output(char **command, int client_sock) {
 void *worker(void *args) {
   Connection *conn = (Connection *)args;
 
-  char *client_addr_str = strdup(
-      addr_to_string((struct sockaddr *)&conn->client_addr, conn->client_len));
+  char client_addr_str[40];
+
+  sprintf(
+      client_addr_str, "%s:%d",
+      addr_to_string((struct sockaddr *)&conn->client_addr, conn->client_len),
+      get_port((struct sockaddr *)&conn->client_addr));
 
   log_info("Connected to client: %s", client_addr_str);
 
@@ -96,9 +100,15 @@ void *worker(void *args) {
 
   if (nread == -1) {
     close(conn->client_sock);
-    free(client_addr_str);
     delete conn;
     perror("read");
+    return NULL;
+  }
+
+  if (nread == 0) {
+    log_warn("No bytes received from client %s", client_addr_str);
+    close(conn->client_sock);
+    delete conn;
     return NULL;
   }
 
@@ -127,7 +137,6 @@ void *worker(void *args) {
   }
   free(command);
 
-  free(client_addr_str);
   delete conn;
   return NULL;
 }
