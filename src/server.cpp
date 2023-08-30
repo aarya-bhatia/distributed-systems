@@ -66,14 +66,11 @@ int send_command_output(char **command, int client_sock) {
 
     while ((bytes_read = read(pipefd[READ], buf, sizeof buf)) > 0) {
       write_all(client_sock, buf, bytes_read);
-      write_all(STDOUT_FILENO, buf, bytes_read);
     }
 
     close(pipefd[READ]);
     wait(NULL);
   }
-
-  puts("=============================");
 
   return SUCCESS;
 }
