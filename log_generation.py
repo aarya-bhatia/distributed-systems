@@ -3,7 +3,7 @@ import random
 
 test_pattern = {"high frequency": 1e6, "mid frequency": 1e4, "low frequency": 1e2}
 
-def inject_patter(f: __file__):
+def inject_pattern(f):
     if len(test_pattern) > 0:
         # 80% chance to inject a pattern
         if random.randint(1, 10) <= 8:
@@ -18,7 +18,7 @@ def main():
     with open("./log", "w") as f:
         for i in range(2000000):
             f.write(f"{datetime.datetime.now()} {random.randint(0, 9)}")
-            inject_patter(f)
+            inject_pattern(f)
             f.write("\n")
         print(test_pattern)
 

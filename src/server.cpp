@@ -87,6 +87,8 @@ void *worker(void *args) {
   char *client_addr_str = strdup(
       addr_to_string((struct sockaddr *)&conn->client_addr, conn->client_len));
 
+  log_info("Connected to client: %s", client_addr_str);
+
   msg_queue->enqueue(
       make_string((char *)"Connected to client: %s", client_addr_str));
 
@@ -94,12 +96,16 @@ void *worker(void *args) {
   ssize_t nread = read(conn->client_sock, message, sizeof message - 1);
 
   if (nread == -1) {
-    die("read");
+    close(conn->client_sock);
+    free(client_addr_str);
+    delete conn;
+    perror("read");
+    return NULL;
   }
 
   message[nread] = 0;
 
-  // printf("Message received on socket %d: %s\n", conn->client_sock, message);
+  log_debug("Request from socket %d: %s", conn->client_sock, message);
 
   char *log_message = make_string((char *)"Request from client %s: %s",
                                   client_addr_str, message);
@@ -107,7 +113,10 @@ void *worker(void *args) {
   msg_queue->enqueue(log_message);
 
   char **command = split_string(message);
-  send_command_output(command, conn->client_sock);
+
+  if (send_command_output(command, conn->client_sock) == FAILURE) {
+    perror("send_command_output");
+  }
 
   shutdown(conn->client_sock, SHUT_RDWR);
   close(conn->client_sock);
@@ -130,10 +139,10 @@ void *worker(void *args) {
 void *file_logger_start(void *args) {
   Queue<char *> *msg_queue = (Queue<char *> *)args;
 
-  log_info("Started file logger thread %ld", pthread_self());
-
   char filename[256];
   sprintf(filename, "/var/log/cs425/machine.%d.log", server_id);
+  log_info("Started file logger thread %ld: %s", pthread_self(), filename);
+
   FILE *log_file = fopen(filename, "a");
 
   if (!log_file) {

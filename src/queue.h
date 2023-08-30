@@ -24,7 +24,7 @@ template <typename T> struct Queue {
   void enqueue(const T &data) {
     pthread_mutex_lock(&m);
     l.push_back(data);
-    pthread_cond_signal(&cv);
+    pthread_cond_broadcast(&cv);
     pthread_mutex_unlock(&m);
   }
 
@@ -35,7 +35,7 @@ template <typename T> struct Queue {
     }
     T data = l.front();
     l.pop_front();
-    pthread_cond_signal(&cv);
+    pthread_cond_broadcast(&cv);
     pthread_mutex_unlock(&m);
     return data;
   }

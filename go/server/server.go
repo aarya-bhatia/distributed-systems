@@ -26,11 +26,11 @@ func main() {
 			os.Exit(1)
 		}
 		fmt.Println("Connetion established")
-		go handleConnetion(conn)
+		go handleConnection(conn)
 	}
 }
 
-func handleConnetion(conn net.Conn) {
+func handleConnection(conn net.Conn) {
 	fmt.Printf("Serving %s\n", conn.RemoteAddr().String())
 	for {
 		// Read incomming net message
@@ -42,7 +42,7 @@ func handleConnetion(conn net.Conn) {
 
 		temp := strings.TrimSpace(string(netData))
 		if temp == "EOF" {
-			fmt.Println("Clinet closes connection")
+			fmt.Println("Client closes connection")
 			break
 		}
 		fmt.Println(temp)
