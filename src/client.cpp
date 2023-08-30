@@ -147,6 +147,8 @@ int main(int argc, const char *argv[]) {
     off += sprintf(command + off, "%s", argv[i]);
     if (i + 1 < argc) {
       off += sprintf(command + off, " ");
+    } else {
+      off += sprintf(command + off, "\n");
     }
   }
 
