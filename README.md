@@ -5,7 +5,6 @@
 - Compile the code: `make`
 - Run the server: `bin/server <id> <port>`
 - Run the client: `bin/client <command> [...args]`
-- Create log directory: `sudo mkdir -p /var/log/cs425 && sudo chown $USER:$USER /var/log/cs425`
 - Add hosts to file "hosts" with the format: `Server ID, IP Address, Port`
 
 ## Server Architecture
@@ -48,8 +47,7 @@ Worker thread:
 
 ## TODO
 
-- Refactor server to accept an ID (number) - use ID to create LOG file in directory:
-    `/var/log/cs425/...`
+- Refactor server to accept an ID (number) - use ID to create the log file `machine.<id>.log`
 - Ability to specify another log file to use for testing
 - Add access logs on Server containing the client's request
 
