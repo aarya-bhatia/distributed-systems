@@ -140,7 +140,8 @@ void *file_logger_start(void *args) {
   Queue<char *> *msg_queue = (Queue<char *> *)args;
 
   char filename[256];
-  sprintf(filename, "/var/log/cs425/machine.%d.log", server_id);
+  system("mkdir -p logs");
+  sprintf(filename, "logs/machine.%d.log", server_id);
   log_info("Started file logger thread %ld: %s", pthread_self(), filename);
 
   FILE *log_file = fopen(filename, "a");
