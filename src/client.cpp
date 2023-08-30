@@ -21,8 +21,6 @@ struct Host {
     free(hostname);
     free(port);
   }
-
-  // void print_info() { log_debug("Host %d: %s:%s", id, hostname, port); }
 };
 
 struct Task {
@@ -58,38 +56,18 @@ void load_hosts(const char *filename) {
     const char *port = strtok(NULL, " ");
 
     hosts.push_back(new Host(atoi(id), host, port));
-    // hosts.back()->print_info();
 
     free(tmp);
   }
 }
 
-void flush_read_buffer(Task *task, char *buffer, size_t len) {
-  assert(task);
-  assert(buffer);
-
-  buffer[len] = 0;
-
-  if (len == 0) {
-    return;
-  }
-
-  char *ptr = strtok(buffer, "\n");
-
-  while (ptr) {
-    if (strlen(ptr)) {
-      char *msg = NULL;
-      asprintf(&msg, "%s:%s (%zu bytes): %s", task->host->hostname,
-               task->host->port, strlen(ptr), ptr);
-      msg_queue->enqueue(new Message(Message::TYPE_DATA, msg));
-    }
-    ptr = strtok(NULL, "\n");
-  }
-}
-
 void *worker(void *args) {
   Task *task = (Task *)args;
-  // log_info("Worker thread %ld started", task->tid);
+  assert(task);
+  assert(strlen(command));
+
+  char hostname[40];
+  sprintf(hostname, "%s:%s", task->host->hostname, task->host->port);
 
   int fd = connect_to_host(task->host->hostname, task->host->port);
 
@@ -99,17 +77,9 @@ void *worker(void *args) {
     return args;
   }
 
-  if (fcntl(fd, F_SETFD, fcntl(fd, F_GETFD) | O_NONBLOCK) < 0) {
-    perror("fcntl");
-    msg_queue->enqueue(new Message(Message::TYPE_FINISHED, task));
-    task->status = EXIT_FAILURE;
-    close(fd);
-    return args;
-  }
-
   clock_gettime(CLOCK_REALTIME, &task->start_time);
 
-  if (write(fd, command, strlen(command)) == -1) {
+  if (write_all(fd, command, strlen(command)) <= 0) {
     perror("write");
     close(fd);
     msg_queue->enqueue(new Message(Message::TYPE_FINISHED, task));
@@ -120,41 +90,35 @@ void *worker(void *args) {
   shutdown(fd, SHUT_WR);
 
   char buffer[MAX_BUFFER_LEN];
-  size_t off = 0; // stores the number of bytes read into buffer
-  size_t bytes_read = 0;
+  ssize_t nread;
+  size_t total = 0;
+  while ((nread = read_all(fd, buffer, sizeof buffer - 1)) > 0) {
+    buffer[nread] = 0;
+    total += nread;
 
-  while (true) {
-    ssize_t n_read = read(fd, buffer + off, sizeof buffer - off);
-    if (n_read == -1) {
-      if (errno == EINTR) {
-        continue;
+    char *ptr = strtok(buffer, "\n");
+    while (ptr) {
+      if (strlen(ptr)) {
+        char *msg = NULL;
+        asprintf(&msg, "%s (%zu bytes): %s", hostname, strlen(ptr), ptr);
+        msg_queue->enqueue(new Message(Message::TYPE_DATA, msg));
       }
-      log_error("Thread %ld: read", task->tid);
-      task->status = EXIT_FAILURE;
-      msg_queue->enqueue(new Message(Message::TYPE_FINISHED, task));
-      close(fd);
-      return args;
-    } else if (n_read == 0) {
-      // End of stream
-      break;
-    } else if (n_read > 0) {
-      bytes_read += n_read;
-      // Recieved new bytes
-      off += n_read;
-      buffer[off] = 0;
-      if (off >= sizeof buffer) {
-        flush_read_buffer(task, buffer, off);
-        off = 0;
-      }
+      ptr = strtok(NULL, "\n");
     }
   }
 
   shutdown(fd, SHUT_RD);
   close(fd);
 
-  flush_read_buffer(task, buffer, off);
-  printf("Total bytes read from server %s:%s: %zu\n", task->host->hostname,
-         task->host->port, bytes_read);
+  if (nread < 0) {
+    perror("read");
+    task->status = EXIT_FAILURE;
+    msg_queue->enqueue(new Message(Message::TYPE_FINISHED, task));
+    close(fd);
+    return args;
+  }
+
+  printf("Total bytes read from %s: %zu\n", hostname, total);
   task->status = EXIT_SUCCESS;
   msg_queue->enqueue(new Message(Message::TYPE_FINISHED, task));
 
@@ -178,14 +142,6 @@ int main(int argc, const char *argv[]) {
 
   msg_queue = new Queue<Message *>();
 
-  Task *tasks = (Task *)calloc(hosts.size(), sizeof *tasks);
-
-  for (size_t i = 0; i < hosts.size(); i++) {
-    tasks[i].host = hosts[i];
-    tasks[i].status = -1;
-    pthread_create(&tasks[i].tid, NULL, worker, &tasks[i]);
-  }
-
   size_t off = 0;
   for (int i = 1; i < argc; i++) {
     off += sprintf(command + off, "%s", argv[i]);
@@ -194,7 +150,13 @@ int main(int argc, const char *argv[]) {
     }
   }
 
-  // log_debug("Command: %s", command);
+  Task *tasks = (Task *)calloc(hosts.size(), sizeof *tasks);
+
+  for (size_t i = 0; i < hosts.size(); i++) {
+    tasks[i].host = hosts[i];
+    tasks[i].status = -1;
+    pthread_create(&tasks[i].tid, NULL, worker, &tasks[i]);
+  }
 
   size_t finished = 0;
 

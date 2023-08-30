@@ -64,8 +64,8 @@ int send_command_output(char **command, int client_sock) {
     char buf[1024];
     ssize_t bytes_read = 0;
 
-    while ((bytes_read = read(pipefd[READ], buf, sizeof buf)) > 0) {
-      if (write(client_sock, buf, bytes_read) == -1) {
+    while ((bytes_read = read_all(pipefd[READ], buf, sizeof buf)) > 0) {
+      if (write_all(client_sock, buf, bytes_read) == -1) {
         break;
       }
     }
@@ -96,19 +96,12 @@ void *worker(void *args) {
       make_string((char *)"Connected to client: %s", client_addr_str));
 
   char message[4096];
-  ssize_t nread = read(conn->client_sock, message, sizeof message - 1);
+  ssize_t nread = read_all(conn->client_sock, message, sizeof message - 1);
 
-  if (nread == -1) {
+  if (nread <= 0) {
     close(conn->client_sock);
     delete conn;
     perror("read");
-    return NULL;
-  }
-
-  if (nread == 0) {
-    log_warn("No bytes received from client %s", client_addr_str);
-    close(conn->client_sock);
-    delete conn;
     return NULL;
   }
 
@@ -210,12 +203,13 @@ int main(int argc, const char *argv[]) {
       continue;
     }
 
-    if (fcntl(client_sock, F_SETFD, fcntl(client_sock, F_GETFD) | O_NONBLOCK) <
-        0) {
-      perror("fcntl");
-      close(client_sock);
-      continue;
-    }
+    // if (fcntl(client_sock, F_SETFD, fcntl(client_sock, F_GETFD) | O_NONBLOCK)
+    // <
+    //     0) {
+    //   perror("fcntl");
+    //   close(client_sock);
+    //   continue;
+    // }
 
     Connection *conn = new Connection;
     conn->tid = tid;
