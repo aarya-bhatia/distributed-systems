@@ -65,7 +65,9 @@ int send_command_output(char **command, int client_sock) {
     ssize_t bytes_read = 0;
 
     while ((bytes_read = read(pipefd[READ], buf, sizeof buf)) > 0) {
-      write_all(client_sock, buf, bytes_read);
+      if (write(client_sock, buf, bytes_read) == -1) {
+        break;
+      }
     }
 
     close(pipefd[READ]);
@@ -102,6 +104,8 @@ void *worker(void *args) {
 
   message[nread] = 0;
 
+  shutdown(conn->client_sock, SHUT_RD);
+
   log_debug("Request from socket %d: %s", conn->client_sock, message);
 
   char *log_message = make_string((char *)"Request from client %s: %s",
@@ -115,7 +119,7 @@ void *worker(void *args) {
     perror("send_command_output");
   }
 
-  shutdown(conn->client_sock, SHUT_RDWR);
+  shutdown(conn->client_sock, SHUT_WR);
   close(conn->client_sock);
 
   for (char **s = command; *s != NULL; s++) {
@@ -179,7 +183,7 @@ int main(int argc, const char *argv[]) {
 
   signal(SIGPIPE, SIG_IGN);
 
-  int listen_sock = start_server(port);
+  int listen_sock = start_server(port, 1024);
 
   pthread_t file_logger_tid;
   pthread_create(&file_logger_tid, NULL, file_logger_start, msg_queue);
@@ -194,6 +198,13 @@ int main(int argc, const char *argv[]) {
         accept(listen_sock, (struct sockaddr *)&client_addr, &client_len);
 
     if (client_sock == -1) {
+      continue;
+    }
+
+    if (fcntl(client_sock, F_SETFD, fcntl(client_sock, F_GETFD) | O_NONBLOCK) <
+        0) {
+      perror("fcntl");
+      close(client_sock);
       continue;
     }
 

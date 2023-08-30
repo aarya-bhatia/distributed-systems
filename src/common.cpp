@@ -126,7 +126,7 @@ size_t word_len(const char *str) {
  * Start a TCP server on the given port.
  * Returns a socket on success or -1 on failure.
  */
-int start_server(int port) {
+int start_server(int port, int backlog) {
   int listen_sock = socket(PF_INET, SOCK_STREAM, 0);
   if (listen_sock == -1) {
     die("socket");
@@ -148,7 +148,7 @@ int start_server(int port) {
     die("bind");
   }
 
-  if (listen(listen_sock, 16) != 0) {
+  if (listen(listen_sock, backlog) != 0) {
     die("listen");
   }
 

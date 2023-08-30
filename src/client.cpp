@@ -1,6 +1,7 @@
 #include "common.h"
 #include "queue.h"
 #include <cstdlib>
+#include <fcntl.h>
 #include <list>
 #include <pthread.h>
 #include <unordered_map>
@@ -21,7 +22,7 @@ struct Host {
     free(port);
   }
 
-  void print_info() { log_debug("Host %d: %s:%s", id, hostname, port); }
+  // void print_info() { log_debug("Host %d: %s:%s", id, hostname, port); }
 };
 
 struct Task {
@@ -57,7 +58,7 @@ void load_hosts(const char *filename) {
     const char *port = strtok(NULL, " ");
 
     hosts.push_back(new Host(atoi(id), host, port));
-    hosts.back()->print_info();
+    // hosts.back()->print_info();
 
     free(tmp);
   }
@@ -88,7 +89,7 @@ void flush_read_buffer(Task *task, char *buffer, size_t len) {
 
 void *worker(void *args) {
   Task *task = (Task *)args;
-  log_info("Worker thread %ld started", task->tid);
+  // log_info("Worker thread %ld started", task->tid);
 
   int fd = connect_to_host(task->host->hostname, task->host->port);
 
@@ -98,15 +99,25 @@ void *worker(void *args) {
     return args;
   }
 
-  clock_gettime(CLOCK_REALTIME, &task->start_time);
-
-  if (write_all(fd, command, strlen(command)) == -1) {
-    log_error("Thread %ld: write_all", task->tid);
+  if (fcntl(fd, F_SETFD, fcntl(fd, F_GETFD) | O_NONBLOCK) < 0) {
+    perror("fcntl");
+    msg_queue->enqueue(new Message(Message::TYPE_FINISHED, task));
     task->status = EXIT_FAILURE;
     close(fd);
-    msg_queue->enqueue(new Message(Message::TYPE_FINISHED, task));
     return args;
   }
+
+  clock_gettime(CLOCK_REALTIME, &task->start_time);
+
+  if (write(fd, command, strlen(command)) == -1) {
+    perror("write");
+    close(fd);
+    msg_queue->enqueue(new Message(Message::TYPE_FINISHED, task));
+    task->status = EXIT_FAILURE;
+    return args;
+  }
+
+  shutdown(fd, SHUT_WR);
 
   char buffer[MAX_BUFFER_LEN];
   size_t off = 0; // stores the number of bytes read into buffer
@@ -138,8 +149,10 @@ void *worker(void *args) {
     }
   }
 
-  flush_read_buffer(task, buffer, off);
+  shutdown(fd, SHUT_RD);
   close(fd);
+
+  flush_read_buffer(task, buffer, off);
   printf("Total bytes read from server %s:%s: %zu\n", task->host->hostname,
          task->host->port, bytes_read);
   task->status = EXIT_SUCCESS;
@@ -181,7 +194,7 @@ int main(int argc, const char *argv[]) {
     }
   }
 
-  log_debug("Command: %s", command);
+  // log_debug("Command: %s", command);
 
   size_t finished = 0;
 
@@ -193,14 +206,13 @@ int main(int argc, const char *argv[]) {
       free((char *)m->data);
     } else if (m->type == Message::TYPE_FINISHED) {
       Task *task = (Task *)m->data;
-      log_info("Task %ld finished: %zd remaining", task->tid,
-               hosts.size() - finished);
+      log_debug("Task completed for host %s:%s", task->host->hostname,
+                task->host->port);
+      log_info("Tasks remaining: %zd", hosts.size() - finished);
       finished++;
     }
 
     delete m;
-
-    // sleep(1);
   }
 
   size_t count = 0;

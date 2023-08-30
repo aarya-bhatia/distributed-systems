@@ -76,7 +76,7 @@ void logger(FILE *file, char *message);
 // Networking functions
 
 /* Starts a TCP server on given port and returns the listening socket */
-int start_server(int port);
+int start_server(int port, int backlog);
 
 int connect_to_host(
     const char *hostname,
