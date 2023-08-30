@@ -207,6 +207,12 @@ int main(int argc, const char *argv[]) {
 
   double latency = 0;
 
+  FILE *output_file = fopen("output", "a");
+
+  if (!output_file) {
+    die("Failed to open output file");
+  }
+
   for (size_t i = 0; i < hosts.size(); i++) {
     pthread_join(tasks[i].tid, NULL);
     if (tasks[i].status == EXIT_SUCCESS) {
@@ -215,13 +221,18 @@ int main(int argc, const char *argv[]) {
           calc_duration(&tasks[i].start_time, &tasks[i].end_time);
       log_debug("Time elapsed for task %ld: %f", i, time_elapsed_millisecond);
       latency += time_elapsed_millisecond;
+      fprintf(output_file, "%f ", time_elapsed_millisecond);
     }
   }
 
+  fprintf(output_file, "\n");
+  fclose(output_file);
+
   double average_latency = count ? latency / count : 0;
 
-  printf("=== RESULT: Got reply from %ld out of %ld hosts with an average latency of %0.4f "
-         "milliseconds. ===\n",
+  printf("=== RESULT === Got reply from %ld out of %ld hosts with an average "
+         "latency of %0.4f "
+         "milliseconds.\n",
          count, hosts.size(), average_latency);
 
   free(tasks);
