@@ -10,3 +10,9 @@ bin/
 tags
 tmp
 vgcore.*
+output
+log
+*.log
+*.out
+server
+client
