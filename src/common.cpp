@@ -237,28 +237,51 @@ char *addr_to_string(struct sockaddr *addr, socklen_t len) {
 }
 
 /**
- * Used to write at most len bytes of buf to fd.
+ * To read len bytes from fd into buf.
  */
-ssize_t write_all(int fd, char *buf, size_t len) {
-  size_t bytes_written = 0;
-
-  while (bytes_written < len) {
-    errno = 0;
-    ssize_t ret = write(fd, buf + bytes_written, len - bytes_written);
-
-    if (ret == 0) {
+ssize_t read_all(int fd, char *buf, size_t len) {
+  size_t nread = 0;
+  while (nread < len) {
+    size_t to_read = MIN(BLOCK_SIZE, len - nread);
+    ssize_t ret = read(fd, buf + nread, to_read);
+    if (ret == -1) {
+      if (errno == EINTR) {
+        continue;
+      } else {
+        return -1;
+      }
+    } else if (ret == 0) {
       break;
-    } else if (ret > 0) {
-      bytes_written += ret;
-      continue;
-    } else if (ret == -1 && errno == EINTR) {
-      continue;
     } else {
-      return -1;
+      nread += ret;
     }
   }
 
-  return bytes_written;
+  return nread;
+}
+
+/**
+ * To write len bytes from buf to fd.
+ */
+ssize_t write_all(int fd, char *buf, size_t len) {
+  size_t nsent = 0;
+  while (nsent < len) {
+    size_t to_write = MIN(BLOCK_SIZE, len - nsent);
+    ssize_t ret = write(fd, buf + nsent, to_write);
+    if (ret == -1) {
+      if (errno == EINTR) {
+        continue;
+      } else {
+        return -1;
+      }
+    } else if (ret == 0) {
+      break;
+    } else {
+      nsent += ret;
+    }
+  }
+
+  return nsent;
 }
 
 /* calculates time duration in milliseconds */
