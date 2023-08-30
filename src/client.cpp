@@ -46,7 +46,7 @@ static std::vector<Host *> hosts;
 void load_hosts(const char *filename) {
   std::vector<std::string> lines = readlines(filename);
   for (size_t i = 0; i < lines.size(); i++) {
-    if (lines[i].empty()) {
+    if (lines[i].empty() || lines[i][0] == '!') {
       continue;
     }
 
