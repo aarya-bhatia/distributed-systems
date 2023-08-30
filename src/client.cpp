@@ -195,7 +195,9 @@ int main(int argc, const char *argv[]) {
       count++;
       double time_elapsed_millisecond =
           calc_duration(&tasks[i].start_time, &tasks[i].end_time);
-      log_debug("Time elapsed for task %ld: %f", i, time_elapsed_millisecond);
+      log_debug("Time elapsed for task %ld (%s:%s): %f", i,
+                tasks[i].host->hostname, tasks[i].host->port,
+                time_elapsed_millisecond);
       latency += time_elapsed_millisecond;
       fprintf(output_file, "%f ", time_elapsed_millisecond);
     }
