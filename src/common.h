@@ -71,6 +71,9 @@ char **split_string(const char *str);
 /* Returns a static datetime string in the form of "yyyy/mm/dd-hh:mm:ss.ms" */
 const char *get_datetime();
 
+/* Convert bytes to human readble string */
+const char *humanSize(uint64_t bytes);
+
 std::vector<std::string>
 readlines(const char *filename);  /* Returns a vector of lines in given file */
 size_t word_len(const char *str); /* calculates the distance to the next

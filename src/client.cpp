@@ -29,6 +29,7 @@ struct Task {
   int status;
   struct timespec start_time;
   struct timespec end_time;
+  unsigned long total_bytes_recv;
 };
 
 struct Message {
@@ -98,10 +99,12 @@ void *worker(void *args) {
 
     char *ptr = strtok(buffer, "\n");
     while (ptr) {
-      if (strlen(ptr)) {
+      size_t len = strlen(ptr);
+      if (len) {
         char *msg = NULL;
-        asprintf(&msg, "%s (%zu bytes): %s", hostname, strlen(ptr), ptr);
+        asprintf(&msg, "%s (%zu bytes): %s", hostname, len, ptr);
         msg_queue->enqueue(new Message(Message::TYPE_DATA, msg));
+        task->total_bytes_recv += len;
       }
       ptr = strtok(NULL, "\n");
     }
@@ -161,6 +164,7 @@ int main(int argc, const char *argv[]) {
   }
 
   size_t finished = 0;
+  uint64_t total_bytes_recv = 0;
 
   while (finished < hosts.size()) {
     Message *m = (Message *)msg_queue->dequeue();
@@ -174,6 +178,7 @@ int main(int argc, const char *argv[]) {
                 task->host->port);
       log_info("Tasks remaining: %zd", hosts.size() - finished);
       finished++;
+      total_bytes_recv += task->total_bytes_recv;
     }
 
     delete m;
@@ -212,6 +217,8 @@ int main(int argc, const char *argv[]) {
          "latency of %0.4f "
          "milliseconds.\n",
          count, hosts.size(), average_latency);
+
+  printf("Total data received from %ld hosts: %s\n", count, humanSize(total_bytes_recv));
 
   free(tasks);
 
