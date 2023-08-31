@@ -2,7 +2,6 @@
 #pragma once
 
 // standard
-#include <assert.h>
 #include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -24,13 +23,19 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 
-// external
-#include "log.h"
-
 // cpp headers
 #include <list>
 #include <string>
 #include <vector>
+
+#ifdef DEBUG
+#include "log.h"
+#include <assert.h>
+#else
+#define assert(...) (void)0
+#define NDEBUG
+#include "log.h"
+#endif
 
 #define BLOCK_SIZE 1024
 
@@ -68,7 +73,7 @@ float calc_duration(struct timespec *start_time, struct timespec *end_time);
 /* splits a string by whitespace and allocates a string array with the tokens */
 char **split_string(const char *str);
 
-/* Returns a static datetime string in the form of "yyyy/mm/dd-hh:mm:ss.ms" */
+/* Returns the UTC datetime string in the form of "yyyy/mm/dd-hh:mm:ss.ms" */
 const char *get_datetime();
 
 /* Convert bytes to human readble string */
@@ -91,8 +96,9 @@ int connect_to_host(
 void *get_in_addr(
     struct sockaddr *sa); /* returns the in_addr of ivp4 and ipv6 addresses */
 int get_port(struct sockaddr *sa);
-char *addr_to_string(struct sockaddr *addr,
-                     socklen_t len); /* get ip address from sockaddr */
+
+const char * addr_to_string(struct sockaddr *addr,
+               socklen_t len); /* get ip address from sockaddr */
 
 ssize_t read_all(int fd, char *buf, size_t len);
 ssize_t write_all(int fd, char *buf, size_t len);
