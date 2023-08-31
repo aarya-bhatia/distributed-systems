@@ -68,13 +68,13 @@ float calc_duration(struct timespec *start_time, struct timespec *end_time);
 /* splits a string by whitespace and allocates a string array with the tokens */
 char **split_string(const char *str);
 
+/* Returns a static datetime string in the form of "yyyy/mm/dd-hh:mm:ss.ms" */
+const char *get_datetime();
+
 std::vector<std::string>
 readlines(const char *filename);  /* Returns a vector of lines in given file */
 size_t word_len(const char *str); /* calculates the distance to the next
                                      whitespace in the string */
-
-/* Logs the message to the given file with a timestamp */
-void logger(FILE *file, char *message);
 
 // Networking functions
 
@@ -93,4 +93,3 @@ char *addr_to_string(struct sockaddr *addr,
 
 ssize_t read_all(int fd, char *buf, size_t len);
 ssize_t write_all(int fd, char *buf, size_t len);
-

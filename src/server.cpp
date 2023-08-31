@@ -37,6 +37,10 @@ static int port;
  * Returns a status of SUCCESS or FAILURE.
  */
 int send_command_output(char **command, int client_sock) {
+  assert(command);
+  assert(command[0] != NULL);
+  assert(client_sock >= 0);
+
   int pipefd[2];
 
   if (pipe(pipefd) < 0) {
@@ -58,6 +62,7 @@ int send_command_output(char **command, int client_sock) {
     dup2(pipefd[WRITE], 1);
     close(pipefd[WRITE]);
     execvp(command[0], (char **)command);
+    log_error("cannot exec command %s", command[0]);
     die("execvp");
   } else {
     close(pipefd[WRITE]);
@@ -92,8 +97,8 @@ void *worker(void *args) {
 
   log_info("Connected to client: %s", client_addr_str);
 
-  msg_queue->enqueue(
-      make_string((char *)"Connected to client: %s", client_addr_str));
+  msg_queue->enqueue(make_string((char *)"%s: Connected to client: %s\n",
+                                 get_datetime(), client_addr_str));
 
   char message[4096];
   ssize_t nread = read_all(conn->client_sock, message, sizeof message - 1);
@@ -111,10 +116,8 @@ void *worker(void *args) {
 
   log_debug("Request from socket %d: %s", conn->client_sock, message);
 
-  char *log_message = make_string((char *)"Request from client %s: %s",
-                                  client_addr_str, message);
-
-  msg_queue->enqueue(log_message);
+  msg_queue->enqueue(make_string((char *)"%s: Request from client %s: %s\n",
+                                 get_datetime(), client_addr_str, message));
 
   char **command = split_string(message);
 
@@ -158,9 +161,9 @@ void *file_logger_start(void *args) {
     if (!message) {
       break;
     }
-    logger(log_file, message);
+
+    fputs(message, log_file);
     fflush(log_file);
-    // log_debug("Message received on thread %ld: %s", pthread_self(), message);
     free(message);
   }
 
@@ -202,14 +205,6 @@ int main(int argc, const char *argv[]) {
     if (client_sock == -1) {
       continue;
     }
-
-    // if (fcntl(client_sock, F_SETFD, fcntl(client_sock, F_GETFD) | O_NONBLOCK)
-    // <
-    //     0) {
-    //   perror("fcntl");
-    //   close(client_sock);
-    //   continue;
-    // }
 
     Connection *conn = new Connection;
     conn->tid = tid;

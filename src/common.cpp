@@ -335,19 +335,13 @@ char **split_string(const char *str) {
   return tokens;
 }
 
-void logger(FILE *file, char *message) {
-  assert(file);
-
+/**
+ * Get UTC datetime string
+ */
+const char *get_datetime() {
+  static char buf[64];
   time_t t = time(NULL);
-  struct tm tm = *localtime(&t);
-
-  char buf[128];
-  strftime(buf, sizeof buf, "%Y-%m-%e %H:%M:%S %z", &tm);
-
-  char hostname[128];
-  gethostname(hostname, sizeof hostname);
-
-  const char *user = getlogin();
-
-  fprintf(file, "%s@%s: [%s]: %s\n", user, hostname, buf, message);
+  struct tm tm = *gmtime(&t); // Get UTC time
+  strftime(buf, sizeof buf, "%Y/%m/%e-%H:%M:%S", &tm);
+  return buf;
 }
