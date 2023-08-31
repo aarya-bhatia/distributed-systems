@@ -230,7 +230,7 @@ int get_port(struct sockaddr *sa) {
  * Returns a pointer to a static string containing the IP address
  * of the given sockaddr.
  */
-char *addr_to_string(struct sockaddr *addr, socklen_t len) {
+const char *addr_to_string(struct sockaddr *addr, socklen_t len) {
   static char s[100];
   inet_ntop(addr->sa_family, get_in_addr(addr), s, len);
   return s;

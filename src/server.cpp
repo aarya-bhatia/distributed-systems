@@ -13,6 +13,9 @@
 #define SUCCESS 0
 #define FAILURE -1
 
+#define MAX_MSG_LEN 512
+#define MAX_LOG_LEN 1024
+
 /**
  * Data to pass to thread per connection
  */
@@ -23,9 +26,38 @@ struct Connection {
   socklen_t client_len;
 };
 
-static Queue<char *> *msg_queue = NULL; // Message queue that receives strings
 static int server_id;
 static int port;
+
+void logger(const char *message) {
+  assert(message);
+  static pthread_mutex_t logger_mutex = PTHREAD_MUTEX_INITIALIZER;
+  static bool logger_init = false;
+  static char filename[256];
+
+  pthread_mutex_lock(&logger_mutex);
+
+  if (!logger_init) {
+    sprintf(filename, "logs/machine.%d.log", server_id);
+
+    if (system("mkdir -p logs") < 0) {
+      die("system");
+    }
+
+    logger_init = true;
+  }
+
+  FILE *log_file = fopen(filename, "a");
+
+  if (!log_file) {
+    die("fopen");
+  }
+
+  fprintf(log_file, "%s: %s\n", get_datetime(), message);
+  fclose(log_file);
+
+  pthread_mutex_unlock(&logger_mutex);
+}
 
 /**
  * Runs a shell command in a child process and sends its output to the client
@@ -87,8 +119,11 @@ int send_command_output(char **command, int client_sock) {
  */
 void *worker(void *args) {
   Connection *conn = (Connection *)args;
+  assert(conn);
 
   char client_addr_str[40];
+  char log_msg[MAX_LOG_LEN + 1];
+  char message[MAX_MSG_LEN + 1];
 
   sprintf(
       client_addr_str, "%s:%d",
@@ -97,11 +132,10 @@ void *worker(void *args) {
 
   log_info("Connected to client: %s", client_addr_str);
 
-  msg_queue->enqueue(make_string((char *)"%s: Connected to client: %s\n",
-                                 get_datetime(), client_addr_str));
+  snprintf(log_msg, MAX_LOG_LEN, "Connected to client: %s", client_addr_str);
+  logger(log_msg);
 
-  char message[4096];
-  ssize_t nread = read_all(conn->client_sock, message, sizeof message - 1);
+  ssize_t nread = read_all(conn->client_sock, message, MAX_MSG_LEN);
 
   if (nread <= 0) {
     close(conn->client_sock);
@@ -114,10 +148,14 @@ void *worker(void *args) {
 
   shutdown(conn->client_sock, SHUT_RD);
 
-  log_debug("Request from socket %d: %s", conn->client_sock, message);
+  if (message[nread - 1] == '\n') {
+    message[nread - 1] = 0;
+  }
 
-  msg_queue->enqueue(make_string((char *)"%s: Request from client %s: %s\n",
-                                 get_datetime(), client_addr_str, message));
+  log_debug("Request from socket %d: %s", conn->client_sock, message);
+  snprintf(log_msg, MAX_LOG_LEN, "Request from client %s: %s", client_addr_str,
+           message);
+  logger(log_msg);
 
   char **command = split_string(message);
 
@@ -138,41 +176,6 @@ void *worker(void *args) {
 }
 
 /**
- * Listens for messages (strings) on the message queue and writes them to the
- * log file with the appropriate format. It will free the memory for the message
- * string.
- */
-void *file_logger_start(void *args) {
-  Queue<char *> *msg_queue = (Queue<char *> *)args;
-
-  char filename[256];
-  system("mkdir -p logs");
-  sprintf(filename, "logs/machine.%d.log", server_id);
-  log_info("Started file logger thread %ld: %s", pthread_self(), filename);
-
-  FILE *log_file = fopen(filename, "a");
-
-  if (!log_file) {
-    die("fopen");
-  }
-
-  while (1) {
-    char *message = (char *)msg_queue->dequeue();
-    if (!message) {
-      break;
-    }
-
-    fputs(message, log_file);
-    fflush(log_file);
-    free(message);
-  }
-
-  fclose(log_file);
-
-  return args;
-}
-
-/**
  * Server accepts an ID and port on start up.
  */
 int main(int argc, const char *argv[]) {
@@ -184,15 +187,9 @@ int main(int argc, const char *argv[]) {
   server_id = atoi(argv[1]);
   port = atoi(argv[2]);
 
-  msg_queue = new Queue<char *>;
-
   signal(SIGPIPE, SIG_IGN);
 
   int listen_sock = start_server(port, 1024);
-
-  pthread_t file_logger_tid;
-  pthread_create(&file_logger_tid, NULL, file_logger_start, msg_queue);
-  sleep(1);
 
   struct sockaddr_storage client_addr;
   socklen_t client_len = sizeof client_addr;
