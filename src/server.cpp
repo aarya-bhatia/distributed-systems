@@ -20,7 +20,7 @@
  * Data to pass to thread per connection
  */
 struct Connection {
-  int tid;
+  pthread_t tid;
   int client_sock;
   struct sockaddr_storage client_addr;
   socklen_t client_len;
@@ -98,7 +98,7 @@ int send_command_output(char **command, int client_sock) {
     die("execvp");
   } else {
     close(pipefd[WRITE]);
-    char buf[1024];
+    char buf[MAX_BUFFER_LEN];
     ssize_t bytes_read = 0;
 
     while ((bytes_read = read_all(pipefd[READ], buf, sizeof buf)) > 0) {
@@ -106,6 +106,8 @@ int send_command_output(char **command, int client_sock) {
         break;
       }
     }
+
+    write_all(client_sock, (char *)"\n", 1);
 
     close(pipefd[READ]);
     wait(NULL);

@@ -8,7 +8,6 @@
 #include <vector>
 
 #define SERVER_PORT "6000"
-#define MAX_BUFFER_LEN 1024
 
 struct Host {
   int id;
@@ -92,10 +91,20 @@ void *worker(void *args) {
 
   char buffer[MAX_BUFFER_LEN];
   ssize_t nread;
+  size_t off = 0;
   size_t total = 0;
-  while ((nread = read_all(fd, buffer, sizeof buffer - 1)) > 0) {
-    buffer[nread] = 0;
+  while ((nread = read_all(fd, buffer + off, sizeof buffer - off - 1)) > 0) {
     total += nread;
+    off += nread;
+
+    buffer[off] = 0;
+
+    char *last = rstrstr(buffer, (char *)"\n");
+    if (!last) {
+      continue;
+    }
+
+    *last = 0;
 
     char *ptr = strtok(buffer, "\n");
     while (ptr) {
@@ -104,9 +113,13 @@ void *worker(void *args) {
         char *msg = NULL;
         asprintf(&msg, "%s (%zu bytes): %s", hostname, len, ptr);
         msg_queue->enqueue(new Message(Message::TYPE_DATA, msg));
-        task->total_bytes_recv += len;
       }
       ptr = strtok(NULL, "\n");
+    }
+
+    size_t remaining_bytes = strlen(last + 1);
+    if (last < buffer + off) {
+      memmove(last + 1, buffer, remaining_bytes);
     }
   }
 
@@ -122,6 +135,7 @@ void *worker(void *args) {
   }
 
   printf("Total bytes read from %s: %zu\n", hostname, total);
+  task->total_bytes_recv = total;
   task->status = EXIT_SUCCESS;
   msg_queue->enqueue(new Message(Message::TYPE_FINISHED, task));
 
@@ -172,6 +186,7 @@ int main(int argc, const char *argv[]) {
     if (m->type == Message::TYPE_DATA && m->data != NULL) {
       puts((char *)m->data);
       free((char *)m->data);
+      fflush(stdout);
     } else if (m->type == Message::TYPE_FINISHED) {
       Task *task = (Task *)m->data;
       log_debug("Task completed for host %s:%s", task->host->hostname,
@@ -218,7 +233,8 @@ int main(int argc, const char *argv[]) {
          "milliseconds.\n",
          count, hosts.size(), average_latency);
 
-  printf("Total data received from %ld hosts: %s\n", count, humanSize(total_bytes_recv));
+  printf("Total data received from %ld hosts: %s\n", count,
+         humanSize(total_bytes_recv));
 
   free(tasks);
 
