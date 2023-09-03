@@ -13,8 +13,8 @@
 #define SUCCESS 0
 #define FAILURE -1
 
-#define MAX_MSG_LEN 512
-#define MAX_LOG_LEN 1024
+#define MAX_MSG_LEN 1024
+#define MAX_LOG_LEN 2048
 
 /**
  * Data to pass to thread per connection
