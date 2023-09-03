@@ -15,6 +15,7 @@ def inject_pattern(f):
 
 
 def main():
+    random.seed(425)
     with open("./log", "w") as f:
         for i in range(2000000):
             f.write(f"{datetime.datetime.now()} {random.randint(0, 9)}")
