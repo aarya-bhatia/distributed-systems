@@ -118,9 +118,15 @@ void *worker(void *args) {
     }
 
     size_t remaining_bytes = strlen(last + 1);
+
     if (last < buffer + off) {
       memmove(last + 1, buffer, remaining_bytes);
+      off = remaining_bytes;
+    } else {
+      off = 0;
     }
+
+    buffer[off] = 0;
   }
 
   shutdown(fd, SHUT_RD);
