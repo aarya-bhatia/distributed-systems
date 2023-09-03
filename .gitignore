@@ -12,7 +12,6 @@ tmp
 vgcore.*
 output
 log
+logs
 *.log
 *.out
-server
-client
