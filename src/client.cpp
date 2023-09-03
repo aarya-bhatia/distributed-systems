@@ -117,9 +117,8 @@ void *worker(void *args) {
       ptr = strtok(NULL, "\n");
     }
 
-    size_t remaining_bytes = strlen(last + 1);
-
-    if (last < buffer + off) {
+    if (last[1] != 0 && last < buffer + off) {
+      size_t remaining_bytes = strlen(last + 1);
       memmove(last + 1, buffer, remaining_bytes);
       off = remaining_bytes;
     } else {
@@ -140,7 +139,6 @@ void *worker(void *args) {
     return args;
   }
 
-  printf("Total bytes read from %s: %zu\n", hostname, total);
   task->total_bytes_recv = total;
   task->status = EXIT_SUCCESS;
   msg_queue->enqueue(new Message(Message::TYPE_FINISHED, task));
@@ -184,7 +182,6 @@ int main(int argc, const char *argv[]) {
   }
 
   size_t finished = 0;
-  uint64_t total_bytes_recv = 0;
 
   while (finished < hosts.size()) {
     Message *m = (Message *)msg_queue->dequeue();
@@ -192,24 +189,22 @@ int main(int argc, const char *argv[]) {
     if (m->type == Message::TYPE_DATA && m->data != NULL) {
       puts((char *)m->data);
       free((char *)m->data);
-      fflush(stdout);
     } else if (m->type == Message::TYPE_FINISHED) {
       Task *task = (Task *)m->data;
       log_debug("Task completed for host %s:%s", task->host->hostname,
                 task->host->port);
-      log_info("Tasks remaining: %zd", hosts.size() - finished);
+      log_debug("Tasks remaining: %zd", hosts.size() - finished);
       finished++;
-      total_bytes_recv += task->total_bytes_recv;
     }
 
     delete m;
   }
 
   size_t count = 0;
-
+  uint64_t total_bytes_recv = 0;
   double latency = 0;
 
-  FILE *output_file = fopen("output", "a");
+  FILE *output_file = fopen("latency_output", "a");
 
   if (!output_file) {
     die("Failed to open output file");
@@ -221,11 +216,15 @@ int main(int argc, const char *argv[]) {
       count++;
       double time_elapsed_millisecond =
           calc_duration(&tasks[i].start_time, &tasks[i].end_time);
-      log_debug("Time elapsed for task %ld (%s:%s): %f", i,
-                tasks[i].host->hostname, tasks[i].host->port,
-                time_elapsed_millisecond);
+      printf("Time elapsed for task %ld (%s:%s): %f\n", i,
+             tasks[i].host->hostname, tasks[i].host->port,
+             time_elapsed_millisecond);
       latency += time_elapsed_millisecond;
       fprintf(output_file, "%f ", time_elapsed_millisecond);
+
+      printf("Total bytes read from %s:%s: %zu\n", tasks[i].host->hostname,
+             tasks[i].host->port, tasks[i].total_bytes_recv);
+      total_bytes_recv += tasks[i].total_bytes_recv;
     }
   }
 

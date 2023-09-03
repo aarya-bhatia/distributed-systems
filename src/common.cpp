@@ -242,7 +242,8 @@ const char *addr_to_string(struct sockaddr *addr, socklen_t len) {
 ssize_t read_all(int fd, char *buf, size_t len) {
   size_t nread = 0;
   while (nread < len) {
-    size_t to_read = MIN(BLOCK_SIZE, len - nread);
+    // size_t to_read = MIN(BLOCK_SIZE, len - nread);
+    size_t to_read = len - nread;
     ssize_t ret = read(fd, buf + nread, to_read);
     if (ret == -1) {
       if (errno == EINTR) {
@@ -266,7 +267,8 @@ ssize_t read_all(int fd, char *buf, size_t len) {
 ssize_t write_all(int fd, char *buf, size_t len) {
   size_t nsent = 0;
   while (nsent < len) {
-    size_t to_write = MIN(BLOCK_SIZE, len - nsent);
+    // size_t to_write = MIN(BLOCK_SIZE, len - nsent);
+    size_t to_write = len - nsent;
     ssize_t ret = write(fd, buf + nsent, to_write);
     if (ret == -1) {
       if (errno == EINTR) {
@@ -347,22 +349,21 @@ const char *get_datetime() {
 }
 
 /**
-* Convert bytes to human readble string
-*/
-const char *humanSize(uint64_t bytes)
-{
-	const char *suffix[] = {"B", "KB", "MB", "GB", "TB"};
-	char length = sizeof(suffix) / sizeof(suffix[0]);
+ * Convert bytes to human readble string
+ */
+const char *humanSize(uint64_t bytes) {
+  const char *suffix[] = {"B", "KB", "MB", "GB", "TB"};
+  char length = sizeof(suffix) / sizeof(suffix[0]);
 
-	int i = 0;
-	double dblBytes = bytes;
+  int i = 0;
+  double dblBytes = bytes;
 
-	if (bytes > 1024) {
-		for (i = 0; (bytes / 1024) > 0 && i<length-1; i++, bytes /= 1024)
-			dblBytes = bytes / 1024.0;
-	}
+  if (bytes > 1024) {
+    for (i = 0; (bytes / 1024) > 0 && i < length - 1; i++, bytes /= 1024)
+      dblBytes = bytes / 1024.0;
+  }
 
-	static char output[200];
-	sprintf(output, "%.02lf %s", dblBytes, suffix[i]);
-	return output;
+  static char output[200];
+  sprintf(output, "%.02lf %s", dblBytes, suffix[i]);
+  return output;
 }
