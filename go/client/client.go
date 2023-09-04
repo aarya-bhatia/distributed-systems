@@ -23,10 +23,8 @@ func main() {
 
 	argsWithoutProg := strings.Join(os.Args[1:], " ")
 	cmd := []byte(argsWithoutProg + "\n")
-	// fmt.Println("cmd: " + argsWithoutProg)
 
 	for _, host := range hosts {
-		// fmt.Println(host)
 		go connect(host, outputChannel, finishedChannel, cmd)
 	}
 
@@ -62,7 +60,6 @@ func readHosts() []Host {
 	}
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
-		fmt.Println(scanner.Text())
 		words := strings.Split(scanner.Text(), " ")
 		if len(scanner.Text()) == 1 { continue }
 		hosts = append(hosts, Host{words[0], words[1], words[2]})
@@ -79,7 +76,7 @@ func connect(host Host, channel chan string, finishedChannel chan bool, cmd []by
 	if err != nil {
 		fmt.Println(err)
 	}
-	fmt.Println("Conenct to: " + conn.LocalAddr().String())
+	fmt.Println("Connected to: " + conn.LocalAddr().String())
 	_, err = conn.Write(cmd)
 	conn.(*net.TCPConn).CloseWrite()
 	connbuf := bufio.NewReader(conn)
