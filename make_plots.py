@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 
-with open("output", "r") as file:
+with open("latency_output", "r") as file:
     lines = file.readlines()
 
     y = []
@@ -26,6 +26,8 @@ with open("output", "r") as file:
 # x = np.array([1, 2, 3, 4, 5])
 # y = np.power(x, 2)  # Effectively y = x**2
 # e = np.array([1.5, 2.6, 3.7, 4.6, 5.5])
+
+plt.figure(figsize=(20,10))
 
 plt.plot(x, np.array(samples))
 
