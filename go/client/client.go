@@ -30,24 +30,17 @@ func main() {
 
 	go func() {
 		count := 0
-		for {
+
+		for count < len(hosts) {
 			<-finishedChannel
 			count += 1
-			if count >= len(hosts) {
-				break
-			}
 		}
 
 		close(outputChannel)
 	}()
 
-	for {
-		str, more := <-outputChannel
-		if more {
-			fmt.Print(str)
-		} else {
-			break
-		}
+	for str := range outputChannel {
+		fmt.Print(str)
 	}
 }
 
@@ -60,13 +53,21 @@ func readHosts() []Host {
 	}
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
-		words := strings.Split(scanner.Text(), " ")
-		if len(scanner.Text()) == 1 { continue }
+		line := scanner.Text()
+
+		// Ignore lines that start with '!', are empty, or contain only whitespace
+		if strings.HasPrefix(line, "!") || strings.TrimSpace(line) == "" {
+			continue
+		}
+
+		words := strings.Split(line, " ")
 		hosts = append(hosts, Host{words[0], words[1], words[2]})
 	}
+
 	if err := scanner.Err(); err != nil {
 		log.Fatal(err)
 	}
+
 	fmt.Println(hosts)
 	return hosts
 }
@@ -80,13 +81,15 @@ func connect(host Host, channel chan string, finishedChannel chan bool, cmd []by
 	_, err = conn.Write(cmd)
 	conn.(*net.TCPConn).CloseWrite()
 	connbuf := bufio.NewReader(conn)
+
 	for {
 		str, err := connbuf.ReadString('\n')
 
 		if err != nil {
-			finishedChannel<- true
+			finishedChannel <- true
 			break
 		}
+
 		if str != "\n" {
 			channel <- str
 		}
