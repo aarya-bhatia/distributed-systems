@@ -154,9 +154,17 @@ void *worker(void *args) {
     message[nread - 1] = 0;
   }
 
-  log_debug("Request from socket %d: %s", conn->client_sock, message);
-  snprintf(log_msg, MAX_LOG_LEN, "Request from client %s: %s", client_addr_str,
-           message);
+  if (strlen(message) == 0) {
+    shutdown(conn->client_sock, SHUT_WR);
+    close(conn->client_sock);
+    delete conn;
+    return NULL;
+  }
+
+  log_debug("Request from socket %d (%zu bytes): %s", conn->client_sock,
+            strlen(message), message);
+  snprintf(log_msg, MAX_LOG_LEN, "Request from client (%zu bytes) %s: %s",
+           strlen(message), client_addr_str, message);
   logger(log_msg);
 
   char **command = split_string(message);
