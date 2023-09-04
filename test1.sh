@@ -24,7 +24,7 @@ num_expected_matches=$(grep "$pattern" log | wc -l)
 num_actual_matches=$(grep "$pattern" output | wc -l)
 expected=$(printf "%s * %s\n" $num_hosts $num_expected_matches | bc -q)
 
-echo $num_hosts, $num_actual_matches, $num_expected_matches, $expected
+echo $num_actual_matches, $num_expected_matches, $expected
 
 if [ $expected -eq $num_actual_matches ]; then
 	echo 'Test passed :)!'

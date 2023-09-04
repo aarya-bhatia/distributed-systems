@@ -27,8 +27,8 @@ for vm in "${cluster[@]}"; do
 	ping -W $timeout -c 1 $vm
 
 	if [ $? -eq 0 ]; then
-		sshpass -f $passwd_file scp ~/.ssh/cs425 ~/.ssh/cs425.pub $vm:~
-		sshpass -f $passwd_file ssh $vm "mkdir -p ~/.ssh && mv cs425 cs425.pub .ssh/"
+		sshpass -f $passwd_file scp ~/.ssh/cs425 ~/.ssh/cs425.pub ./start.sh $vm:~
+		sshpass -f $passwd_file ssh $vm "mkdir -p ~/.ssh && mv cs425 cs425.pub .ssh/; ./start.sh"
 	else
 		echo "Failed to connect to $vm"
 	fi
