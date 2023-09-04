@@ -110,9 +110,9 @@ void *worker(void *args) {
     while (ptr) {
       size_t len = strlen(ptr);
       if (len) {
-        char *msg = NULL;
-        asprintf(&msg, "%s (%zu bytes): %s", hostname, len, ptr);
-        msg_queue->enqueue(new Message(Message::TYPE_DATA, msg));
+        msg_queue->enqueue(new Message(
+            Message::TYPE_DATA,
+            make_string((char *)"%s (%zu bytes): %s", hostname, len, ptr)));
       }
       ptr = strtok(NULL, "\n");
     }
@@ -131,6 +131,8 @@ void *worker(void *args) {
   shutdown(fd, SHUT_RD);
   close(fd);
 
+  task->total_bytes_recv = total;
+
   if (nread < 0) {
     perror("read");
     task->status = EXIT_FAILURE;
@@ -139,7 +141,6 @@ void *worker(void *args) {
     return args;
   }
 
-  task->total_bytes_recv = total;
   task->status = EXIT_SUCCESS;
   msg_queue->enqueue(new Message(Message::TYPE_FINISHED, task));
 
