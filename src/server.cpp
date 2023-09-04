@@ -13,8 +13,7 @@
 #define SUCCESS 0
 #define FAILURE -1
 
-#define MAX_MSG_LEN 1024
-#define MAX_LOG_LEN 2048
+#define MAX_REQUEST_LEN 4096
 
 /**
  * Data to pass to thread per connection
@@ -95,7 +94,7 @@ int send_command_output(char **command, int client_sock) {
     close(pipefd[WRITE]);
     execvp(command[0], (char **)command);
     log_error("cannot exec command %s", command[0]);
-    die("execvp");
+    exit(1);
   } else {
     close(pipefd[WRITE]);
     char buf[MAX_BUFFER_LEN];
@@ -124,8 +123,6 @@ void *worker(void *args) {
   assert(conn);
 
   char client_addr_str[40];
-  char log_msg[MAX_LOG_LEN + 1];
-  char message[MAX_MSG_LEN + 1];
 
   sprintf(
       client_addr_str, "%s:%d",
@@ -134,10 +131,13 @@ void *worker(void *args) {
 
   log_info("Connected to client: %s", client_addr_str);
 
-  snprintf(log_msg, MAX_LOG_LEN, "Connected to client: %s", client_addr_str);
+  char *log_msg =
+      make_string((char *)"Connected to client: %s", client_addr_str);
   logger(log_msg);
+  free(log_msg);
 
-  ssize_t nread = read_all(conn->client_sock, message, MAX_MSG_LEN);
+  char message[MAX_REQUEST_LEN + 1];
+  ssize_t nread = read_all(conn->client_sock, message, MAX_REQUEST_LEN);
 
   if (nread <= 0) {
     close(conn->client_sock);
@@ -161,11 +161,11 @@ void *worker(void *args) {
     return NULL;
   }
 
-  log_debug("Request from socket %d (%zu bytes): %s", conn->client_sock,
-            strlen(message), message);
-  snprintf(log_msg, MAX_LOG_LEN, "Request from client (%zu bytes) %s: %s",
-           strlen(message), client_addr_str, message);
+  log_msg = make_string((char *)"Request from client (%zu bytes) %s: %s",
+                        strlen(message), client_addr_str, message);
   logger(log_msg);
+  log_debug("%s", log_msg);
+  free(log_msg);
 
   char **command = split_string(message);
 
