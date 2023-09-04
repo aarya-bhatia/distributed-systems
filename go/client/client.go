@@ -18,19 +18,38 @@ type Host struct {
 func main() {
 	hosts := readHosts()
 
-	c := make(chan string)
+	outputChannel := make(chan string)
+	finishedChannel := make(chan bool)
+
 	argsWithoutProg := strings.Join(os.Args[1:], " ")
 	cmd := []byte(argsWithoutProg + "\n")
-	fmt.Println("cmd: " + argsWithoutProg)
+	// fmt.Println("cmd: " + argsWithoutProg)
 
 	for _, host := range hosts {
-		fmt.Println(host)
-		go connect(host, c, cmd)
+		// fmt.Println(host)
+		go connect(host, outputChannel, finishedChannel, cmd)
 	}
 
+	go func() {
+		count := 0
+		for {
+			<-finishedChannel
+			count += 1
+			if count >= len(hosts) {
+				break
+			}
+		}
+
+		close(outputChannel)
+	}()
+
 	for {
-		str := <-c
-		fmt.Print(str)
+		str, more := <-outputChannel
+		if more {
+			fmt.Print(str)
+		} else {
+			break
+		}
 	}
 }
 
@@ -45,6 +64,7 @@ func readHosts() []Host {
 	for scanner.Scan() {
 		fmt.Println(scanner.Text())
 		words := strings.Split(scanner.Text(), " ")
+		if len(scanner.Text()) == 1 { continue }
 		hosts = append(hosts, Host{words[0], words[1], words[2]})
 	}
 	if err := scanner.Err(); err != nil {
@@ -54,7 +74,7 @@ func readHosts() []Host {
 	return hosts
 }
 
-func connect(host Host, channel chan string, cmd []byte) {
+func connect(host Host, channel chan string, finishedChannel chan bool, cmd []byte) {
 	conn, err := net.Dial("tcp", host.host+":"+host.port)
 	if err != nil {
 		fmt.Println(err)
@@ -67,8 +87,7 @@ func connect(host Host, channel chan string, cmd []byte) {
 		str, err := connbuf.ReadString('\n')
 
 		if err != nil {
-			// log.Fatal(err)
-			// fmt.Println(err)
+			finishedChannel<- true
 			break
 		}
 		if str != "\n" {
