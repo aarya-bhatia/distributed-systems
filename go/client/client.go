@@ -173,9 +173,13 @@ func readHosts() []*Host {
 
 func connect(host *Host, queue *Queue[string], finishedChannel chan bool, cmd []byte) {
 	conn, err := net.Dial("tcp", host.host+":"+host.port)
+
 	if err != nil {
 		fmt.Println(err)
+		finishedChannel <- true
+		return
 	}
+
 	serverSignature := fmt.Sprintf("%s %s:%s", host.id, host.host, host.port)
 	fmt.Println("Connected to: " + serverSignature)
 	_, err = conn.Write(cmd)
