@@ -48,7 +48,6 @@ func (q *Queue[T]) push(value T) {
 	q.data = append(q.data, value)
 	q.waiting = 0
 	q.cv.Signal()
-	// fmt.Println("push(): Queue: ", q.data)
 	q.m.Unlock()
 }
 
@@ -60,7 +59,6 @@ func (q *Queue[T]) pop() T {
 	}
 	value := q.data[0]
 	q.data = q.data[1:]
-	// fmt.Println("pop(): Queue: ", q.data)
 	q.waiting -= 1
 	if q.waiting > 0 {
 		q.cv.Signal()
@@ -81,12 +79,15 @@ func (q *Queue[T]) empty() bool {
 
 func main() {
 	if len(os.Args) <= 1 {
-		log.Fatal("Please enter command")
+		log.Fatal("Usage: ./client options query\n")
 	}
+
+	var silent = strings.ToLower(os.Getenv("silent")) == "true"
+
 	hosts := readHosts()
 	finishedChannel := make(chan bool)
 	argsWithoutProg := strings.Join(os.Args[1:], " ")
-	cmd := []byte(argsWithoutProg + "\n")
+	grepWithoutFile := fmt.Sprintf("grep %s", argsWithoutProg)
 
 	var queue *Queue[string] = &Queue[string]{}
 	queue.init()
@@ -95,7 +96,7 @@ func main() {
 
 	// Create a new thread for each connection
 	for _, host := range hosts {
-		go connect(host, queue, finishedChannel, cmd)
+		go connect(host, queue, finishedChannel, grepWithoutFile)
 	}
 
 	var wg sync.WaitGroup
@@ -107,10 +108,12 @@ func main() {
 		for true {
 			// fmt.Println("Queue is waiting")
 			value := queue.pop()
-			fmt.Print(value)
-
 			if value == "EXIT" {
 				return
+			}
+
+			if !silent {
+				fmt.Print(value)
 			}
 
 			totalLines += 1
@@ -135,7 +138,7 @@ func main() {
 
 	for _, host := range hosts {
 		hostSignature := fmt.Sprintf("%s %s:%s", host.id, host.host, host.port)
-		fmt.Printf("%s, lines: %d, data: %d, latency: %s\n", hostSignature, host.lines, host.dataSize, host.latency)
+		fmt.Printf("%s, lines: %d, data: %d bytes, latency: %s\n", hostSignature, host.lines, host.dataSize, host.latency)
 	}
 
 	fmt.Printf("Total of %d lines received from server\n", totalLines)
@@ -167,22 +170,27 @@ func readHosts() []*Host {
 		log.Fatal(err)
 	}
 
-	fmt.Println(hosts)
+	log.Println(hosts)
 	return hosts
 }
 
-func connect(host *Host, queue *Queue[string], finishedChannel chan bool, cmd []byte) {
+func connect(host *Host, queue *Queue[string], finishedChannel chan bool, grepWithoutFile string) {
 	conn, err := net.Dial("tcp", host.host+":"+host.port)
 
 	if err != nil {
-		fmt.Println(err)
+		log.Println(err)
 		finishedChannel <- true
 		return
 	}
 
 	serverSignature := fmt.Sprintf("%s %s:%s", host.id, host.host, host.port)
-	fmt.Println("Connected to: " + serverSignature)
-	_, err = conn.Write(cmd)
+	log.Println("Connected to: " + serverSignature)
+
+	var logFile = fmt.Sprintf("data/vm%s.log", host.id)
+	var cmd = fmt.Sprintf("%s %s\n", grepWithoutFile, logFile)
+	log.Print("Command: ", cmd)
+
+	_, err = conn.Write([]byte(cmd))
 	conn.(*net.TCPConn).CloseWrite()
 	startTime := time.Now()
 	connbuf := bufio.NewReader(conn)
@@ -195,7 +203,6 @@ func connect(host *Host, queue *Queue[string], finishedChannel chan bool, cmd []
 			host.latency = time.Now().Sub(startTime).String()
 			host.dataSize = dataTransferred
 			host.lines = lineCount
-			fmt.Println(*host)
 			finishedChannel <- true
 			break
 		}
