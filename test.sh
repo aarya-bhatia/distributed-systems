@@ -36,8 +36,7 @@ test_pattern() {
 	fi
 }
 
-# queries=("-i http" "GET" "DELETE" "POST\|PUT" "[4-5]0[0-9]" "20[0-9]")
-queries=("/list")
+queries=("-i http" "GET" "DELETE" "POST\|PUT" "[4-5]0[0-9]" "20[0-9]")
 for query in "${queries[@]}"; do
 	test_pattern data/vm1.log "$query"
 done
