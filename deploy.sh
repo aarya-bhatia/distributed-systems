@@ -38,3 +38,10 @@ for vm in "${cluster[@]}"; do
 	fi
 done
 
+for i in {0..9}; do
+	file="vm$((i+1)).log"
+	vm=${cluster[i]}
+	echo "vm: $vm"
+	sshpass -f $passwd_file scp -o 'StrictHostKeyChecking no' data/$file $netid@$vm:~
+	sshpass -f $passwd_file ssh -o 'StrictHostKeyChecking no' $netid@$vm "mkdir -p ~/mp1/data; mv $file ~/mp1/data"
+done

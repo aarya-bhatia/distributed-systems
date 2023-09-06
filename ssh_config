@@ -1,3 +1,4 @@
 Host gitlab.engr.illinois.edu
     IdentityFile ~/.ssh/cs425
     IdentitiesOnly yes
+	StrictHostKeyChecking no
