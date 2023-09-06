@@ -1,6 +1,7 @@
 #!/bin/bash
 
 passwd_file="../passwd"
+netid="aaryab2"
 
 if [ ! -e $passwd_file ]; then
 	echo "Password file not found"
@@ -27,8 +28,11 @@ for vm in "${cluster[@]}"; do
 	ping -W $timeout -c 1 $vm
 
 	if [ $? -eq 0 ]; then
-		sshpass -f $passwd_file scp ~/.ssh/cs425 ~/.ssh/cs425.pub start.sh ssh_config $vm:~
-		sshpass -f $passwd_file ssh $vm "./start.sh"
+		sshpass -f $passwd_file scp -v -o 'StrictHostKeyChecking no' ~/.ssh/cs425 $netid@$vm:~/ssh_cs425
+		sshpass -f $passwd_file scp -v -o 'StrictHostKeyChecking no' ~/.ssh/cs425.pub $netid@$vm:~/ssh_cs425.pub
+		sshpass -f $passwd_file scp -v -o 'StrictHostKeyChecking no' ssh_config $netid@$vm:~/ssh_config
+		sshpass -f $passwd_file scp -v -o 'StrictHostKeyChecking no' start.sh $netid@$vm:~/start.sh
+		sshpass -f $passwd_file ssh -f -n -o 'StrictHostKeyChecking no' $netid@$vm "./start.sh"
 	else
 		echo "Failed to connect to $vm"
 	fi
