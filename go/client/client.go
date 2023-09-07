@@ -121,20 +121,24 @@ func main() {
 	var reportFile *os.File = nil
 
 	if outputFilepath != "" {
-		outputFile, err := os.Open(outputFilepath)
+		outputFile, err = os.OpenFile(outputFilepath, os.O_WRONLY|os.O_CREATE, 0664)
 
 		if err != nil {
-			log.Fatal("Failed to open output file")
+			log.Fatal("Error opening file:", err)
 		}
 
 		defer outputFile.Close()
 	}
+
+	log.Println("output file: ", outputFile)
+
 	reportFile, err = os.Create(reportFilepath)
 	if err != nil {
 		fmt.Print(err)
 		log.Fatal("Failed to open report file")
 	}
 	defer reportFile.Close()
+
 	hosts := readHosts()
 	finishedChannel := make(chan bool)
 
@@ -165,7 +169,10 @@ func main() {
 			}
 
 			if outputFile != nil {
-				outputFile.Write([]byte(value))
+				_, err = outputFile.WriteString(value)
+				if err != nil {
+					log.Println(err)
+				}
 			}
 
 			totalLines += 1

@@ -3,7 +3,7 @@
 hosts_file="hosts"
 client="bin/client"
 
-make clean && make
+make bin/client
 
 results=()
 score=0
@@ -17,6 +17,8 @@ test_grep() {
 	output_file=/tmp/cs425.out
 	pattern="$1"
 
+	/bin/rm $output_file
+
 	$client -grep "$pattern" -output $output_file -silence -logs data
 
 	if [ ! $? -eq 0 ]; then
@@ -24,6 +26,8 @@ test_grep() {
 	else
 		num_expected_matches=$(grep -c "$pattern" $input_file)
 		num_actual_matches=$(grep -c "$pattern" $output_file)
+
+		echo $num_actual_matches, $num_expected_matches
 
 		if [ $num_expected_matches -eq $num_actual_matches ]; then
 			results+=("Test passed for pattern \"$pattern\": matched $num_actual_matches out of $num_expected_matches lines from $num_hosts servers.")
