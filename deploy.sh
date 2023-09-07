@@ -1,9 +1,9 @@
 #!/bin/bash
 
-passwd_file="~/passwd"
+passwd_file="/home/aarya/passwd"
 netid="aaryab2"
 
-if [ ! -e $passwd_file ]; then
+if [ ! -f $passwd_file ]; then
 	echo "Password file not found"
 	exit 1
 fi
