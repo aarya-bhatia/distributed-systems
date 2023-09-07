@@ -8,18 +8,19 @@ make bin/client
 results=()
 score=0
 
-input_file=data/all.log
-[ ! -f $input_file ] && find data/ -type f | xargs cat >$input_file
+[ ! -f data/all.log ] && find data/ -type f | xargs cat >$input_file
 
 num_hosts=$(cat $hosts_file | grep -v '^!\|^\s*$' | wc -l)
 
 test_grep() {
 	output_file=/tmp/cs425.out
 	pattern="$1"
+	logs=$2
+	input_file=$3
 
 	/bin/rm $output_file
 
-	$client -grep "$pattern" -output $output_file -silence -logs data
+	$client -grep "$pattern" -output $output_file -silence -logs $logs
 
 	if [ ! $? -eq 0 ]; then
 		results+=("Test failed for pattern \"$pattern\": client failed with status $?")
@@ -34,15 +35,25 @@ test_grep() {
 			score=$((score+1))
 		else
 			results+=("Test failed for pattern \"$pattern\": matched $num_actual_matches out of $num_expected_matches lines from $num_hosts servers.")
-			score=$((score-1))
 		fi
 	fi
 }
 
-queries=("-i http" "GET" "DELETE" "POST\|PUT" "[4-5]0[0-9]" "20[0-9]")
-for query in "${queries[@]}"; do
-	test_grep "$query"
-done
+test_num=$1
+
+if [ -z $test_num ] || [ $test_num -eq 0 ]; then
+	echo "Test 0"
+	queries=("-i http" "GET" "DELETE" "POST\|PUT" "[4-5]0[0-9]" "20[0-9]")
+	for query in "${queries[@]}"; do
+		test_grep "$query" data data/all.log
+	done
+elif [ $test_num -eq 1 ]; then
+	echo "Test 1"
+	queries=("low" "mid" "high")
+	for query in "${queries[@]}"; do
+		test_grep "$query" logs logs/vm1.log
+	done
+fi
 
 echo "Results"
 for result in "${results[@]}"; do
