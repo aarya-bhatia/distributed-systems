@@ -1,12 +1,9 @@
 #!/bin/bash
 
 hosts_file="hosts"
-output_file=/tmp/output
-client="go/client/client"
+client="bin/client"
 
-sh -c "cd go/client; go build"
-
-num_hosts=$(cat $hosts_file | grep -v '^!\|^\s*$' | wc -l)
+make clean && make
 
 results=()
 score=0
@@ -14,10 +11,13 @@ score=0
 input_file=data/all.log
 [ ! -f $input_file ] && find data/ -type f | xargs cat >$input_file
 
-test_pattern() {
+num_hosts=$(cat $hosts_file | grep -v '^!\|^\s*$' | wc -l)
+
+test_grep() {
+	output_file=/tmp/cs425.out
 	pattern="$1"
-	/bin/rm $output_file
-	$client "$pattern" | tee $output_file
+
+	$client -grep "$pattern" -output $output_file -silence -logs data
 
 	if [ ! $? -eq 0 ]; then
 		results+=("Test failed for pattern \"$pattern\": client failed with status $?")
@@ -37,7 +37,7 @@ test_pattern() {
 
 queries=("-i http" "GET" "DELETE" "POST\|PUT" "[4-5]0[0-9]" "20[0-9]")
 for query in "${queries[@]}"; do
-	test_pattern "$query"
+	test_grep "$query"
 done
 
 echo "Results"
