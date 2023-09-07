@@ -2,12 +2,12 @@
 
 ## Setup Instructions
 
-- Build the server: `make`
+- Prerequisites: Install `g++` and `go`
+- Build: `make`
 - Run the server: `bin/server <id> <port>`
-- Build the client: `cd go/client && go build client.go`
-- Run the client: `go/client/client ...args`
+- Run the client: `bin/client ...args`
 - Help: `go/client/client --help`
-- Update the hosts file to add or remove servers (Format: `id, hostname, port`)
+- Configure: Update the hosts file to add or remove servers (id, hostname, port)
 
 ## Server Architecture
 

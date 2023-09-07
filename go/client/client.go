@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"flag"
 	"fmt"
 	"log"
 	"net"
@@ -78,16 +79,52 @@ func (q *Queue[T]) empty() bool {
 }
 
 func main() {
-	if len(os.Args) <= 1 {
-		log.Fatal("Usage: ./client options query\n")
+	var logsDirectory string
+	var outputFilepath string
+	var reportFilepath string
+	var silence bool
+	var command string
+	var grep string
+
+	var timestamp = time.Now().Format("20060102150405")
+
+	flag.StringVar(&logsDirectory, "logs", "data", "Path to directory containing the log files in format vm{i}.log")
+	flag.StringVar(&outputFilepath, "output", "", "The file to store the output of the command from all the servers.")
+	flag.StringVar(&reportFilepath, "report", fmt.Sprintf("reports/%s", timestamp), "The file to store the stats for all the servers")
+	flag.BoolVar(&silence, "silence", false, "Whether to silence the output of the command")
+	flag.StringVar(&command, "command", "", "The command to execute remotely. Either 'command' or 'grep' must be specified.")
+	flag.StringVar(&grep, "grep", "", "The grep query to execute remotely. Either 'command' or 'grep' must be specified.")
+
+	flag.Parse()
+
+	if command == "" && grep == "" {
+		flag.Usage()
+		os.Exit(1)
 	}
 
-	var silent = strings.ToLower(os.Getenv("silent")) == "true"
+	if command != "" && grep != "" {
+		flag.Usage()
+		os.Exit(1)
+	}
+
+	if grep != "" {
+		command = fmt.Sprintf("grep %s", grep)
+	}
+
+	var outputFile *os.File = nil
+
+	if outputFilepath != "" {
+		outputFile, err := os.Open(outputFilepath)
+
+		if err != nil {
+			log.Fatal("Failed to open output file")
+		}
+
+		defer outputFile.Close()
+	}
 
 	hosts := readHosts()
 	finishedChannel := make(chan bool)
-	argsWithoutProg := strings.Join(os.Args[1:], " ")
-	grepWithoutFile := fmt.Sprintf("grep %s", argsWithoutProg)
 
 	var queue *Queue[string] = &Queue[string]{}
 	queue.init()
@@ -96,7 +133,7 @@ func main() {
 
 	// Create a new thread for each connection
 	for _, host := range hosts {
-		go connect(host, queue, finishedChannel, grepWithoutFile)
+		go connect(host, queue, finishedChannel, command)
 	}
 
 	var wg sync.WaitGroup
@@ -106,14 +143,18 @@ func main() {
 	go func() {
 		defer wg.Done()
 		for true {
-			// fmt.Println("Queue is waiting")
 			value := queue.pop()
+
 			if value == "EXIT" {
 				return
 			}
 
-			if !silent {
+			if silence == false {
 				fmt.Print(value)
+			}
+
+			if outputFile != nil {
+				outputFile.Write([]byte(value))
 			}
 
 			totalLines += 1
