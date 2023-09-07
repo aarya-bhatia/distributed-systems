@@ -7,6 +7,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -86,6 +87,7 @@ func main() {
 	var silence bool
 	var command string
 	var grep string
+	var err error
 
 	var timestamp string = time.Now().Format("20060102150405")
 
@@ -112,26 +114,27 @@ func main() {
 		command = fmt.Sprintf("grep %s", grep)
 	}
 
-	err := os.MkdirAll(filepath.Dir(reportFilepath), os.ModePerm)
+	exec.Command("mkdir", "-p", outputFilepath)
+
+	err = os.MkdirAll(filepath.Dir(reportFilepath), os.ModePerm)
 	if err != nil {
 		fmt.Println(err)
 		log.Fatal(err)
 	}
-	var outputFile *os.File = nil
+
+	// var outputFile *os.File = nil
+	// if outputFilepath != "" {
+	// 	outputFile, err = os.OpenFile(outputFilepath, os.O_WRONLY|os.O_CREATE, 0664)
+	//
+	// 	if err != nil {
+	// 		log.Fatal("Error opening file:", err)
+	// 	}
+	//
+	// 	defer outputFile.Close()
+	// }
+	// log.Println("output file: ", outputFile)
+
 	var reportFile *os.File = nil
-
-	if outputFilepath != "" {
-		outputFile, err = os.OpenFile(outputFilepath, os.O_WRONLY|os.O_CREATE, 0664)
-
-		if err != nil {
-			log.Fatal("Error opening file:", err)
-		}
-
-		defer outputFile.Close()
-	}
-
-	log.Println("output file: ", outputFile)
-
 	reportFile, err = os.Create(reportFilepath)
 	if err != nil {
 		fmt.Print(err)
@@ -148,7 +151,7 @@ func main() {
 	totalLines := 0
 	// Create a new thread for each connection
 	for _, host := range hosts {
-		go connect(host, queue, finishedChannel, command, logsDirectory)
+		go connect(host, queue, finishedChannel, command, logsDirectory, silence, outputFilepath)
 	}
 
 	var wg sync.WaitGroup
@@ -168,12 +171,12 @@ func main() {
 				fmt.Print(value)
 			}
 
-			if outputFile != nil {
-				_, err = outputFile.WriteString(value)
-				if err != nil {
-					log.Println(err)
-				}
-			}
+			// if outputFile != nil {
+			// 	_, err = outputFile.WriteString(value)
+			// 	if err != nil {
+			// 		log.Println(err)
+			// 	}
+			// }
 
 			totalLines += 1
 		}
@@ -195,7 +198,7 @@ func main() {
 
 	fmt.Println("---Meta data---")
 
-	reportFile.Write([]byte(fmt.Sprintf("Command: %s, total lies: %d\n", command, totalLines)))
+	reportFile.Write([]byte(fmt.Sprintf("Command: %s, total lines: %d\n", command, totalLines)))
 	reportFile.Write([]byte("id,host,port,lines,latency,size\n"))
 	for _, host := range hosts {
 		hostSignature := fmt.Sprintf("%s %s:%s", host.id, host.host, host.port)
@@ -236,7 +239,7 @@ func readHosts() []*Host {
 	return hosts
 }
 
-func connect(host *Host, queue *Queue[string], finishedChannel chan bool, grepWithoutFile string, logFile string) {
+func connect(host *Host, queue *Queue[string], finishedChannel chan bool, grepWithoutFile string, logFile string, silence bool, outputFilepath string) {
 	conn, err := net.Dial("tcp", host.host+":"+host.port)
 
 	if err != nil {
@@ -244,6 +247,16 @@ func connect(host *Host, queue *Queue[string], finishedChannel chan bool, grepWi
 		finishedChannel <- true
 		return
 	}
+
+	outputFile, err := os.OpenFile(fmt.Sprintf("%s/output%s", outputFilepath, host.id), os.O_CREATE|os.O_WRONLY, 0660)
+
+	if err != nil {
+		log.Println(err)
+		finishedChannel <- true
+		return
+	}
+
+	defer outputFile.Close()
 
 	serverSignature := fmt.Sprintf("%s %s:%s", host.id, host.host, host.port)
 	log.Println("Connected to: " + serverSignature)
@@ -273,7 +286,12 @@ func connect(host *Host, queue *Queue[string], finishedChannel chan bool, grepWi
 			dataTransferred += len(str)
 			lineCount++
 			str = host.id + " " + host.host + ":" + host.port + " " + str
-			queue.push(str)
+
+			if silence == false {
+				queue.push(str)
+			}
+
+			outputFile.WriteString(str)
 		}
 	}
 }
