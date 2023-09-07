@@ -1,6 +1,6 @@
 #!/bin/bash
 
-passwd_file="../passwd"
+passwd_file="~/passwd"
 netid="aaryab2"
 
 if [ ! -e $passwd_file ]; then
