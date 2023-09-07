@@ -2,52 +2,45 @@
 
 ## Setup Instructions
 
-- Compile the code: `make`
+- Build the server: `make`
 - Run the server: `bin/server <id> <port>`
-- Run the client: `bin/client <command> [...args]`
-- Add hosts to file "hosts" with the format: `Server ID, IP Address, Port`
+- Build the client: `cd go/client && go build client.go`
+- Run the client: `go/client/client ...args`
+- Help: `go/client/client --help`
+- Update the hosts file to add or remove servers (Format: `id, hostname, port`)
 
 ## Server Architecture
 
 Main thread:
-- Initializes file logger thread
-- Listens for tcp connections on a specified port
-- Creates a thread for each connection
+- Listens for tcp connections on given port
+- Creates a new thread for each connection
 
-File logger:
-- Opens the log file using server ID `machine.<ID>.log`
-- Reads messages from queue and blocks while empty
-- Appends a log message to file
-
-Worker process:
-- Read the request from client socket
-- Add log for the request made by the client
-- Add log for establishing connection
-- Run the requested shell command in a new process
-- Pipe the output of the command to the client socket
+Worker thread:
+- Read request from client
+- Add log for client request
+- Run the requested shell command in a child process and capture output in
+  parent process using a pipe a pipe.
+- Write the output of command to client
 
 ## Client Architecture
 
 Main thread:
-- Create a blocking message queue
-- Loads the hosts ID, IP address and port from a file called "hosts"
-- Create a thread for each host and open a tcp connection
-- Blocks while message queue is empty
-- When new message in queue, print it to stdout
-- Wait for threads to exit
+- Create a asynchronous queue which blocks while empty
+- Loads the hosts from file
+- Creates thread for each host and connect to server
+- Another thread to listen for messages on queue and print/write to
+  stdout/file. Thread quits when it receives the message "EXIT".
+- Creates a "finished" channel that counts how many threads have finished. It
+  sends a "EXIT" message to queue when all threads finish.
+- Main thread waits for all threads to finish
 
 Worker thread:
 - If cannot connect to host, exit worker
-- Sends a request to the server containing the specified shell command
-- Receives messages from the server and pushes them to message queue
+- Writes the request to server containing a grep command and the input file
+  (eg. `vm{i}.log`)
+- Reads output of command from the server and pushes each line to queue
 - Messages are split by new line characters
-- On completion, adds a FINISHED message to the queue
-
-
-
-## TODO
-
-- Refactor server to accept an ID (number) - use ID to create the log file `machine.<id>.log`
-- Ability to specify another log file to use for testing
-- Add access logs on Server containing the client's request
+- Compute the latency of the response when connection is closed
+- Save all meta data to the host struct (data transferred, line count, latency)
+- Inform finished channel when finished, on both success and failure
 
