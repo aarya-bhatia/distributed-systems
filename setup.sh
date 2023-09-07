@@ -23,16 +23,25 @@ cluster=(
 
 timeout=3
 
-
 for vm in "${cluster[@]}"; do
 	echo "vm: $vm"
 	ping -W $timeout -c 1 $vm
 
 	if [ $? -eq 0 ]; then
-		sshpass -f $passwd_file rsync -avu -e "ssh -o 'StrictHostKeyChecking no'" start.sh $netid@$vm:~/start.sh
+		sshpass -f $passwd_file scp -v -o 'StrictHostKeyChecking no' ~/.ssh/cs425 $netid@$vm:~/ssh_cs425
+		sshpass -f $passwd_file scp -v -o 'StrictHostKeyChecking no' ~/.ssh/cs425.pub $netid@$vm:~/ssh_cs425.pub
+		sshpass -f $passwd_file scp -v -o 'StrictHostKeyChecking no' ssh_config $netid@$vm:~/ssh_config
+		sshpass -f $passwd_file scp -v -o 'StrictHostKeyChecking no' start.sh $netid@$vm:~/start.sh
 		sshpass -f $passwd_file ssh -f -n -o 'StrictHostKeyChecking no' $netid@$vm "./start.sh"
 	else
 		echo "Failed to connect to $vm"
 	fi
 done
 
+for i in {0..9}; do
+	file="vm$((i+1)).log"
+	vm=${cluster[i]}
+	echo "vm: $vm"
+	sshpass -f $passwd_file scp -o 'StrictHostKeyChecking no' data/$file $netid@$vm:~
+	sshpass -f $passwd_file ssh -o 'StrictHostKeyChecking no' $netid@$vm "mkdir -p ~/mp1/data; mv $file ~/mp1/data"
+done
