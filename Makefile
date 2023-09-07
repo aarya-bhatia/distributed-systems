@@ -16,9 +16,13 @@ bin/server: obj/server.o $(OBJ)
 	mkdir -p $(dir $@);
 	$(CC) $^ -o $@ $(LDFLAGS)
 
-bin/client: obj/client.o $(OBJ)
-	mkdir -p $(dir $@);
-	$(CC) $^ -o $@ $(LDFLAGS)
+bin/client: go/client/client.go
+	go build $^
+	[ -x client ] && mv client bin/client
+
+# bin/client: obj/client.o $(OBJ)
+# 	mkdir -p $(dir $@);
+# 	$(CC) $^ -o $@ $(LDFLAGS)
 
 bin/test: obj/test.o $(OBJ)
 	mkdir -p $(dir $@);
