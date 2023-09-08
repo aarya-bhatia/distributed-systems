@@ -1,8 +1,13 @@
 package main
 
-import "testing"
-import "fmt"
-import "os/exec"
+import (
+	"fmt"
+	"os/exec"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"testing"
+)
 
 const OUTPUT_PATH = "../../outputs"
 
@@ -26,14 +31,13 @@ func TestPattern(t *testing.T) {
 				}
 			}
 		}
-
-		fmt.Println(client.stat)
 	}
 }
 
 func TestSampleData(t *testing.T) {
-	for _, pattern := range []string{"DELETE", "HTTP"} {
+	var queries = []string{"HTTP", "GET", "DELETE", "POST\\|PUT", "[4-5]0[0-9]", "20[0-9]"}
 
+	for _, pattern := range queries {
 		client := RunClient(ClientArgs{
 			grep:            "grep " + pattern,
 			outputDirectory: OUTPUT_PATH,
@@ -44,17 +48,23 @@ func TestSampleData(t *testing.T) {
 
 		for _, host := range client.hosts {
 			if host.status == STATUS_SUCCESS {
-				cmd := fmt.Sprintf("grep -c %s data/vm%s.log", pattern, host.id)
-				fmt.Println("Command: ", cmd)
-				out, err := exec.Command(cmd).Output()
+				filepath, err := filepath.Abs(fmt.Sprintf("../../data/vm%s.log", host.id))
 				if err != nil {
-					log.Fatal(err)
+					t.Fatalf("Failed to resolve filepath: %v", err)
 				}
 
-				expected := int(strings.TrimSpace(out))
+				out, err := exec.Command("/bin/grep", "-c", pattern, filepath).Output()
+				if err != nil {
+					t.Fatalf("Failed to execute command: %v", err)
+				}
 
-				if host.lines != count {
-					t.Fail()
+				expected, err := strconv.Atoi(strings.TrimSpace(string(out)))
+				if err != nil {
+					t.Fatalf("Failed to parse output: %v", err)
+				}
+
+				if host.lines != expected {
+					t.Errorf("Test failed for pattern %s (Expected: %d, Actual: %d)", pattern, expected, host.lines)
 				}
 			}
 		}
