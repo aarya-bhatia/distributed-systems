@@ -17,7 +17,8 @@ if [ ! -d mp1 ]; then
 fi
 
 cd mp1
-git pull
+git checkout -b testing
+git pull origin testing
 make clean
 make
 

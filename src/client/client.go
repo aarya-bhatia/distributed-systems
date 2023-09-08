@@ -6,7 +6,6 @@ import (
 	"log"
 	"net"
 	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -79,21 +78,6 @@ func RunClient(args ClientArgs) *Client {
 
 	client.wg = &sync.WaitGroup{}
 	client.wg.Add(2)
-
-	absOutputDirectory, err := filepath.Abs(client.args.outputDirectory)
-
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	absLogsDirectory, err := filepath.Abs(client.args.logsDirectory)
-
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	client.args.logsDirectory = absLogsDirectory
-	client.args.outputDirectory = absOutputDirectory
 
 	log.Println(client)
 
