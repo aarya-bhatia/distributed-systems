@@ -10,19 +10,11 @@ OBJ=obj/common.o
 
 .PHONY: all clean
 
-all: bin/server bin/client bin/test
+all: bin/server bin/test
 
 bin/server: obj/server.o $(OBJ)
 	mkdir -p $(dir $@);
 	$(CC) $^ -o $@ $(LDFLAGS)
-
-bin/client: go/client/client.go
-	go build $^
-	[ -x client ] && mv client bin/client
-
-# bin/client: obj/client.o $(OBJ)
-# 	mkdir -p $(dir $@);
-# 	$(CC) $^ -o $@ $(LDFLAGS)
 
 bin/test: obj/test.o $(OBJ)
 	mkdir -p $(dir $@);
