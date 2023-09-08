@@ -2,17 +2,17 @@ package main
 
 import (
 	"bufio"
-	"flag"
 	"fmt"
 	"log"
 	"net"
 	"os"
-	"os/exec"
-	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 )
+
+const STATUS_SUCCESS = 0
+const STATUS_FAILURE = 1
 
 type Host struct {
 	id       string
@@ -21,195 +21,113 @@ type Host struct {
 	latency  string
 	dataSize int
 	lines    int
+	status   int
 }
 
-type Queue[T any] struct {
-	data    []T
-	m       sync.Mutex
-	cv      sync.Cond
-	waiting int
+type ClientStat struct {
+	totalLines         uint
+	averageLatency     float64
+	totalBytesReceived uint
 }
 
+type ClientArgs struct {
+	command         string
+	grep            string
+	outputDirectory string
+	logsDirectory   string
+	reportDirectory string
+	silence         bool
+}
+
+type Client struct {
+	finishedChannel chan bool
+	queue           *Queue[string]
+	hosts           []*Host
+	wg              *sync.WaitGroup
+	args            ClientArgs
+	stat            ClientStat
+}
+
+const EXIT_MESSAGE = "EXIT"
+const DEFAULT_FILE_MODE = 0664
+const DEFAULT_DIRECTORY_MODE = 0775
+
+// Creates and initialize a new Host
 func NewHost(id string, host string, port string) *Host {
 	obj := new(Host)
 	obj.id = id
 	obj.host = host
 	obj.port = port
-	obj.latency = ""
 	obj.dataSize = 0
 	obj.lines = 0
+	obj.status = STATUS_FAILURE
 
 	return obj
 }
 
-func (q *Queue[T]) init() {
-	q.cv = *sync.NewCond(&q.m)
-}
+func RunClient(args ClientArgs) *Client {
+	client := &Client{}
+	client.args = args
+	client.hosts = readHosts()
+	client.finishedChannel = make(chan bool)
+	client.queue = &Queue[string]{}
+	client.queue.init()
 
-func (q *Queue[T]) push(value T) {
-	q.m.Lock()
-	q.data = append(q.data, value)
-	q.waiting = 0
-	q.cv.Signal()
-	q.m.Unlock()
-}
+	client.stat.totalLines = 0
+	client.stat.totalBytesReceived = 0
+	client.stat.averageLatency = 0
 
-func (q *Queue[T]) pop() T {
-	q.m.Lock()
-	q.waiting += 1
-	for len(q.data) == 0 {
-		q.cv.Wait()
-	}
-	value := q.data[0]
-	q.data = q.data[1:]
-	q.waiting -= 1
-	if q.waiting > 0 {
-		q.cv.Signal()
-	}
-	q.m.Unlock()
-	return value
-}
+	client.wg = &sync.WaitGroup{}
+	client.wg.Add(2)
 
-func (q *Queue[T]) empty() bool {
-	q.m.Lock()
-	if len(q.data) == 0 {
-		q.m.Unlock()
-		return true
-	}
-	q.m.Unlock()
-	return false
-}
+	go FinishedChannelRoutine(client)
+	go OutputConsumerRoutine(client)
 
-func main() {
-	var logsDirectory string
-	var outputFilepath string
-	var reportFilepath string
-	var silence bool
-	var command string
-	var grep string
-	var err error
-
-	var timestamp string = time.Now().Format("20060102150405")
-
-	flag.StringVar(&logsDirectory, "logs", "data", "Path to directory containing the log files in format vm{i}.log")
-	flag.StringVar(&outputFilepath, "output", "", "The file to store the output of the command from all the servers.")
-	flag.StringVar(&reportFilepath, "report", fmt.Sprintf("reports/%s.log", timestamp), "The file to store the stats for all the servers")
-	flag.BoolVar(&silence, "silence", false, "Whether to silence the output of the command")
-	flag.StringVar(&command, "command", "", "The command to execute remotely. Either 'command' or 'grep' must be specified.")
-	flag.StringVar(&grep, "grep", "", "The grep query to execute remotely. Either 'command' or 'grep' must be specified.")
-
-	flag.Parse()
-
-	if command == "" && grep == "" {
-		flag.Usage()
-		os.Exit(1)
-	}
-
-	if command != "" && grep != "" {
-		flag.Usage()
-		os.Exit(1)
-	}
-
-	if grep != "" {
-		command = fmt.Sprintf("grep %s", grep)
-	}
-
-	exec.Command("mkdir", "-p", outputFilepath)
-
-	err = os.MkdirAll(filepath.Dir(reportFilepath), os.ModePerm)
-	if err != nil {
-		fmt.Println(err)
-		log.Fatal(err)
-	}
-
-	// var outputFile *os.File = nil
-	// if outputFilepath != "" {
-	// 	outputFile, err = os.OpenFile(outputFilepath, os.O_WRONLY|os.O_CREATE, 0664)
-	//
-	// 	if err != nil {
-	// 		log.Fatal("Error opening file:", err)
-	// 	}
-	//
-	// 	defer outputFile.Close()
-	// }
-	// log.Println("output file: ", outputFile)
-
-	var reportFile *os.File = nil
-	reportFile, err = os.Create(reportFilepath)
-	if err != nil {
-		fmt.Print(err)
-		log.Fatal("Failed to open report file")
-	}
-	defer reportFile.Close()
-
-	hosts := readHosts()
-	finishedChannel := make(chan bool)
-
-	var queue *Queue[string] = &Queue[string]{}
-	queue.init()
-
-	totalLines := 0
 	// Create a new thread for each connection
-	for _, host := range hosts {
-		go connect(host, queue, finishedChannel, command, logsDirectory, silence, outputFilepath)
+	for _, host := range client.hosts {
+		go Worker(host, client)
 	}
 
-	var wg sync.WaitGroup
-	wg.Add(1)
+	client.wg.Wait()
 
-	// Thread to receive log messages from the workers and print to stdout
-	go func() {
-		defer wg.Done()
-		for true {
-			value := queue.pop()
-
-			if value == "EXIT" {
-				return
-			}
-
-			if silence == false {
-				fmt.Print(value)
-			}
-
-			// if outputFile != nil {
-			// 	_, err = outputFile.WriteString(value)
-			// 	if err != nil {
-			// 		log.Println(err)
-			// 	}
-			// }
-
-			totalLines += 1
-		}
-	}()
-
-	// Routine that check if all communication are finished
-	go func() {
-		count := 0
-
-		for count < len(hosts) {
-			<-finishedChannel
-			count += 1
-		}
-
-		queue.push("EXIT")
-	}()
-
-	wg.Wait()
-
-	fmt.Println("---Meta data---")
-
-	reportFile.Write([]byte(fmt.Sprintf("Command: %s, total lines: %d\n", command, totalLines)))
-	reportFile.Write([]byte("id,host,port,lines,latency,size\n"))
-	for _, host := range hosts {
-		hostSignature := fmt.Sprintf("%s %s:%s", host.id, host.host, host.port)
-		fmt.Printf("%s, lines: %d, data: %d bytes, latency: %s\n", hostSignature, host.lines, host.dataSize, host.latency)
-		reportFile.Write([]byte(fmt.Sprintf("%s,%s,%s,%d,%s,%d\n", host.id, host.host, host.port, host.lines, host.latency, host.dataSize)))
-	}
-
-	fmt.Printf("Total of %d lines received from server\n", totalLines)
-
+	return client
 }
 
+// Routine to check if all communications are finished
+func FinishedChannelRoutine(client *Client) {
+	defer client.wg.Done()
+
+	count := 0
+
+	for count < len(client.hosts) {
+		<-client.finishedChannel
+		count += 1
+	}
+
+	client.queue.push(EXIT_MESSAGE)
+}
+
+// Routine to consume the output lines received from the servers
+func OutputConsumerRoutine(client *Client) {
+	defer client.wg.Done()
+
+	for true {
+		message := client.queue.pop()
+
+		if message == EXIT_MESSAGE {
+			break
+		}
+
+		if !client.args.silence {
+			fmt.Print(message)
+		}
+
+		client.stat.totalLines += 1
+		client.stat.totalBytesReceived += uint(len(message))
+	}
+}
+
+// Read the hosts file and initialize host array
 func readHosts() []*Host {
 	hosts := []*Host{}
 	file, err := os.Open("./hosts")
@@ -239,20 +157,25 @@ func readHosts() []*Host {
 	return hosts
 }
 
-func connect(host *Host, queue *Queue[string], finishedChannel chan bool, grepWithoutFile string, logFile string, silence bool, outputFilepath string) {
+// Routine to communicate with specific server and execute client command
+// Saves the output to the file "<outputDirectory>/vm<ID>.output"
+func Worker(host *Host, client *Client) {
+	defer func() {
+		client.finishedChannel <- true
+	}()
+
 	conn, err := net.Dial("tcp", host.host+":"+host.port)
 
 	if err != nil {
 		log.Println(err)
-		finishedChannel <- true
 		return
 	}
 
-	outputFile, err := os.OpenFile(fmt.Sprintf("%s/output%s", outputFilepath, host.id), os.O_CREATE|os.O_WRONLY, 0660)
+	outputFilename := fmt.Sprintf("%s/vm%s.output", client.args.outputDirectory, host.id)
+	outputFile, err := os.OpenFile(outputFilename, os.O_CREATE|os.O_WRONLY, DEFAULT_FILE_MODE)
 
 	if err != nil {
 		log.Println(err)
-		finishedChannel <- true
 		return
 	}
 
@@ -260,38 +183,41 @@ func connect(host *Host, queue *Queue[string], finishedChannel chan bool, grepWi
 
 	serverSignature := fmt.Sprintf("%s %s:%s", host.id, host.host, host.port)
 	log.Println("Connected to: " + serverSignature)
-	logFile = fmt.Sprintf("%s/vm%s.log", logFile, host.id)
 
-	var cmd = fmt.Sprintf("%s %s\n", grepWithoutFile, logFile)
-	log.Print("Command: ", cmd)
+	serverLogFile := fmt.Sprintf("%s/vm%s.log", client.args.logsDirectory, host.id)
 
-	_, err = conn.Write([]byte(cmd))
+	var command string
+
+	if client.args.grep != "" {
+		command = fmt.Sprintf("%s %s\n", client.args.grep, serverLogFile)
+	} else {
+		command = client.args.command + "\n"
+	}
+
+	log.Print("Command: ", command)
+	_, err = conn.Write([]byte(command))
 	conn.(*net.TCPConn).CloseWrite()
-	startTime := time.Now()
-	connbuf := bufio.NewReader(conn)
-	dataTransferred := 0
-	lineCount := 0
+
+	startTime := time.Now() // Start timer
+	buffer := bufio.NewReader(conn)
+
 	for {
-		str, err := connbuf.ReadString('\n')
+		str, err := buffer.ReadString('\n')
 
 		if err != nil {
-			host.latency = time.Now().Sub(startTime).String()
-			host.dataSize = dataTransferred
-			host.lines = lineCount
-			finishedChannel <- true
+			host.latency = time.Now().Sub(startTime).String() // end timer
 			break
 		}
 
 		if str != "\n" {
-			dataTransferred += len(str)
-			lineCount++
-			str = host.id + " " + host.host + ":" + host.port + " " + str
+			host.dataSize += len(str)
+			host.lines++
 
-			if silence == false {
-				queue.push(str)
-			}
-
+			outputStr := fmt.Sprintf("%s %s:%s %s", host.id, host.host, host.port, str)
+			client.queue.push(outputStr)
 			outputFile.WriteString(str)
 		}
 	}
+
+	host.status = STATUS_SUCCESS
 }
