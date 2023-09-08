@@ -131,11 +131,6 @@ void *worker(void *args) {
 
   log_info("Connected to client: %s", client_addr_str);
 
-  char *log_msg =
-      make_string((char *)"Connected to client: %s", client_addr_str);
-  logger(log_msg);
-  free(log_msg);
-
   char message[MAX_REQUEST_LEN + 1];
   ssize_t nread = read_all(conn->client_sock, message, MAX_REQUEST_LEN);
 
@@ -161,11 +156,8 @@ void *worker(void *args) {
     return NULL;
   }
 
-  log_msg = make_string((char *)"Request from client (%zu bytes) %s: %s",
-                        strlen(message), client_addr_str, message);
-  logger(log_msg);
-  log_debug("%s", log_msg);
-  free(log_msg);
+  log_info("Request from client (%zu bytes) %s: %s", strlen(message),
+           client_addr_str, message);
 
   char **command = split_string(message);
 
