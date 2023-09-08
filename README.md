@@ -8,7 +8,7 @@ Authors: Aarya Bhatia \<aaryab@illinois.edu\>, William Zheng \<xinzez2@illinois.
 
 - Install prerequisites: `g++`, `go`
 - Build server and client: `make`
-- Run the server: `bin/server <id> <port>`
+- Run the server: `bin/server <port>`
 - Run the client: `bin/client args...`
 - Help: `bin/client --help`
 - Configure [./hosts](hosts) file to add or remove servers
