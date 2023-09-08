@@ -3,7 +3,7 @@ package main
 import "testing"
 import "fmt"
 
-const TEST_LOG_PATH = "../../test_logs"
+const TEST_LOG_PATH = "test_logs"
 const OUTPUT_PATH = "../../outputs"
 
 func TestPattern(t *testing.T) {
