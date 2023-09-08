@@ -1,5 +1,4 @@
 #include "common.h"
-#include "queue.h"
 #include <cstdlib>
 #include <ctime>
 #include <fcntl.h>

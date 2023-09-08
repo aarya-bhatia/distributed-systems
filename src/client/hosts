@@ -1,0 +1,15 @@
+1 localhost 6000
+2 localhost 6000
+3 localhost 6000
+4 localhost 6000
+5 localhost 6000
+!1 fa23-cs425-0701.cs.illinois.edu 3000
+!2 fa23-cs425-0702.cs.illinois.edu 3000
+!3 fa23-cs425-0703.cs.illinois.edu 3000
+!4 fa23-cs425-0704.cs.illinois.edu 3000
+!5 fa23-cs425-0705.cs.illinois.edu 3000
+!6 fa23-cs425-0706.cs.illinois.edu 3000
+!7 fa23-cs425-0707.cs.illinois.edu 3000
+!8 fa23-cs425-0708.cs.illinois.edu 3000
+!9 fa23-cs425-0709.cs.illinois.edu 3000
+!10 fa23-cs425-0710.cs.illinois.edu 3000
