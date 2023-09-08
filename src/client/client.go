@@ -173,7 +173,7 @@ func Worker(host *Host, client *Client) {
 	}
 
 	outputFilename := fmt.Sprintf("%s/vm%s.output", client.args.outputDirectory, host.id)
-	outputFile, err := os.OpenFile(outputFilename, os.O_CREATE|os.O_WRONLY, DEFAULT_FILE_MODE)
+	outputFile, err := os.OpenFile(outputFilename, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, DEFAULT_FILE_MODE)
 
 	if err != nil {
 		log.Println(err)
