@@ -15,13 +15,14 @@ const STATUS_SUCCESS = 0
 const STATUS_FAILURE = 1
 
 type Host struct {
-	id       string
-	host     string
-	port     string
-	latency  string
-	dataSize int
-	lines    int
-	status   int
+	id          string
+	host        string
+	port        string
+	latency     string
+	latencyNano int64
+	dataSize    int
+	lines       int
+	status      int
 }
 
 type ClientStat struct {
@@ -31,7 +32,7 @@ type ClientStat struct {
 }
 
 type ClientArgs struct {
-	hosts			string
+	hosts           string
 	command         string
 	grep            string
 	outputDirectory string
@@ -204,7 +205,9 @@ func Worker(host *Host, client *Client) {
 		str, err := buffer.ReadString('\n')
 
 		if err != nil {
-			host.latency = time.Now().Sub(startTime).String() // end timer
+			elapsed := time.Now().Sub(startTime) // end timer
+			host.latency = elapsed.String()
+			host.latencyNano = elapsed.Nanoseconds()
 			break
 		}
 

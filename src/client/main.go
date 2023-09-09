@@ -65,8 +65,8 @@ func main() {
 
 	for _, host := range client.hosts {
 		hostSignature := fmt.Sprintf("%s %s:%s", host.id, host.host, host.port)
-		fmt.Printf("%s, lines: %d, data: %d bytes, latency: %s\n", hostSignature, host.lines, host.dataSize, host.latency)
-		reportFile.Write([]byte(fmt.Sprintf("%s,%s,%s,%d,%s,%d\n", host.id, host.host, host.port, host.lines, host.latency, host.dataSize)))
+		fmt.Printf("%s, lines: %d, data: %d bytes, latency: %s (%v nanoseconds) \n", hostSignature, host.lines, host.dataSize, host.latency, host.latencyNano)
+		reportFile.Write([]byte(fmt.Sprintf("%s,%s,%s,%d,%v,%d\n", host.id, host.host, host.port, host.lines, host.latencyNano, host.dataSize)))
 		if host.status == STATUS_SUCCESS {
 			count += 1
 		}
