@@ -9,6 +9,7 @@ import (
 	"testing"
 )
 
+const HOSTS_FILE = "../../hosts"
 const OUTPUT_PATH = "../../outputs"
 
 func TestPattern(t *testing.T) {
@@ -17,17 +18,26 @@ func TestPattern(t *testing.T) {
 	for pattern, count := range queries {
 
 		client := RunClient(ClientArgs{
-			grep:            "grep " + pattern,
+			command:         fmt.Sprintf("grep %s testlogs/log", pattern),
 			outputDirectory: OUTPUT_PATH,
 			logsDirectory:   "test_logs",
 			silence:         true,
-			command:         "",
+			grep:         	 "",
+			hosts:			 HOSTS_FILE,
 		})
+
+		// client := RunClient(ClientArgs{
+		// 	grep:            "grep " + pattern,
+		// 	outputDirectory: OUTPUT_PATH,
+		// 	logsDirectory:   "test_logs",
+		// 	silence:         true,
+		// 	command:         "",
+		// })
 
 		for _, host := range client.hosts {
 			if host.status == STATUS_SUCCESS {
 				if host.lines != count {
-					t.Fail()
+					t.Errorf("Test failed for pattern %s on host %s:%s", pattern, host.host, host.port)
 				}
 			}
 		}
@@ -44,6 +54,7 @@ func TestSampleData(t *testing.T) {
 			logsDirectory:   "data",
 			silence:         true,
 			command:         "",
+ 			hosts:			 HOSTS_FILE,
 		})
 
 		for _, host := range client.hosts {
@@ -68,7 +79,5 @@ func TestSampleData(t *testing.T) {
 				}
 			}
 		}
-
-		fmt.Println(client.stat)
 	}
 }

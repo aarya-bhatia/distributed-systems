@@ -13,6 +13,7 @@ func main() {
 	var args ClientArgs
 	var err error
 
+	flag.StringVar(&args.hosts, "hosts", "hosts", "The file containing hosts in the format <id, hostname, port>")
 	flag.StringVar(&args.logsDirectory, "logs", "data", "The path containing the log files in format vm{i}.log")
 	flag.StringVar(&args.outputDirectory, "outputs", "outputs", "The path to store the output data from the server")
 	flag.BoolVar(&args.silence, "silence", false, "To suppress the output of the commands on stdout")

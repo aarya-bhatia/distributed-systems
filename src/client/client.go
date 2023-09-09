@@ -31,6 +31,7 @@ type ClientStat struct {
 }
 
 type ClientArgs struct {
+	hosts			string
 	command         string
 	grep            string
 	outputDirectory string
@@ -67,7 +68,7 @@ func NewHost(id string, host string, port string) *Host {
 func RunClient(args ClientArgs) *Client {
 	client := &Client{}
 	client.args = args
-	client.hosts = readHosts()
+	client.hosts = readHosts(args.hosts)
 	client.finishedChannel = make(chan bool)
 	client.queue = &Queue[string]{}
 	client.queue.init()
@@ -78,8 +79,6 @@ func RunClient(args ClientArgs) *Client {
 
 	client.wg = &sync.WaitGroup{}
 	client.wg.Add(2)
-
-	log.Println(client)
 
 	go FinishedChannelRoutine(client)
 	go OutputConsumerRoutine(client)
@@ -129,9 +128,9 @@ func OutputConsumerRoutine(client *Client) {
 }
 
 // Read the hosts file and initialize host array
-func readHosts() []*Host {
+func readHosts(filename string) []*Host {
 	hosts := []*Host{}
-	file, err := os.Open("./hosts")
+	file, err := os.Open(filename)
 	defer file.Close()
 	if err != nil {
 		log.Fatal(err)
@@ -154,7 +153,6 @@ func readHosts() []*Host {
 		log.Fatal(err)
 	}
 
-	log.Println(hosts)
 	return hosts
 }
 
