@@ -6,12 +6,17 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"time"
 )
 
 func main() {
 	var args ClientArgs
 	var err error
+
+	var reportsDirectory string
+
+	flag.StringVar(&reportsDirectory, "reports", "reports", "The directory to create the report file with current timestamp")
 
 	flag.StringVar(&args.hosts, "hosts", "hosts", "The file containing hosts in the format <id, hostname, port>")
 	flag.StringVar(&args.logsDirectory, "logs", "data", "The path containing the log files in format vm{i}.log")
@@ -43,7 +48,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	err = exec.Command("mkdir", "-p", "reports/").Run()
+	err = exec.Command("mkdir", "-p", reportsDirectory).Run()
 
 	if err != nil {
 		log.Fatal(err)
@@ -53,7 +58,7 @@ func main() {
 
 	var timestamp string = time.Now().Format("20060102150405")
 
-	reportFile, err := os.OpenFile("reports/"+timestamp, os.O_CREATE|os.O_WRONLY, DEFAULT_FILE_MODE)
+	reportFile, err := os.OpenFile(filepath.Join(reportsDirectory, timestamp), os.O_CREATE|os.O_WRONLY, DEFAULT_FILE_MODE)
 
 	if err != nil {
 		log.Fatal(err)
