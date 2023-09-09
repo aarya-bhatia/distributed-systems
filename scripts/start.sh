@@ -38,6 +38,6 @@ fi
 echo $id, $host, $port
 
 pkill -f bin/server
-nohup bin/server $port 2>&1 >stdout &
+nohup bin/server $port >stdout 2>&1 &
 echo "Server $id running at $host:$port"
 
