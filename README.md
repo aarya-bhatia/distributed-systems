@@ -31,6 +31,7 @@ Authors: Aarya Bhatia \<aaryab@illinois.edu\>, William Zheng \<xinzez2@illinois.
   output directory by passing the "-output" option.
 - Each job will also create a report file containing host metadata. The reports
   path is `reports/<timestamp>`.
+- To change the hosts config file you can use the `-hosts` option.
 
 
 ## Server Architecture
