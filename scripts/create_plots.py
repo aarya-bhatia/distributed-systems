@@ -61,8 +61,14 @@ for query in queries:
     line_count = round(line_count/num_hosts)
     print(line_count, values)
 
-    latencies.append(np.log(values))
+    latencies.append((np.log(values), line_count))
 
+
+latencies.sort(key=lambda x: x[1])
+
+for x in latencies: print(x[1])
+
+latencies = list(map(lambda x: x[0], latencies))
 
 # Create a boxplot
 plt.boxplot(latencies)
