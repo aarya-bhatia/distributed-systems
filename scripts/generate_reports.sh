@@ -6,7 +6,8 @@ make
 
 logfile="testlogs/log"
 
-queries=("low" "mid" "high")
+queries=("apple" "orange" "grape" "monkey" "mountain" "computer" "systems")
+# queries=("low" "mid" "high")
 
 for query in "${queries[@]}"; do
 	echo Query: $query

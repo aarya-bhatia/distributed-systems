@@ -28,13 +28,15 @@ def get_files(path):
 
 queries = get_files(REPORTS_DIR)[DIRS]
 
+latencies = []
+
 for query in queries:
     trials = get_files(query)[DIRS]
 
     if len(trials) == 0:
         continue
 
-    latencies = []
+    values = []
     line_count = 0
 
     for trial in trials:
@@ -47,18 +49,39 @@ for query in queries:
                     num_lines = tokens[-3]
                     time_nano = tokens[-2]
                     time_milli = float(time_nano) / 1e6
-                    latencies.append(time_milli)
                     line_count += int(num_lines)
+                    values.append(time_milli)
 
-    num_hosts = len(latencies)
+    num_hosts = len(values)
 
     if num_hosts == 0:
         continue
 
     # average line count
     line_count = round(line_count/num_hosts)
+    print(line_count, values)
 
-    average_latency = np.mean(latencies)
-    std_latency = np.std(latencies)
+    latencies.append(np.log(values))
 
-    print(line_count, average_latency, std_latency)
+
+# Create a boxplot
+plt.boxplot(latencies)
+
+# Add labels to the x-axis
+trial_labels = [f"Trial {i+1}" for i in range(len(latencies))]
+plt.xticks(range(1, len(latencies) + 1), trial_labels)
+
+# Set the y-axis label
+plt.ylabel('Values')
+
+# Set the title
+plt.title('Boxplot of Trial Data')
+
+# Show the plot
+plt.show()
+
+# fig = plt.figure(figsize=(10, 7))
+# ax = fig.add_axes([0, 0, 1, 1])
+# bp = ax.boxplot(latencies)
+#
+# plt.show()
