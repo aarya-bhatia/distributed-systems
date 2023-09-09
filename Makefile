@@ -6,33 +6,27 @@ CFLAGS=-DDEBUG -D_GNU_SOURCE -std=c++14 -g \
 LDFLAGS=-Llib -pthread
 # LINKLIBS += -fsanitize=thread
 
-OBJ=obj/common.o
-
 .PHONY: all clean
 
 all: bin/server bin/client bin/test
 
-bin/server: obj/server.o $(OBJ)
-	mkdir -p $(dir $@);
+bin/server: .obj/server.o .obj/common.o
+	mkdir -p bin
 	$(CC) $^ -o $@ $(LDFLAGS)
 
-bin/client: go/client/client.go
-	go build $^
-	[ -x client ] && mv client bin/client
-
-# bin/client: obj/client.o $(OBJ)
-# 	mkdir -p $(dir $@);
-# 	$(CC) $^ -o $@ $(LDFLAGS)
-
-bin/test: obj/test.o $(OBJ)
-	mkdir -p $(dir $@);
+bin/test: .obj/test.o .obj/common.o
+	mkdir -p bin
 	$(CC) $^ -o $@ $(LDFLAGS)
 
-obj/%.o: src/%.cpp
-	mkdir -p $(dir $@);
+.obj/%.o: src/server/%.cpp
+	mkdir -p .obj
 	$(CC) $(CFLAGS) -o $@ $<
 
-clean:
-	rm -rf obj/ bin/
+bin/client: $(wildcard src/client/*.go)
+	go build src/client/*.go
+	mv client bin/client
 
--include $(OBJS_DIR)/*.d
+clean:
+	rm -rf .obj/ bin/
+
+-include .obj/*.d

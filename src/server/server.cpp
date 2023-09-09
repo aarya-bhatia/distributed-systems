@@ -1,5 +1,4 @@
 #include "common.h"
-#include "queue.h"
 #include <cstdlib>
 #include <ctime>
 #include <fcntl.h>
@@ -13,8 +12,6 @@
 #define SUCCESS 0
 #define FAILURE -1
 
-#define MAX_REQUEST_LEN 4096
-
 /**
  * Data to pass to thread per connection
  */
@@ -24,39 +21,6 @@ struct Connection {
   struct sockaddr_storage client_addr;
   socklen_t client_len;
 };
-
-static int server_id;
-static int port;
-
-void logger(const char *message) {
-  assert(message);
-  static pthread_mutex_t logger_mutex = PTHREAD_MUTEX_INITIALIZER;
-  static bool logger_init = false;
-  static char filename[256];
-
-  pthread_mutex_lock(&logger_mutex);
-
-  if (!logger_init) {
-    sprintf(filename, "logs/machine.%d.log", server_id);
-
-    if (system("mkdir -p logs") < 0) {
-      die("system");
-    }
-
-    logger_init = true;
-  }
-
-  FILE *log_file = fopen(filename, "a");
-
-  if (!log_file) {
-    die("fopen");
-  }
-
-  fprintf(log_file, "%s: %s\n", get_datetime(), message);
-  fclose(log_file);
-
-  pthread_mutex_unlock(&logger_mutex);
-}
 
 /**
  * Runs a shell command in a child process and sends its output to the client
@@ -131,13 +95,8 @@ void *worker(void *args) {
 
   log_info("Connected to client: %s", client_addr_str);
 
-  char *log_msg =
-      make_string((char *)"Connected to client: %s", client_addr_str);
-  logger(log_msg);
-  free(log_msg);
-
-  char message[MAX_REQUEST_LEN + 1];
-  ssize_t nread = read_all(conn->client_sock, message, MAX_REQUEST_LEN);
+  char message[MAX_BUFFER_LEN + 1];
+  ssize_t nread = read_all(conn->client_sock, message, sizeof message - 1);
 
   if (nread <= 0) {
     close(conn->client_sock);
@@ -161,11 +120,8 @@ void *worker(void *args) {
     return NULL;
   }
 
-  log_msg = make_string((char *)"Request from client (%zu bytes) %s: %s",
-                        strlen(message), client_addr_str, message);
-  logger(log_msg);
-  log_debug("%s", log_msg);
-  free(log_msg);
+  log_info("Request from client (%zu bytes) %s: %s", strlen(message),
+           client_addr_str, message);
 
   char **command = split_string(message);
 
@@ -189,13 +145,12 @@ void *worker(void *args) {
  * Server accepts an ID and port on start up.
  */
 int main(int argc, const char *argv[]) {
-  if (argc < 3) {
-    fprintf(stderr, "Usage: %s id port\n", *argv);
+  if (argc < 2) {
+    fprintf(stderr, "Usage: %s port\n", *argv);
     return 1;
   }
 
-  server_id = atoi(argv[1]);
-  port = atoi(argv[2]);
+  int port = atoi(argv[1]);
 
   signal(SIGPIPE, SIG_IGN);
 

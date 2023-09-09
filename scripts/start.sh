@@ -17,7 +17,8 @@ if [ ! -d mp1 ]; then
 fi
 
 cd mp1
-git pull
+git checkout -b testing
+git pull origin testing
 make clean
 make
 
@@ -37,6 +38,6 @@ fi
 echo $id, $host, $port
 
 pkill -f bin/server
-nohup bin/server $id $port 2>&1 >stdout &
+nohup bin/server $port 2>&1 >stdout &
 echo "Server $id running at $host:$port"
 
