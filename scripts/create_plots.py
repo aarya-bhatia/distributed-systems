@@ -76,12 +76,13 @@ averages = np.mean(latencies, axis=1)
 stds = np.std(latencies, axis=1)
 
 plt.errorbar(average_lines, averages, stds, linestyle='None', fmt='.', ecolor = 'red', capsize=3)
-plt.xlabel("Frequency of pattern (lines)")
-plt.ylabel("Logarithm of latency (log(ms))")
+plt.xlabel("Frequency of pattern (lines)", fontsize=12)
+plt.ylabel("Logarithm of latency (log(ms))", fontsize=12)
 plt.grid(True)
 
 for i in range(len(averages)):
     print(f"{average_lines[i]} & {averages[i]:.3f} & {stds[i]:.3f} \\\\")
     print("\\hline")
 
+plt.savefig('plot.jpg')
 plt.show()
