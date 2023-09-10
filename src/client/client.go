@@ -14,6 +14,7 @@ import (
 const STATUS_SUCCESS = 0
 const STATUS_FAILURE = 1
 
+// Struct of every host, including metadata for each query
 type Host struct {
 	id          string
 	host        string
@@ -25,12 +26,14 @@ type Host struct {
 	status      int
 }
 
+// Struct for stats of each client command
 type ClientStat struct {
 	totalLines         uint
 	averageLatency     float64
 	totalBytesReceived uint
 }
 
+// Struct of CLI arguments 
 type ClientArgs struct {
 	hosts           string
 	command         string
@@ -40,6 +43,7 @@ type ClientArgs struct {
 	silence         bool
 }
 
+// Struct for clients routine
 type Client struct {
 	finishedChannel chan bool
 	queue           *Queue[string]
@@ -53,7 +57,7 @@ const EXIT_MESSAGE = "EXIT"
 const DEFAULT_FILE_MODE = 0664
 const DEFAULT_DIRECTORY_MODE = 0775
 
-// Creates and initialize a new Host
+// Creates and initializes a new Host
 func NewHost(id string, host string, port string) *Host {
 	obj := new(Host)
 	obj.id = id
@@ -66,6 +70,7 @@ func NewHost(id string, host string, port string) *Host {
 	return obj
 }
 
+// Initializes a a client object run the query command and sync the results
 func RunClient(args ClientArgs) *Client {
 	client := &Client{}
 	client.args = args
@@ -89,7 +94,7 @@ func RunClient(args ClientArgs) *Client {
 		go Worker(host, client)
 	}
 
-	client.wg.Wait()
+	client.wg.Wait() // Wait all queries to finish
 
 	return client
 }
@@ -105,7 +110,7 @@ func FinishedChannelRoutine(client *Client) {
 		count += 1
 	}
 
-	client.queue.push(EXIT_MESSAGE)
+	client.queue.push(EXIT_MESSAGE) // Push exit message to the async queue to signal all queries are done
 }
 
 // Routine to consume the output lines received from the servers
@@ -115,7 +120,7 @@ func OutputConsumerRoutine(client *Client) {
 	for true {
 		message := client.queue.pop()
 
-		if message == EXIT_MESSAGE {
+		if message == EXIT_MESSAGE { // All queries are finished
 			break
 		}
 
@@ -161,7 +166,7 @@ func readHosts(filename string) []*Host {
 // Saves the output to the file "<outputDirectory>/vm<ID>.output"
 func Worker(host *Host, client *Client) {
 	defer func() {
-		client.finishedChannel <- true
+		client.finishedChannel <- true // Send finish signal to finishedChannel
 	}()
 
 	conn, err := net.Dial("tcp", host.host+":"+host.port)
@@ -186,6 +191,7 @@ func Worker(host *Host, client *Client) {
 
 	serverLogFile := fmt.Sprintf("%s/vm%s.log", client.args.logsDirectory, host.id)
 
+	// Parse the command based on CLI args
 	var command string
 
 	if client.args.grep != "" {
@@ -204,14 +210,14 @@ func Worker(host *Host, client *Client) {
 	for {
 		str, err := buffer.ReadString('\n')
 
-		if err != nil {
+		if err != nil { // Server close the connection
 			elapsed := time.Now().Sub(startTime) // end timer
 			host.latency = elapsed.String()
 			host.latencyNano = elapsed.Nanoseconds()
 			break
 		}
 
-		if str != "\n" {
+		if str != "\n" { // Server will send an single extra newline after sending all messages, ingore the extra new line
 			host.dataSize += len(str)
 			host.lines++
 

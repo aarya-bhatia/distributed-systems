@@ -12,6 +12,7 @@ import (
 const HOSTS_FILE = "../../hosts"
 const OUTPUT_PATH = "../../outputs"
 
+// Test patterns of different frequencies in the test log
 func TestPattern(t *testing.T) {
 	words := []string {"apple","orange","grape","monkey","mountain","computer","systems"}
 	lines := 100
@@ -38,6 +39,7 @@ func TestPattern(t *testing.T) {
 	}
 }
 
+// Test the output from assigned log
 func TestSampleData(t *testing.T) {
 	queries := []string{"HTTP", "GET", "DELETE", "POST\\|PUT", "[4-5]0[0-9]", "20[0-9]", "-i -P get\\s.*mozilla"}
 
