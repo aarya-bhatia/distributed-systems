@@ -68,26 +68,15 @@ latencies.sort(key=lambda x: x[1])
 
 for x in latencies: print(x[1])
 
+average_lines = list(map(lambda x: str(x[1]), latencies))
 latencies = list(map(lambda x: x[0], latencies))
 
-# Create a boxplot
-plt.boxplot(latencies)
+# Calculate 
+averages = np.mean(latencies, axis=1)
+stds = np.std(latencies, axis=1)
 
-# Add labels to the x-axis
-trial_labels = [f"Trial {i+1}" for i in range(len(latencies))]
-plt.xticks(range(1, len(latencies) + 1), trial_labels)
-
-# Set the y-axis label
-plt.ylabel('Values')
-
-# Set the title
-plt.title('Boxplot of Trial Data')
-
-# Show the plot
+plt.errorbar(average_lines, averages, stds, linestyle='None', fmt='.', ecolor = 'red', capsize=3)
+plt.xlabel("Frequency of pattern (lines)")
+plt.ylabel("Logarithm of latency (log(ms))")
+plt.grid(True)
 plt.show()
-
-# fig = plt.figure(figsize=(10, 7))
-# ax = fig.add_axes([0, 0, 1, 1])
-# bp = ax.boxplot(latencies)
-#
-# plt.show()
