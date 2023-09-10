@@ -59,19 +59,19 @@ for query in queries:
 
     # average line count
     line_count = round(line_count/num_hosts)
-    print(line_count, values)
+    # print(line_count, values)
 
     latencies.append((np.log(values), line_count))
 
 
 latencies.sort(key=lambda x: x[1])
 
-for x in latencies: print(x[1])
+# for x in latencies: print(x[1])
 
 average_lines = list(map(lambda x: str(x[1]), latencies))
 latencies = list(map(lambda x: x[0], latencies))
 
-# Calculate 
+# Calculate
 averages = np.mean(latencies, axis=1)
 stds = np.std(latencies, axis=1)
 
@@ -79,4 +79,9 @@ plt.errorbar(average_lines, averages, stds, linestyle='None', fmt='.', ecolor = 
 plt.xlabel("Frequency of pattern (lines)")
 plt.ylabel("Logarithm of latency (log(ms))")
 plt.grid(True)
+
+for i in range(len(averages)):
+    print(f"{average_lines[i]} & {averages[i]:.3f} & {stds[i]:.3f} \\\\")
+    print("\\hline")
+
 plt.show()
