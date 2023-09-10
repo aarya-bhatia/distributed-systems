@@ -3,8 +3,15 @@
 passwd_file="/home/aarya/passwd"
 netid="aaryab2"
 
+SCRIPTS="scripts"
+
 if [ ! -f $passwd_file ]; then
-	echo "Password file not found"
+	echo Password file not found: $passwd_file
+	exit 1
+fi
+
+if [ ! -d $SCRIPTS ]; then
+	echo Directory does not exist: $SCRIPTS
 	exit 1
 fi
 
@@ -29,7 +36,7 @@ for vm in "${cluster[@]}"; do
 	ping -W $timeout -c 1 $vm
 
 	if [ $? -eq 0 ]; then
-		sshpass -f $passwd_file rsync -avu -e "ssh -o 'StrictHostKeyChecking no'" start.sh $netid@$vm:~/start.sh
+		sshpass -f $passwd_file rsync -avu -e "ssh -o 'StrictHostKeyChecking no'" $SCRIPTS/start.sh $netid@$vm:~/start.sh
 		sshpass -f $passwd_file ssh -f -n -o 'StrictHostKeyChecking no' $netid@$vm "./start.sh"
 	else
 		echo "Failed to connect to $vm"
