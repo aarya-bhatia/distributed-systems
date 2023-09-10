@@ -13,39 +13,33 @@ const HOSTS_FILE = "../../hosts"
 const OUTPUT_PATH = "../../outputs"
 
 func TestPattern(t *testing.T) {
-	queries := map[string]int{"low": 100, "mid": 10000, "high": 1000000}
+	words := []string {"apple","orange","grape","monkey","mountain","computer","systems"}
+	lines := 100
 
-	for pattern, count := range queries {
+	for _, word := range words {
 
 		client := RunClient(ClientArgs{
-			command:         fmt.Sprintf("grep %s testlogs/log", pattern),
-			outputDirectory: OUTPUT_PATH,
-			logsDirectory:   "test_logs",
-			silence:         true,
+			command:         fmt.Sprintf("grep %s testlogs/log", word),
 			grep:         	 "",
+			outputDirectory: OUTPUT_PATH,
+			silence:         true,
 			hosts:			 HOSTS_FILE,
 		})
 
-		// client := RunClient(ClientArgs{
-		// 	grep:            "grep " + pattern,
-		// 	outputDirectory: OUTPUT_PATH,
-		// 	logsDirectory:   "test_logs",
-		// 	silence:         true,
-		// 	command:         "",
-		// })
-
 		for _, host := range client.hosts {
 			if host.status == STATUS_SUCCESS {
-				if host.lines != count {
-					t.Errorf("Test failed for pattern %s on host %s:%s", pattern, host.host, host.port)
+				if host.lines != lines {
+					t.Errorf("Test failed for pattern %s on host %s:%s", word, host.host, host.port)
 				}
 			}
 		}
+
+		lines *= 5
 	}
 }
 
 func TestSampleData(t *testing.T) {
-	var queries = []string{"HTTP", "GET", "DELETE", "POST\\|PUT", "[4-5]0[0-9]", "20[0-9]"}
+	queries := []string{"HTTP", "GET", "DELETE", "POST\\|PUT", "[4-5]0[0-9]", "20[0-9]", "-i get\\s.*mozilla"}
 
 	for _, pattern := range queries {
 		client := RunClient(ClientArgs{
