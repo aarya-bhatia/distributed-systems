@@ -39,7 +39,7 @@ func TestPattern(t *testing.T) {
 }
 
 func TestSampleData(t *testing.T) {
-	queries := []string{"HTTP", "GET", "DELETE", "POST\\|PUT", "[4-5]0[0-9]", "20[0-9]", "-i get\\s.*mozilla"}
+	queries := []string{"HTTP", "GET", "DELETE", "POST\\|PUT", "[4-5]0[0-9]", "20[0-9]", "-i -P get\\s.*mozilla"}
 
 	for _, pattern := range queries {
 		client := RunClient(ClientArgs{
@@ -58,7 +58,11 @@ func TestSampleData(t *testing.T) {
 					t.Fatalf("Failed to resolve filepath: %v", err)
 				}
 
-				out, err := exec.Command("/bin/grep", "-c", pattern, filepath).Output()
+				tokens := strings.Split(pattern, " ")
+				tokens = append([]string{"/bin/grep","-c"},append(tokens,filepath)...)
+				t.Log(tokens)
+
+				out, err := exec.Command(tokens[0], tokens[1:]...).Output()
 				if err != nil {
 					t.Fatalf("Failed to execute command: %v", err)
 				}
