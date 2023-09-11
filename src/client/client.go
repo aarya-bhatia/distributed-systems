@@ -11,8 +11,8 @@ import (
 	"time"
 )
 
-const STATUS_SUCCESS = 0
-const STATUS_FAILURE = 1
+const STATUS_SUCCESS = 0 // Task successful
+const STATUS_FAILURE = 1 // Task failed
 
 // Struct of every host, including metadata for each query
 type Host struct {
@@ -33,7 +33,7 @@ type ClientStat struct {
 	totalBytesReceived uint
 }
 
-// Struct of CLI arguments 
+// Struct of CLI arguments
 type ClientArgs struct {
 	hosts           string
 	command         string
@@ -70,7 +70,7 @@ func NewHost(id string, host string, port string) *Host {
 	return obj
 }
 
-// Initializes a a client object run the query command and sync the results
+// Initializes a client object, runs the query command and returns the results
 func RunClient(args ClientArgs) *Client {
 	client := &Client{}
 	client.args = args
@@ -210,14 +210,14 @@ func Worker(host *Host, client *Client) {
 	for {
 		str, err := buffer.ReadString('\n')
 
-		if err != nil { // Server close the connection
-			elapsed := time.Now().Sub(startTime) // end timer
+		if err != nil { // Server closed the connection
+			elapsed := time.Now().Sub(startTime) // End timer
 			host.latency = elapsed.String()
 			host.latencyNano = elapsed.Nanoseconds()
 			break
 		}
 
-		if str != "\n" { // Server will send an single extra newline after sending all messages, ingore the extra new line
+		if str != "\n" { // Server will send a single extra newline after sending all messages, Ignore the extra new line
 			host.dataSize += len(str)
 			host.lines++
 
