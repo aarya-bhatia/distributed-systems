@@ -33,7 +33,7 @@ Authors: Aarya Bhatia \<aaryab@illinois.edu\>, William Zheng \<xinzez2@illinois.
 
 ## Scripts
 
-- Deploy latest changes to all hosts and start the server: `./scripts/deploy.sh`
+- Deploy latest changes to all hosts and start the server: [deploy.sh](./scripts/deploy.sh)
 - All servers have a copy of the Gitlab SSH key, ssh config file and the log file
 - The start.sh scripts is copied to each host in cluster over an SSH connection
 - The start.sh script is run on each server and clones, builds and starts the servers.
