@@ -31,6 +31,11 @@ Authors: Aarya Bhatia \<aaryab@illinois.edu\>, William Zheng \<xinzez2@illinois.
   path is `reports/<timestamp>`.
 - To change the hosts config file you can use the `-hosts` option.
 
+## Testing
+
+- Store all the log files `vm1.log,...,vm10.log` in the [data](./data/) directory.
+- Run client tests: `cd src/client; go test`
+
 ## Scripts
 
 - Deploy latest changes to all hosts and start the server: [deploy.sh](./scripts/deploy.sh)
