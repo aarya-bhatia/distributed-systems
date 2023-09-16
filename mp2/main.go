@@ -14,10 +14,10 @@ import (
 	"time"
 )
 
-const NODES_PER_ROUND = 2                 // Number of random peers to send gossip every round
-const T_GOSSIP = 5 * time.Second  // Time duration between each gossip round
+const NODES_PER_ROUND = 2          // Number of random peers to send gossip every round
+const T_GOSSIP = 5 * time.Second   // Time duration between each gossip round
 const T_TIMEOUT = 10 * time.Second // Time duration until a peer times out
-var T_CLEANUP = 5 * time.Second   // Time duration before peer is deleted
+var T_CLEANUP = 5 * time.Second    // Time duration before peer is deleted
 
 var timerManager = timer.NewTimerManager()
 
