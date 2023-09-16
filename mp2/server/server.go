@@ -42,6 +42,10 @@ func (host Host) GetSignature() string {
 	return fmt.Sprintf("%s:%d:%s", host.Address, host.Port, host.ID)
 }
 
+func (host Host) GetSignatureWithCount() string {
+	return fmt.Sprintf("%s:%d:%d", host.GetSignature(), host.Counter, host.UpdatedAt)
+}
+
 func NewServer(hostname string, port int, id string) (*Server, error) {
 	addr, err := net.ResolveUDPAddr("udp", fmt.Sprintf(":%d", port))
 	if err != nil {
@@ -85,7 +89,7 @@ func (server *Server) GetPacket() (message string, addr *net.UDPAddr, err error)
 		return "", nil, err
 	}
 	message = strings.TrimSpace(string(buffer[0:n]))
-	log.Printf("%s: %s\n", addr.String(), message)
+	log.Printf("Received %d bytes from %s\n", len(message), addr.String())
 	return message, addr, nil
 }
 
@@ -111,7 +115,7 @@ func (server *Server) EncodeMembersList() string {
 	defer server.MemberLock.Unlock()
 
 	for _, host := range server.Members {
-		arr = append(arr, host.GetSignature())
+		arr = append(arr, host.GetSignatureWithCount())
 	}
 
 	return strings.Join(arr, ";")
