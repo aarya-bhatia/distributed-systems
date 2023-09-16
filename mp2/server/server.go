@@ -1,22 +1,48 @@
 package server
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"net"
 	"strings"
+	"sync"
 )
 
-type RequestHandler interface {
-	Handle(*Server, *net.UDPAddr, string)
+type Host struct {
+	Address   string // IP address
+	Port      int    // server port
+	ID        string // unique ID
+	Counter   uint64 // heartbeat counter
+	UpdatedAt uint64 // local timestamp when counter last updated
+	Suspected bool   // whether the node is suspected of failure
 }
 
 type Server struct {
+	HostName   string
+	ID         string
 	Address    *net.UDPAddr
 	Connection *net.UDPConn
+	Members    map[string]*Host
+	MemberLock sync.Mutex
+	Introducer bool
 }
 
-func NewServer(port int) (*Server, error) {
+func NewHost(Address string, Port int, ID string) *Host {
+	var host = &Host{}
+	host.Address = Address
+	host.Port = Port
+	host.ID = ID
+	host.Counter = 0
+	host.UpdatedAt = 0
+	return host
+}
+
+func (host Host) GetSignature() string {
+	return fmt.Sprintf("%s:%d:%s", host.Address, host.Port, host.ID)
+}
+
+func NewServer(hostname string, port int, id string) (*Server, error) {
 	addr, err := net.ResolveUDPAddr("udp", fmt.Sprintf(":%d", port))
 	if err != nil {
 		return nil, err
@@ -25,30 +51,68 @@ func NewServer(port int) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Server{Address: addr, Connection: conn}, nil
+
+	return &Server{ID: id, HostName: hostname, Address: addr, Connection: conn, Members: make(map[string]*Host), Introducer: false}, nil
+}
+
+func (server *Server) AddHost(address string, port int, id string) (*Host, error) {
+	server.MemberLock.Lock()
+	defer server.MemberLock.Unlock()
+
+	_, present := server.Members[id]
+	if present {
+		return nil, errors.New("A peer with this ID already exists")
+	}
+
+	if server.Introducer {
+		for _, member := range server.Members {
+			if member.Address == address && member.Port == port {
+				member.ID = id
+				return member, nil
+			}
+		}
+	}
+
+	server.Members[id] = NewHost(address, port, id)
+	return server.Members[id], nil
+}
+
+func (server *Server) GetPacket() (message string, addr *net.UDPAddr, err error) {
+	buffer := make([]byte, 1024)
+
+	n, addr, err := server.Connection.ReadFromUDP(buffer)
+	if err != nil {
+		return "", nil, err
+	}
+	message = strings.TrimSpace(string(buffer[0:n]))
+	log.Printf("%s: %s\n", addr.String(), message)
+	return message, addr, nil
+}
+
+func (server *Server) SendPacket(address string, port int, data []byte) error {
+	client, err := net.Dial("udp", fmt.Sprintf("%s:%d", address, port))
+	if err != nil {
+		return err
+	}
+
+	defer client.Close()
+	_, err = client.Write(data)
+	return err
 }
 
 func (server *Server) Close() {
 	server.Connection.Close()
 }
 
-func (server *Server) Listen(handler RequestHandler) {
-	buffer := make([]byte, 1024)
+func (server *Server) EncodeMembersList() string {
+	var arr = []string{}
 
-	for {
-		n, addr, err := server.Connection.ReadFromUDP(buffer)
-		if err != nil {
-			log.Fatal(err)
-			return
-		}
+	server.MemberLock.Lock()
+	defer server.MemberLock.Unlock()
 
-		message := strings.TrimSpace(string(buffer[0:n]))
-		log.Printf("%s: %s\n", addr.String(), message)
-		if message == "EXIT" {
-			return
-		}
-
-		go handler.Handle(server, addr, message)
+	for _, host := range server.Members {
+		arr = append(arr, host.GetSignature())
 	}
-}
 
+	return strings.Join(arr, ";")
+}
