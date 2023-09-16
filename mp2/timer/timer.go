@@ -1,51 +1,35 @@
 package timer
 
 import (
-	"sync"
-	"time"
 	"log"
+	"time"
 )
 
 const (
-	TIMER_RESTART_EVENT = 0
 	TIMER_TIMEOUT_EVENT = 1
 	TIMER_STOP_EVENT    = 2
 )
-
-type Timer struct {
-	ID              string
-	TimerChannel    chan TimerEvent
-	TimeoutChannel  chan TimerEvent
-	TimeoutDuration time.Duration
-	Alive           bool
-	Mutex           sync.Mutex
-}
 
 type TimerEvent struct {
 	EventType int
 	ID        string
 }
 
-type TimerManager struct {
-	Timers          map[string]*Timer
+type Timer struct {
+	ID              string
+	TimerChannel    chan TimerEvent
 	TimeoutChannel  chan TimerEvent
 	TimeoutDuration time.Duration
 }
 
-func NewTimer(id string, timerChannel chan TimerEvent, timeoutChannel chan TimerEvent, timeoutDuration time.Duration) *Timer {
-	t := &Timer{}
-	t.ID = id
-	t.TimerChannel = timerChannel
-	t.TimeoutChannel = timeoutChannel
-	t.Alive = false
-	t.TimeoutDuration = timeoutDuration
-	return t
+type TimerManager struct {
+	Timers          map[string]*Timer
+	TimeoutChannel  chan TimerEvent
 }
 
-func NewTimerManager(timeoutDuration time.Duration) *TimerManager {
+func NewTimerManager() *TimerManager {
 	tm := &TimerManager{}
 	tm.Timers = make(map[string]*Timer)
-	tm.TimeoutDuration = timeoutDuration
 	tm.TimeoutChannel = make(chan TimerEvent)
 	return tm
 }
@@ -57,65 +41,39 @@ func (tm *TimerManager) StopAll() {
 }
 
 func (timer *Timer) Start() {
-	timer.Mutex.Lock()
-	timer.Alive = true
-	timer.Mutex.Unlock()
-
 	log.Printf("Timer %s has started.\n", timer.ID)
-
-	for {
-		select {
-		case event := <-timer.TimerChannel:
-			if event.EventType == TIMER_RESTART_EVENT && event.ID == timer.ID {
-				log.Printf("Timer %s is restarting.\n", timer.ID)
-				continue
-			} else if event.EventType == TIMER_STOP_EVENT && event.ID == timer.ID {
-				log.Printf("Timer %s has stopped.\n", timer.ID)
-				timer.Mutex.Lock()
-				timer.Alive = false
-				timer.Mutex.Unlock()
-				return
-			}
-		case <-time.After(timer.TimeoutDuration):
-			log.Printf("Timer %s has timed out.\n", timer.ID)
-			timer.TimeoutChannel <- TimerEvent{EventType: TIMER_TIMEOUT_EVENT, ID: timer.ID}
+	select {
+	case event := <-timer.TimerChannel:
+		if event.EventType == TIMER_STOP_EVENT {
+			log.Printf("Timer %s has stopped.\n", timer.ID)
+			return
 		}
+	case <-time.After(timer.TimeoutDuration):
+		log.Printf("Timer %s has timed out.\n", timer.ID)
+		timer.TimeoutChannel <- TimerEvent{EventType: TIMER_TIMEOUT_EVENT, ID: timer.ID}
 	}
 }
 
-func (tm *TimerManager) RestartTimer(id string) {
-	_, present := tm.Timers[id]
-	if !present {
-		timerChannel := make(chan TimerEvent)
-		tm.Timers[id] = NewTimer(id, timerChannel, tm.TimeoutChannel, tm.TimeoutDuration)
-		go tm.Timers[id].Start()
-		return
-	}
+func (timer *Timer) Stop() {
+	timer.TimerChannel <- TimerEvent{EventType: TIMER_STOP_EVENT, ID: timer.ID}
+}
 
-	timer := tm.Timers[id]
-	timer.Mutex.Lock()
-	alive := timer.Alive
-	timer.Mutex.Unlock()
-	if !alive {
-		go tm.Timers[id].Start()
-		return
-	}
+func (tm *TimerManager) RestartTimer(id string, duration time.Duration) {
+	tm.StopTimer(id)
+	tm.StartTimer(id, duration)
+}
 
-	timer.TimerChannel <- TimerEvent{EventType: TIMER_RESTART_EVENT, ID: id}
+func (tm *TimerManager) StartTimer(id string, duration time.Duration) {
+	if _, ok := tm.Timers[id]; !ok {
+		tm.Timers[id] = &Timer{ID: id, TimerChannel: make(chan TimerEvent), TimeoutChannel: tm.TimeoutChannel, TimeoutDuration: duration}
+		go tm.Timers[id].Start()
+	}
 }
 
 func (tm *TimerManager) StopTimer(id string) {
-	timer, present := tm.Timers[id]
-	if !present {
-		return
+	if timer, ok := tm.Timers[id]; ok {
+		timer.Stop()
+		delete(tm.Timers, id)
 	}
-
-	timer.Mutex.Lock()
-	alive := timer.Alive
-	timer.Mutex.Unlock()
-	if !alive {
-		return
-	}
-
-	timer.TimerChannel <- TimerEvent{EventType: TIMER_STOP_EVENT, ID: id}
 }
+
