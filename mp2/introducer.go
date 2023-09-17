@@ -1,4 +1,4 @@
-package introducer
+package main
 
 import (
 	"bufio"

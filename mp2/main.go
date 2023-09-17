@@ -1,7 +1,6 @@
 package main
 
 import (
-	"cs425/introducer"
 	"cs425/server"
 	"cs425/timer"
 	"fmt"
@@ -77,12 +76,12 @@ func JoinWithRetry(s *server.Server) error {
 				log.Fatalf("Error reading packet: %s", err.Error())
 			}
 
-			if strings.Index(message, introducer.JOIN_OK) == 0 {
+			if strings.Index(message, JOIN_OK) == 0 {
 				messageChannel <- message
 				break
 			}
 
-			if strings.Index(message, introducer.JOIN_ERROR) == 0 {
+			if strings.Index(message, JOIN_ERROR) == 0 {
 				log.Fatalf("Failed to join: %s", message)
 			}
 
@@ -91,7 +90,7 @@ func JoinWithRetry(s *server.Server) error {
 	}()
 
 	for {
-		_, err := s.SendPacket(introducer.INTRODUCER_HOST, introducer.INTRODUCER_PORT, []byte(request))
+		_, err := s.SendPacket(INTRODUCER_HOST, INTRODUCER_PORT, []byte(request))
 		if err != nil {
 			return err
 		}
@@ -119,7 +118,7 @@ func handleMessage(s *server.Server, message string) {
 		}
 		s.ProcessMembersList(lines[1])
 	} else if strings.Index(message, "JOIN") == 0 {
-		introducer.HandleJoin(s, message)
+		HandleJoin(s, message)
 	}
 }
 
@@ -189,8 +188,8 @@ func main() {
 	}
 
 	id := os.Args[3]
-	if id == introducer.INTRODUCER_ID && port != introducer.INTRODUCER_PORT {
-		log.Fatalf("Introducer port should be %d", introducer.INTRODUCER_PORT)
+	if id == INTRODUCER_ID && port != INTRODUCER_PORT {
+		log.Fatalf("Introducer port should be %d", INTRODUCER_PORT)
 	}
 
 	hostname := os.Args[1]
@@ -202,9 +201,9 @@ func main() {
 	log.Printf("Server %s listening on port %d\n", id, port)
 	defer s.Close()
 
-	if id == introducer.INTRODUCER_ID {
+	if id == INTRODUCER_ID {
 		s.Introducer = true
-		introducer.LoadKnownHosts(s)
+		LoadKnownHosts(s)
 		log.Println("Introducer is online...")
 		StartNode(s)
 	} else {
