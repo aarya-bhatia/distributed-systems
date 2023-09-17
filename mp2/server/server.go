@@ -166,7 +166,10 @@ func (server *Server) ProcessMembersList(message string) {
 			found.Counter = memberCounterInt
 			found.UpdatedAt = timeNow
 			found.Suspected = false
-			server.TimerManager.RestartTimer(memberID, timer.T_TIMEOUT)
+
+			if memberID != server.Self.ID {
+				server.TimerManager.RestartTimer(memberID, timer.T_TIMEOUT)
+			}
 		}
 	}
 

@@ -22,18 +22,20 @@ func RandomGossipRoutine(s *server.Server) {
 	for {
 		message := s.GetPingMessage()
 		targets := SelectRandomTargets(s, NODES_PER_ROUND)
-		log.Printf("Sending gossip to %d hosts: %s", len(targets), message)
-		s.MemberLock.Lock()
-		s.Members[s.Self.ID].Counter++
-		s.Members[s.Self.ID].UpdatedAt = time.Now().UnixMilli()
-		s.MemberLock.Unlock()
-		for _, target := range targets {
-			n, err := s.Connection.WriteToUDP([]byte(message), target.Address)
-			if err != nil {
-				log.Println(err)
-				continue
+		if len(targets) > 0 {
+			log.Printf("Sending gossip to %d hosts", len(targets))
+			s.MemberLock.Lock()
+			s.Self.Counter++
+			s.Self.UpdatedAt = time.Now().UnixMilli()
+			s.MemberLock.Unlock()
+			for _, target := range targets {
+				n, err := s.Connection.WriteToUDP([]byte(message), target.Address)
+				if err != nil {
+					log.Println(err)
+					continue
+				}
+				log.Printf("Sent %d bytes to %s\n", n, target.Signature)
 			}
-			log.Printf("Sent %d bytes to %s\n", n, target.Signature)
 		}
 		time.Sleep(timer.T_GOSSIP)
 	}
@@ -129,6 +131,7 @@ func handleTimeout(s *server.Server, e timer.TimerEvent) {
 		if host.Suspected || timer.T_CLEANUP == 0 {
 			log.Printf("FAILURE DETECTED: Node %s is considered failed\n", e.ID)
 			delete(s.Members, e.ID)
+			s.TimerManager.RestartTimer(e.ID, timer.T_CLEANUP)
 		} else {
 			log.Printf("FAILURE SUSPECTED: Node %s is suspected of failure\n", e.ID)
 			host.Suspected = true
