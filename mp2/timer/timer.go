@@ -25,7 +25,6 @@ type Timer struct {
 	TimerChannel    chan TimerEvent
 	TimeoutChannel  chan TimerEvent
 	TimeoutDuration time.Duration
-	State           int
 	Alive           bool
 	Mutex           sync.Mutex
 }
