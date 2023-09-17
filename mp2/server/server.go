@@ -13,8 +13,8 @@ type Host struct {
 	Address   string // IP address
 	Port      int    // server port
 	ID        string // unique ID
-	Counter   uint64 // heartbeat counter
-	UpdatedAt uint64 // local timestamp when counter last updated
+	Counter   int    // heartbeat counter
+	UpdatedAt int64  // local timestamp when counter last updated
 	Suspected bool   // whether the node is suspected of failure
 }
 
@@ -63,15 +63,18 @@ func (server *Server) AddHost(address string, port int, id string) (*Host, error
 	server.MemberLock.Lock()
 	defer server.MemberLock.Unlock()
 
-	_, present := server.Members[id]
-	if present {
+	if found, ok := server.Members[id]; ok {
+		log.Println(found)
 		return nil, errors.New("A peer with this ID already exists")
 	}
 
 	if server.Introducer {
 		for _, member := range server.Members {
 			if member.Address == address && member.Port == port {
+				prevID := member.ID
 				member.ID = id
+				server.Members[id] = member
+				delete(server.Members, prevID)
 				return member, nil
 			}
 		}
