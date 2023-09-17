@@ -19,4 +19,5 @@ logs
 outputs/
 reports/
 .vscode/
-mp2/cs425
+mp2/main
+mp2/known_hosts
