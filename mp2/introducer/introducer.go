@@ -69,7 +69,7 @@ func handleMessage(s *server.Server, message string) error {
 				}
 			}
 
-			log.Printf("New host added: %s\n", host.GetSignature())
+			log.Printf("New host added: %s\n", host.Signature)
 			reply := fmt.Sprintf("%s\n%s\n", JOIN_OK, s.EncodeMembersList())
 			_, err = s.SendPacket(senderAddress, senderPortInt, []byte(reply))
 			return err
@@ -114,7 +114,7 @@ func StartIntroducer(s *server.Server) {
 		if err != nil {
 			log.Println(err)
 		} else {
-			log.Println(host.GetSignature())
+			log.Println(host.Signature)
 		}
 	}
 	log.Printf("Added %d hosts: %s\n", len(s.Members), s.EncodeMembersList())

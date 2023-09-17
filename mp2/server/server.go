@@ -10,46 +10,36 @@ import (
 )
 
 type Host struct {
-	Address   string // IP address
-	Port      int    // server port
-	ID        string // unique ID
-	Counter   int    // heartbeat counter
-	UpdatedAt int64  // local timestamp when counter last updated
-	Suspected bool   // whether the node is suspected of failure
-	UDPAddr   *net.UDPAddr
+	Address   *net.UDPAddr
+	Signature string
+	ID        string
+	Counter   int   // heartbeat counter
+	UpdatedAt int64 // local timestamp when counter last updated
+	Suspected bool  // whether the node is suspected of failure
 }
 
 type Server struct {
-	HostName   string
 	ID         string
 	Address    *net.UDPAddr
 	Connection *net.UDPConn
 	Members    map[string]*Host
 	MemberLock sync.Mutex
 	Introducer bool
+	Signature  string
 }
 
-func NewHost(Address string, Port int, ID string, UDPAddr *net.UDPAddr) *Host {
+func NewHost(Hostname string, Port int, ID string, Address *net.UDPAddr) *Host {
 	var host = &Host{}
-	host.Address = Address
-	host.Port = Port
 	host.ID = ID
+	host.Address = Address
+	host.Signature = fmt.Sprintf("%s:%d:%s", Hostname, Port, ID)
 	host.Counter = 0
 	host.UpdatedAt = 0
-	host.UDPAddr = UDPAddr
 	return host
 }
 
-func (host Host) GetSignature() string {
-	return fmt.Sprintf("%s:%d:%s", host.Address, host.Port, host.ID)
-}
-
-func (host Host) GetSignatureWithCount() string {
-	return fmt.Sprintf("%s:%d:%d", host.GetSignature(), host.Counter, host.UpdatedAt)
-}
-
-func NewServer(hostname string, port int, id string) (*Server, error) {
-	addr, err := net.ResolveUDPAddr("udp", fmt.Sprintf(":%d", port))
+func NewServer(Hostname string, Port int, ID string) (*Server, error) {
+	addr, err := net.ResolveUDPAddr("udp", fmt.Sprintf(":%d", Port))
 	if err != nil {
 		return nil, err
 	}
@@ -58,11 +48,11 @@ func NewServer(hostname string, port int, id string) (*Server, error) {
 		return nil, err
 	}
 
-	return &Server{ID: id, HostName: hostname, Address: addr, Connection: conn, Members: make(map[string]*Host), Introducer: false}, nil
+	return &Server{ID: ID, Address: addr, Connection: conn, Members: make(map[string]*Host), Introducer: false, Signature: fmt.Sprintf("%s:%d:%s", Hostname, Port, ID)}, nil
 }
 
-func (server *Server) AddHost(address string, port int, id string) (*Host, error) {
-	addr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", address, port))
+func (server *Server) AddHost(Hostname string, Port int, ID string) (*Host, error) {
+	addr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", Hostname, Port))
 	if err != nil {
 		return nil, err
 	}
@@ -70,26 +60,28 @@ func (server *Server) AddHost(address string, port int, id string) (*Host, error
 	server.MemberLock.Lock()
 	defer server.MemberLock.Unlock()
 
-	if found, ok := server.Members[id]; ok {
+	if found, ok := server.Members[ID]; ok {
 		log.Println(found)
 		return nil, errors.New("A peer with this ID already exists")
 	}
 
+	signPre := fmt.Sprintf("%s:%d", Hostname, Port)
+
 	if server.Introducer {
 		for _, member := range server.Members {
-			if member.Address == address && member.Port == port {
+			if strings.Index(member.Signature, signPre) == 0 {
 				prevID := member.ID
-				member.ID = id
-				server.Members[id] = member
+				member.ID = ID
+				server.Members[ID] = member
 				delete(server.Members, prevID)
 				return member, nil
 			}
 		}
 	}
 
-	server.Members[id] = NewHost(address, port, id, addr)
-	log.Printf("Added new host: %s\n", server.Members[id].GetSignatureWithCount())
-	return server.Members[id], nil
+	server.Members[ID] = NewHost(Hostname, Port, ID, addr)
+	log.Printf("Added new host: %s\n", server.Members[ID].Signature)
+	return server.Members[ID], nil
 }
 
 func (server *Server) GetPacket() (message string, addr *net.UDPAddr, err error) {
@@ -122,20 +114,21 @@ func (server *Server) EncodeMembersList() string {
 	defer server.MemberLock.Unlock()
 
 	for _, host := range server.Members {
-		arr = append(arr, host.GetSignatureWithCount())
+		arr = append(arr, fmt.Sprintf("%s:%d:%d", host.Signature, host.Counter, host.UpdatedAt))
 	}
 
 	return strings.Join(arr, ";")
 }
 
 func (s *Server) GetJoinMessage() string {
-	return fmt.Sprintf("JOIN %s:%d:%s\n", s.HostName, s.Address.Port, s.ID)
+	return fmt.Sprintf("JOIN %s\n", s.Signature)
 }
 
 func (s *Server) GetLeaveMessage() string {
-	return fmt.Sprintf("LEAVE %s:%d:%s\n", s.HostName, s.Address.Port, s.ID)
+	return fmt.Sprintf("LEAVE %s\n", s.Signature)
 }
 
 func (s *Server) GetPingMessage() string {
-	return fmt.Sprintf("PING %s:%d:%s\n%s\n", s.HostName, s.Address.Port, s.ID, s.EncodeMembersList())
+	return fmt.Sprintf("PING %s\n%s\n", s.Signature, s.EncodeMembersList())
 }
+

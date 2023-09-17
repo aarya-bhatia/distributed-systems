@@ -33,12 +33,12 @@ func RandomGossipRoutine(s *server.Server) {
 		s.Members[s.ID].UpdatedAt = time.Now().UnixMilli()
 		s.MemberLock.Unlock()
 		for _, target := range targets {
-			n, err := s.Connection.WriteToUDP([]byte(message), target.UDPAddr)
+			n, err := s.Connection.WriteToUDP([]byte(message), target.Address)
 			if err != nil {
 				log.Println(err)
 				continue
 			}
-			log.Printf("Sent %d bytes to %s\n", n, target.GetSignature())
+			log.Printf("Sent %d bytes to %s\n", n, target.Signature)
 		}
 		time.Sleep(T_GOSSIP)
 	}
@@ -180,7 +180,7 @@ func handleMessage(s *server.Server, message string) {
 			} else if found.Counter < counterInt {
 				found.Counter = counterInt
 				found.UpdatedAt = timeNow
-				log.Printf("Updated counter: %s\n", s.Members[id].GetSignatureWithCount())
+				log.Printf("counter for %s: %d\n", s.Members[id].Signature, s.Members[id].Counter)
 				s.Members[id].Suspected = false
 				timerManager.RestartTimer(id, T_TIMEOUT)
 			}
