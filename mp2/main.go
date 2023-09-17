@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -27,8 +28,17 @@ func RandomGossipRoutine(s *server.Server) {
 		message := s.GetPingMessage()
 		targets := SelectRandomTargets(s, NODES_PER_ROUND)
 		log.Printf("Sending gossip to %d hosts: %s", len(targets), message)
+		s.MemberLock.Lock()
+		s.Members[s.ID].Counter++
+		s.Members[s.ID].UpdatedAt = time.Now().UnixMilli()
+		s.MemberLock.Unlock()
 		for _, target := range targets {
-			s.SendPacket(target.Address, target.Port, []byte(message))
+			n, err := s.Connection.WriteToUDP([]byte(message), target.UDPAddr)
+			if err != nil {
+				log.Println(err)
+				continue
+			}
+			log.Printf("Sent %d bytes to %s\n", n, target.GetSignature())
 		}
 		time.Sleep(T_GOSSIP)
 	}
@@ -82,7 +92,7 @@ func JoinWithRetry(s *server.Server) error {
 	}()
 
 	for {
-		err := s.SendPacket(introducer.INTRODUCER_HOST, introducer.INTRODUCER_PORT, []byte(request))
+		_, err := s.SendPacket(introducer.INTRODUCER_HOST, introducer.INTRODUCER_PORT, []byte(request))
 		if err != nil {
 			return err
 		}
@@ -111,10 +121,7 @@ func JoinWithRetry(s *server.Server) error {
 				address := tokens[0]
 				id := tokens[2]
 
-				s.MemberLock.Lock()
-				s.Members[id] = server.NewHost(address, port, id)
-				log.Printf("Added new host: %s\n", s.Members[id].GetSignature())
-				s.MemberLock.Unlock()
+				s.AddHost(address, port, id)
 			}
 
 			log.Println("Node join completed!")
@@ -126,7 +133,7 @@ func JoinWithRetry(s *server.Server) error {
 	}
 }
 
-func HandleMessageAtNode(s *server.Server, message string, timerChannel chan string) {
+func handleMessage(s *server.Server, message string) {
 	if strings.Index(message, "PING") == 0 {
 		lines := strings.Split(message, "\n")
 		if len(lines) < 2 {
@@ -134,7 +141,7 @@ func HandleMessageAtNode(s *server.Server, message string, timerChannel chan str
 		}
 
 		members := strings.Split(lines[1], ";")
-		timeNow := uint64(time.Now().UnixMilli())
+		timeNow := time.Now().UnixMilli()
 
 		s.MemberLock.Lock()
 		for _, member := range members {
@@ -157,23 +164,44 @@ func HandleMessageAtNode(s *server.Server, message string, timerChannel chan str
 				return
 			}
 
-			counterInt64 := uint64(counterInt)
-			found, present := s.Members[id]
-			if !present {
-				s.Members[id] = server.NewHost(address, portInt, id)
-				s.Members[id].Counter = counterInt64
-				log.Printf("Added new host: %s\n", s.Members[id].GetSignatureWithCount())
-			} else {
-				if found.Counter < counterInt64 {
-					found.Counter = counterInt64
-					found.UpdatedAt = timeNow
-					log.Printf("Updated counter: %s\n", s.Members[id].GetSignatureWithCount())
-					// timerChannel <- fmt.Sprintf("
-					// TODO: Restart timer here
+			found, ok := s.Members[id]
+			if !ok {
+				s.MemberLock.Unlock()
+				found, err = s.AddHost(address, portInt, id)
+				if err != nil {
+					log.Println(err)
+					continue
 				}
+				s.MemberLock.Lock()
+				s.Members[id].Counter = counterInt
+				found.UpdatedAt = timeNow
+				s.Members[id].Suspected = false
+				timerManager.RestartTimer(id, T_TIMEOUT)
+			} else if found.Counter < counterInt {
+				found.Counter = counterInt
+				found.UpdatedAt = timeNow
+				log.Printf("Updated counter: %s\n", s.Members[id].GetSignatureWithCount())
+				s.Members[id].Suspected = false
+				timerManager.RestartTimer(id, T_TIMEOUT)
 			}
 		}
 		s.MemberLock.Unlock()
+	}
+}
+
+func handleTimeout(s *server.Server, e timer.TimerEvent) {
+	s.MemberLock.Lock()
+	defer s.MemberLock.Unlock()
+
+	if host, ok := s.Members[e.ID]; ok {
+		if host.Suspected || T_CLEANUP == 0 {
+			log.Printf("FAILURE DETECTED: Node %s is considered failed\n", e.ID)
+			delete(s.Members, e.ID)
+		} else {
+			log.Printf("FAILURE SUSPECTED: Node %s is suspected of failure\n", e.ID)
+			host.Suspected = true
+			timerManager.RestartTimer(e.ID, T_CLEANUP)
+		}
 	}
 }
 
@@ -185,28 +213,34 @@ func StartNode(s *server.Server) {
 	}
 
 	go RandomGossipRoutine(s)
-	timerChannel := make(chan string)
 
 	messageReceivedChannel := make(chan string)
-
 	go func() {
 		for {
-			message, _, err := s.GetPacket()
+			message, client, err := s.GetPacket()
 			if err != nil {
 				log.Println(err)
 				continue
 			}
 
-			messageReceivedChannel <- message
+			if strings.Index(message, "ID") == 0 {
+				s.Connection.WriteToUDP([]byte(fmt.Sprintf("%s\n", s.ID)), client)
+			} else if strings.Index(message, "LIST") == 0 {
+				s.Connection.WriteToUDP([]byte(fmt.Sprintf("OK\n%s\n", s.EncodeMembersList())), client)
+			} else if strings.Index(message, "KILL") == 0 {
+				syscall.Kill(syscall.Getpid(), syscall.SIGINT)
+			} else {
+				messageReceivedChannel <- message
+			}
 		}
 	}()
 
 	for {
 		select {
 		case message := <-messageReceivedChannel:
-			HandleMessageAtNode(s, message, timerChannel)
-		case timerEvent := <-timerChannel:
-			log.Printf("Timer event occurred: %s\n", timerEvent)
+			handleMessage(s, message)
+		case timerEvent := <-timerManager.TimeoutChannel:
+			handleTimeout(s, timerEvent)
 		}
 	}
 }

@@ -16,6 +16,7 @@ type Host struct {
 	Counter   int    // heartbeat counter
 	UpdatedAt int64  // local timestamp when counter last updated
 	Suspected bool   // whether the node is suspected of failure
+	UDPAddr   *net.UDPAddr
 }
 
 type Server struct {
@@ -28,13 +29,14 @@ type Server struct {
 	Introducer bool
 }
 
-func NewHost(Address string, Port int, ID string) *Host {
+func NewHost(Address string, Port int, ID string, UDPAddr *net.UDPAddr) *Host {
 	var host = &Host{}
 	host.Address = Address
 	host.Port = Port
 	host.ID = ID
 	host.Counter = 0
 	host.UpdatedAt = 0
+	host.UDPAddr = UDPAddr
 	return host
 }
 
@@ -60,6 +62,11 @@ func NewServer(hostname string, port int, id string) (*Server, error) {
 }
 
 func (server *Server) AddHost(address string, port int, id string) (*Host, error) {
+	addr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", address, port))
+	if err != nil {
+		return nil, err
+	}
+
 	server.MemberLock.Lock()
 	defer server.MemberLock.Unlock()
 
@@ -80,31 +87,28 @@ func (server *Server) AddHost(address string, port int, id string) (*Host, error
 		}
 	}
 
-	server.Members[id] = NewHost(address, port, id)
+	server.Members[id] = NewHost(address, port, id, addr)
+	log.Printf("Added new host: %s\n", server.Members[id].GetSignatureWithCount())
 	return server.Members[id], nil
 }
 
 func (server *Server) GetPacket() (message string, addr *net.UDPAddr, err error) {
 	buffer := make([]byte, 1024)
-
 	n, addr, err := server.Connection.ReadFromUDP(buffer)
 	if err != nil {
 		return "", nil, err
 	}
-	message = strings.TrimSpace(string(buffer[0:n]))
+	message = strings.TrimSpace(string(buffer[:n]))
 	log.Printf("Received %d bytes from %s\n", len(message), addr.String())
 	return message, addr, nil
 }
 
-func (server *Server) SendPacket(address string, port int, data []byte) error {
-	client, err := net.Dial("udp", fmt.Sprintf("%s:%d", address, port))
+func (server *Server) SendPacket(address string, port int, data []byte) (int, error) {
+	addr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", address, port))
 	if err != nil {
-		return err
+		return 0, err
 	}
-
-	defer client.Close()
-	_, err = client.Write(data)
-	return err
+	return server.Connection.WriteToUDP(data, addr)
 }
 
 func (server *Server) Close() {

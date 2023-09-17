@@ -55,21 +55,24 @@ func handleMessage(s *server.Server, message string) error {
 	if messageType == "JOIN" {
 		host, err := s.AddHost(senderAddress, senderPortInt, senderId)
 
-		if save_file != nil {
-			save_file.WriteString(senderInfo)
-			if senderInfo[len(senderInfo)-1] != '\n' {
-				save_file.WriteString("\n")
-			}
-		}
-
 		if err != nil {
 			log.Printf("Failed to add host: %s\n", err.Error())
 			reply := fmt.Sprintf("%s\n%s\n", JOIN_ERROR, err.Error())
-			return s.SendPacket(senderAddress, senderPortInt, []byte(reply))
+			_, err = s.SendPacket(senderAddress, senderPortInt, []byte(reply))
+			return err
 		} else {
+
+			if save_file != nil {
+				save_file.WriteString(senderInfo)
+				if senderInfo[len(senderInfo)-1] != '\n' {
+					save_file.WriteString("\n")
+				}
+			}
+
 			log.Printf("New host added: %s\n", host.GetSignature())
 			reply := fmt.Sprintf("%s\n%s\n", JOIN_OK, s.EncodeMembersList())
-			return s.SendPacket(senderAddress, senderPortInt, []byte(reply))
+			_, err = s.SendPacket(senderAddress, senderPortInt, []byte(reply))
+			return err
 		}
 	}
 
@@ -107,9 +110,14 @@ func StartIntroducer(s *server.Server) {
 			log.Fatal(err)
 		}
 
-		s.AddHost(tokens[0], port, tokens[2])
+		host, err := s.AddHost(tokens[0], port, tokens[2])
+		if err != nil {
+			log.Println(err)
+		} else {
+			log.Println(host.GetSignature())
+		}
 	}
-	log.Printf("Added %d hosts\n", len(s.Members))
+	log.Printf("Added %d hosts: %s\n", len(s.Members), s.EncodeMembersList())
 
 	if err := scanner.Err(); err != nil {
 		log.Fatal(err)
