@@ -120,3 +120,15 @@ func (server *Server) EncodeMembersList() string {
 
 	return strings.Join(arr, ";")
 }
+
+func (s *Server) GetJoinMessage() string {
+	return fmt.Sprintf("JOIN %s:%d:%s\n", s.HostName, s.Address.Port, s.ID)
+}
+
+func (s *Server) GetLeaveMessage() string {
+	return fmt.Sprintf("LEAVE %s:%d:%s\n", s.HostName, s.Address.Port, s.ID)
+}
+
+func (s *Server) GetPingMessage() string {
+	return fmt.Sprintf("PING %s:%d:%s\n%s\n", s.HostName, s.Address.Port, s.ID, s.EncodeMembersList())
+}

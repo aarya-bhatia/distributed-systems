@@ -24,9 +24,9 @@ var timerManager = timer.NewTimerManager()
 // Sends membership list to random subset of peers every T_gossip period
 func RandomGossipRoutine(s *server.Server) {
 	for {
-		message := fmt.Sprintf("PING\n%s\n", s.EncodeMembersList())
-		log.Printf("Gossip message: %s", message)
+		message := s.GetPingMessage()
 		targets := SelectRandomTargets(s, NODES_PER_ROUND)
+		log.Printf("Sending gossip to %d hosts: %s", len(targets), message)
 		for _, target := range targets {
 			s.SendPacket(target.Address, target.Port, []byte(message))
 		}
@@ -51,23 +51,20 @@ func SelectRandomTargets(s *server.Server, count int) []*server.Host {
 		hosts[i], hosts[j] = hosts[j], hosts[i]
 	}
 
-	log.Printf("Number of hosts selected: %d", len(hosts))
 	if len(hosts) < count {
 		return hosts
 	}
-
 	return hosts[:count]
 }
 
 // Request introducer to join node
 func JoinWithRetry(s *server.Server) error {
-	request := fmt.Sprintf("JOIN %s:%d:%s\n", s.HostName, s.Address.Port, s.ID)
+	request := s.GetJoinMessage()
 	messageChannel := make(chan string, 1)
 
 	go func() {
 		for {
 			message, _, err := s.GetPacket()
-			// log.Printf("Recieved message: %s\n", message)
 
 			if err != nil {
 				log.Fatalf("Error reading packet: %s", err.Error())
@@ -94,7 +91,7 @@ func JoinWithRetry(s *server.Server) error {
 		case messageReply := <-messageChannel:
 			lines := strings.Split(messageReply, "\n")
 			if len(lines) < 2 {
-				log.Fatalf("Illegal join reply: %s", messageReply)
+				log.Fatalf("Illegal Join reply: %s", messageReply)
 			}
 
 			initialMembers := strings.Split(lines[1], ";")
