@@ -15,12 +15,7 @@ import (
 	"time"
 )
 
-const NODES_PER_ROUND = 2          // Number of random peers to send gossip every round
-const T_GOSSIP = 5 * time.Second   // Time duration between each gossip round
-const T_TIMEOUT = 10 * time.Second // Time duration until a peer times out
-var T_CLEANUP = 5 * time.Second    // Time duration before peer is deleted
-
-var timerManager = timer.NewTimerManager()
+const NODES_PER_ROUND = 2 // Number of random peers to send gossip every round
 
 // Sends membership list to random subset of peers every T_gossip period
 func RandomGossipRoutine(s *server.Server) {
@@ -29,8 +24,8 @@ func RandomGossipRoutine(s *server.Server) {
 		targets := SelectRandomTargets(s, NODES_PER_ROUND)
 		log.Printf("Sending gossip to %d hosts: %s", len(targets), message)
 		s.MemberLock.Lock()
-		s.Members[s.ID].Counter++
-		s.Members[s.ID].UpdatedAt = time.Now().UnixMilli()
+		s.Members[s.Self.ID].Counter++
+		s.Members[s.Self.ID].UpdatedAt = time.Now().UnixMilli()
 		s.MemberLock.Unlock()
 		for _, target := range targets {
 			n, err := s.Connection.WriteToUDP([]byte(message), target.Address)
@@ -40,7 +35,7 @@ func RandomGossipRoutine(s *server.Server) {
 			}
 			log.Printf("Sent %d bytes to %s\n", n, target.Signature)
 		}
-		time.Sleep(T_GOSSIP)
+		time.Sleep(timer.T_GOSSIP)
 	}
 }
 
@@ -49,7 +44,7 @@ func SelectRandomTargets(s *server.Server, count int) []*server.Host {
 	var hosts = []*server.Host{}
 	s.MemberLock.Lock()
 	for _, host := range s.Members {
-		if host.ID != s.ID {
+		if host.ID != s.Self.ID {
 			hosts = append(hosts, host)
 		}
 	}
@@ -88,6 +83,8 @@ func JoinWithRetry(s *server.Server) error {
 			if strings.Index(message, introducer.JOIN_ERROR) == 0 {
 				log.Fatalf("Failed to join: %s", message)
 			}
+
+			// If PING request, that's also OK
 		}
 	}()
 
@@ -101,33 +98,12 @@ func JoinWithRetry(s *server.Server) error {
 		case messageReply := <-messageChannel:
 			lines := strings.Split(messageReply, "\n")
 			if len(lines) < 2 {
-				log.Fatalf("Illegal Join reply: %s", messageReply)
+				continue
 			}
-
-			initialMembers := strings.Split(lines[1], ";")
-
-			for _, member := range initialMembers {
-				tokens := strings.Split(member, ":")
-				if len(tokens) < 3 {
-					continue
-				}
-
-				port, err := strconv.Atoi(tokens[1])
-				if err != nil {
-					log.Println(err)
-					continue
-				}
-
-				address := tokens[0]
-				id := tokens[2]
-
-				s.AddHost(address, port, id)
-			}
-
-			log.Println("Node join completed!")
+			s.ProcessMembersList(lines[1])
+			log.Println("Node join completed.")
 			return nil
-
-		case <-time.After(5 * time.Second):
+		case <-time.After(timer.T_GOSSIP):
 			fmt.Println("Timeout: Retrying join...")
 		}
 	}
@@ -139,53 +115,9 @@ func handleMessage(s *server.Server, message string) {
 		if len(lines) < 2 {
 			return
 		}
-
-		members := strings.Split(lines[1], ";")
-		timeNow := time.Now().UnixMilli()
-
-		s.MemberLock.Lock()
-		for _, member := range members {
-			tokens := strings.Split(member, ":")
-
-			if len(tokens) < 4 {
-				return
-			}
-
-			address, port, id, counter := tokens[0], tokens[1], tokens[2], tokens[3]
-			portInt, err := strconv.Atoi(port)
-			if err != nil {
-				log.Println(err)
-				return
-			}
-
-			counterInt, err := strconv.Atoi(counter)
-			if err != nil {
-				log.Println(err)
-				return
-			}
-
-			found, ok := s.Members[id]
-			if !ok {
-				s.MemberLock.Unlock()
-				found, err = s.AddHost(address, portInt, id)
-				if err != nil {
-					log.Println(err)
-					continue
-				}
-				s.MemberLock.Lock()
-				s.Members[id].Counter = counterInt
-				found.UpdatedAt = timeNow
-				s.Members[id].Suspected = false
-				timerManager.RestartTimer(id, T_TIMEOUT)
-			} else if found.Counter < counterInt {
-				found.Counter = counterInt
-				found.UpdatedAt = timeNow
-				log.Printf("counter for %s: %d\n", s.Members[id].Signature, s.Members[id].Counter)
-				s.Members[id].Suspected = false
-				timerManager.RestartTimer(id, T_TIMEOUT)
-			}
-		}
-		s.MemberLock.Unlock()
+		s.ProcessMembersList(lines[1])
+	} else if strings.Index(message, "JOIN") == 0 {
+		introducer.HandleJoin(s, message)
 	}
 }
 
@@ -194,24 +126,19 @@ func handleTimeout(s *server.Server, e timer.TimerEvent) {
 	defer s.MemberLock.Unlock()
 
 	if host, ok := s.Members[e.ID]; ok {
-		if host.Suspected || T_CLEANUP == 0 {
+		if host.Suspected || timer.T_CLEANUP == 0 {
 			log.Printf("FAILURE DETECTED: Node %s is considered failed\n", e.ID)
 			delete(s.Members, e.ID)
 		} else {
 			log.Printf("FAILURE SUSPECTED: Node %s is suspected of failure\n", e.ID)
 			host.Suspected = true
-			timerManager.RestartTimer(e.ID, T_CLEANUP)
+			s.TimerManager.RestartTimer(e.ID, timer.T_CLEANUP)
 		}
 	}
 }
 
 // Start FD node process
 func StartNode(s *server.Server) {
-	err := JoinWithRetry(s)
-	if err != nil {
-		log.Fatal(err)
-	}
-
 	go RandomGossipRoutine(s)
 
 	messageReceivedChannel := make(chan string)
@@ -224,7 +151,7 @@ func StartNode(s *server.Server) {
 			}
 
 			if strings.Index(message, "ID") == 0 {
-				s.Connection.WriteToUDP([]byte(fmt.Sprintf("%s\n", s.ID)), client)
+				s.Connection.WriteToUDP([]byte(fmt.Sprintf("%s\n", s.Self.ID)), client)
 			} else if strings.Index(message, "LIST") == 0 {
 				s.Connection.WriteToUDP([]byte(fmt.Sprintf("OK\n%s\n", s.EncodeMembersList())), client)
 			} else if strings.Index(message, "KILL") == 0 {
@@ -239,7 +166,7 @@ func StartNode(s *server.Server) {
 		select {
 		case message := <-messageReceivedChannel:
 			handleMessage(s, message)
-		case timerEvent := <-timerManager.TimeoutChannel:
+		case timerEvent := <-s.TimerManager.TimeoutChannel:
 			handleTimeout(s, timerEvent)
 		}
 	}
@@ -274,8 +201,14 @@ func main() {
 
 	if id == introducer.INTRODUCER_ID {
 		s.Introducer = true
-		introducer.StartIntroducer(s)
+		introducer.LoadKnownHosts(s)
+		log.Println("Introducer is online...")
+		StartNode(s)
 	} else {
+		err := JoinWithRetry(s)
+		if err != nil {
+			log.Fatal(err)
+		}
 		StartNode(s)
 	}
 }

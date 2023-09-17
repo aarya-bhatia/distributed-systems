@@ -1,12 +1,15 @@
 package server
 
 import (
+	"cs425/timer"
 	"errors"
 	"fmt"
 	"log"
 	"net"
+	"strconv"
 	"strings"
 	"sync"
+	"time"
 )
 
 type Host struct {
@@ -19,13 +22,12 @@ type Host struct {
 }
 
 type Server struct {
-	ID         string
-	Address    *net.UDPAddr
-	Connection *net.UDPConn
-	Members    map[string]*Host
-	MemberLock sync.Mutex
-	Introducer bool
-	Signature  string
+	Self         *Host
+	Connection   *net.UDPConn
+	Members      map[string]*Host
+	MemberLock   sync.Mutex
+	Introducer   bool
+	TimerManager *timer.TimerManager
 }
 
 func NewHost(Hostname string, Port int, ID string, Address *net.UDPAddr) *Host {
@@ -48,7 +50,16 @@ func NewServer(Hostname string, Port int, ID string) (*Server, error) {
 		return nil, err
 	}
 
-	return &Server{ID: ID, Address: addr, Connection: conn, Members: make(map[string]*Host), Introducer: false, Signature: fmt.Sprintf("%s:%d:%s", Hostname, Port, ID)}, nil
+	server := &Server{}
+
+	server.Self = NewHost(Hostname, Port, ID, addr)
+	server.Connection = conn
+	server.Members = make(map[string]*Host)
+	server.Introducer = false
+	server.TimerManager = timer.NewTimerManager()
+	server.Members[ID] = server.Self // Add server to its own membership list
+
+	return server, nil
 }
 
 func (server *Server) AddHost(Hostname string, Port int, ID string) (*Host, error) {
@@ -120,15 +131,56 @@ func (server *Server) EncodeMembersList() string {
 	return strings.Join(arr, ";")
 }
 
+func (server *Server) ProcessMembersList(message string) {
+	server.MemberLock.Lock()
+
+	members := strings.Split(message, ";")
+
+	for _, member := range members {
+		tokens := strings.Split(member, ":")
+		if len(tokens) < 4 {
+			continue
+		}
+
+		timeNow := time.Now().UnixMilli()
+		memberHost, memberPort, memberID, memberCounter := tokens[0], tokens[1], tokens[2], tokens[3]
+
+		memberPortInt, err := strconv.Atoi(memberPort)
+		if err != nil {
+			continue
+		}
+
+		memberCounterInt, err := strconv.Atoi(memberCounter)
+		if err != nil {
+			continue
+		}
+
+		if _, ok := server.Members[memberID]; !ok {
+			server.MemberLock.Unlock()
+			server.AddHost(memberHost, memberPortInt, memberID)
+			server.MemberLock.Lock()
+		}
+
+		found, _ := server.Members[memberID]
+		if found.Counter < memberCounterInt {
+			found.Counter = memberCounterInt
+			found.UpdatedAt = timeNow
+			found.Suspected = false
+			server.TimerManager.RestartTimer(memberID, timer.T_TIMEOUT)
+		}
+	}
+
+	server.MemberLock.Unlock()
+}
+
 func (s *Server) GetJoinMessage() string {
-	return fmt.Sprintf("JOIN %s\n", s.Signature)
+	return fmt.Sprintf("JOIN %s\n", s.Self.Signature)
 }
 
 func (s *Server) GetLeaveMessage() string {
-	return fmt.Sprintf("LEAVE %s\n", s.Signature)
+	return fmt.Sprintf("LEAVE %s\n", s.Self.Signature)
 }
 
 func (s *Server) GetPingMessage() string {
-	return fmt.Sprintf("PING %s\n%s\n", s.Signature, s.EncodeMembersList())
+	return fmt.Sprintf("PING %s\n%s\n", s.Self.Signature, s.EncodeMembersList())
 }
-

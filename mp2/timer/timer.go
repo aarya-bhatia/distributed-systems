@@ -5,6 +5,10 @@ import (
 	"time"
 )
 
+const T_GOSSIP = 5 * time.Second   // Time duration between each gossip round
+const T_TIMEOUT = 10 * time.Second // Time duration until a peer times out
+var T_CLEANUP = 5 * time.Second    // Time duration before peer is deleted
+
 const (
 	TIMER_TIMEOUT_EVENT = 1
 	TIMER_STOP_EVENT    = 2
