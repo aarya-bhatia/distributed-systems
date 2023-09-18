@@ -138,7 +138,6 @@ func (server *Server) ProcessMembersList(message string) {
 	server.MemberLock.Lock()
 
 	members := strings.Split(message, ";")
-
 	for _, member := range members {
 		tokens := strings.Split(member, ":")
 		if len(tokens) < 4 {

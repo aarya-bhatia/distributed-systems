@@ -84,7 +84,7 @@ func SaveMembersToFile(s *server.Server) {
 
 // Introducer process accepts new hosts and sends full membership list
 func LoadKnownHosts(s *server.Server) {
-	save_file, err := os.OpenFile(SAVE_FILENAME, os.O_CREATE|os.O_TRUNC|os.O_RDWR, 0644)
+	save_file, err := os.OpenFile(SAVE_FILENAME, os.O_CREATE|os.O_RDWR, 0644)
 	if err != nil {
 		log.Fatalf("Failed to open file: %s\n", err.Error())
 	}
