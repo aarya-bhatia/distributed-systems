@@ -28,6 +28,7 @@ type Server struct {
 	MemberLock   sync.Mutex
 	Introducer   bool
 	DropRate     int
+	TotalByte    int
 	TimerManager *timer.TimerManager
 }
 

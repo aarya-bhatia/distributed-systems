@@ -38,6 +38,7 @@ func RandomGossipRoutine(s *server.Server) {
 					log.Println(err)
 					continue
 				}
+				s.TotalByte += n
 				log.Printf("Sent %d bytes to %s\n", n, target.Signature)
 			}
 		}
@@ -202,7 +203,6 @@ func main() {
 		program := filepath.Base(os.Args[0])
 		log.Fatalf("Usage: %s <hostname> <port> <id>", program)
 	}
-
 	var port int
 	port, err := strconv.Atoi(os.Args[2])
 	if err != nil {
@@ -219,6 +219,13 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	f, err := os.OpenFile(fmt.Sprintf("%s:%d:%s.log", hostname, port, id), os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer f.Close()
+	log.SetOutput(f)
 
 	log.Printf("Server %s listening on port %d\n", id, port)
 	defer s.Close()
