@@ -28,6 +28,11 @@ func RandomGossipRoutine(s *server.Server) {
 			s.Self.UpdatedAt = time.Now().UnixMilli()
 			s.MemberLock.Unlock()
 			for _, target := range targets {
+				// Determin if we should drop a message
+				if rand.Intn(100) < s.DropRate {
+					log.Printf("Message to %s dropped with drop rate %d%\n", target.Address, s.DropRate)
+					continue
+				}
 				n, err := s.Connection.WriteToUDP([]byte(message), target.Address)
 				if err != nil {
 					log.Println(err)
@@ -119,6 +124,8 @@ func handleMessage(s *server.Server, message string) {
 		s.ProcessMembersList(lines[1])
 	} else if strings.Index(message, "JOIN") == 0 {
 		HandleJoin(s, message)
+	} else if strings.Index(message, "CONFIG") == 0 {
+		handleConfig(s, message)
 	}
 }
 
@@ -136,6 +143,21 @@ func handleTimeout(s *server.Server, e timer.TimerEvent) {
 			host.Suspected = true
 			s.TimerManager.RestartTimer(e.ID, timer.T_CLEANUP)
 		}
+	}
+}
+
+// Handle netcat config command using protocal CONFIG <field to change> <value>
+func handleConfig(s *server.Server, message string) {
+	words := strings.Split(message, " ")
+	if len(words) < 3 {
+		return
+	}
+	if words[1] == "droprate" {
+		dropRate, err := strconv.Atoi(words[2])
+		if err != nil {
+			return
+		}
+		s.DropRate = dropRate
 	}
 }
 

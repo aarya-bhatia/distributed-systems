@@ -27,6 +27,7 @@ type Server struct {
 	Members      map[string]*Host
 	MemberLock   sync.Mutex
 	Introducer   bool
+	DropRate     int
 	TimerManager *timer.TimerManager
 }
 
@@ -57,6 +58,7 @@ func NewServer(Hostname string, Port int, ID string) (*Server, error) {
 	server.Members = make(map[string]*Host)
 	server.Introducer = false
 	server.TimerManager = timer.NewTimerManager()
+	server.DropRate = 0
 	server.Members[ID] = server.Self // Add server to its own membership list
 
 	return server, nil
