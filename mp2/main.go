@@ -220,7 +220,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	f, err := os.OpenFile(fmt.Sprintf("%s:%d:%s.log", hostname, port, id), os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+	f, err := os.OpenFile(fmt.Sprintf("%s.log", s.Self.Signature), os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 	if err != nil {
 		log.Fatal(err)
 	}
