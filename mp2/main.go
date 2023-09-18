@@ -220,12 +220,16 @@ func main() {
 		log.Fatal(err)
 	}
 
-	f, err := os.OpenFile(fmt.Sprintf("%s.log", s.Self.Signature), os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
-	if err != nil {
-		log.Fatal(err)
+	if os.Getenv("DEBUG") != "TRUE" {
+		logfile := fmt.Sprintf("%s.log", s.Self.Signature)
+		f, err := os.OpenFile(logfile, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer f.Close()
+		log.SetOutput(f)
+		os.Stderr.WriteString(fmt.Sprintf("Log File: %s", logfile))
 	}
-	defer f.Close()
-	log.SetOutput(f)
 
 	log.Printf("Server %s listening on port %d\n", id, port)
 	defer s.Close()
