@@ -254,7 +254,7 @@ func receiverRoutine(s *server.Server) {
 
 func startGossip(s *server.Server) {
 	s.Active = true
-	log.Println("[DEBUG] Updated Node ID to ", s.Self.SetUniqueID())
+	log.Println("[DEBUG] Updated Node ID to ", s.SetUniqueID())
 	err := joinWithRetry(s)
 	if err != nil {
 		log.Fatal(err)
