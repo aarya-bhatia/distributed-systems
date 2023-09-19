@@ -211,7 +211,7 @@ func (server *Server) ProcessMembersList(message string) {
 		}
 
 		found, _ := server.Members[memberID]
-		if found.Counter == 0 || found.Counter < memberCounterInt {
+		if found.Counter < memberCounterInt {
 			found.Counter = memberCounterInt
 			found.UpdatedAt = timeNow
 			found.Suspected = false
@@ -225,6 +225,16 @@ func (server *Server) ProcessMembersList(message string) {
 	server.MemberLock.Unlock()
 }
 
+func (server *Server) StartAllTimers() {
+	server.MemberLock.Lock()
+	defer server.MemberLock.Unlock()
+	for ID := range server.Members {
+		if ID != server.Self.ID {
+			server.TimerManager.RestartTimer(ID, server.GossipTimeout)
+		}
+	}
+}
+
 func (s *Server) GetJoinMessage() string {
 	return fmt.Sprintf("JOIN %s\n", s.Self.Signature)
 }
@@ -233,6 +243,6 @@ func (s *Server) GetLeaveMessage() string {
 	return fmt.Sprintf("LEAVE %s\n", s.Self.Signature)
 }
 
-func (s *Server) GetPingMessage() string {
-	return fmt.Sprintf("PING %s\n%s\n", s.Self.Signature, s.EncodeMembersList())
+func (s *Server) GetPingMessage(targetID string) string {
+	return fmt.Sprintf("PING %s %s\n%s\n", s.Self.Signature, targetID, s.EncodeMembersList())
 }
