@@ -17,8 +17,7 @@ import (
 )
 
 const (
-	NODES_PER_ROUND       = 2 // Number of random peers to send gossip every round
-	INTRODUCER_ID         = "1"
+	NODES_PER_ROUND       = 2           // Number of random peers to send gossip every round
 	INTRODUCER_HOST       = "127.0.0.1" // TODO: Update this with VM1 in prod
 	INTRODUCER_PORT       = 6001
 	JOIN_OK               = "JOIN_OK"
@@ -29,23 +28,19 @@ const (
 
 // Starts a UDP server on specified port
 func main() {
-	if len(os.Args) < 4 {
+	if len(os.Args) < 3 {
 		program := filepath.Base(os.Args[0])
-		log.Fatalf("Usage: %s <hostname> <port> <id>", program)
+		log.Fatalf("Usage: %s <hostname> <port>", program)
 	}
+
+	hostname := os.Args[1]
 	var port int
 	port, err := strconv.Atoi(os.Args[2])
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	id := os.Args[3]
-	if id == INTRODUCER_ID && port != INTRODUCER_PORT {
-		log.Fatalf("Introducer port should be %d", INTRODUCER_PORT)
-	}
-
-	hostname := os.Args[1]
-	s, err := server.NewServer(hostname, port, id)
+	s, err := server.NewServer(hostname, port)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -61,10 +56,10 @@ func main() {
 		os.Stderr.WriteString(fmt.Sprintf("Log File: %s\n", logfile))
 	}
 
-	log.Printf("Server %s listening on port %d\n", id, port)
+	log.Printf("Server %s listening on port %d\n", s.Self.Signature, port)
 	defer s.Close()
 
-	if id == INTRODUCER_ID {
+	if port == INTRODUCER_PORT {
 		s.Introducer = true
 		loadKnownHosts(s)
 		startNode(s)
@@ -190,7 +185,7 @@ func handleTimeout(s *server.Server, e timer.TimerEvent) {
 
 	if host, ok := s.Members[e.ID]; ok {
 		if host.Suspected || s.SuspicionTimeout == 0 {
-			log.Printf("[CRITICAL]FAILURE DETECTED: Node %s is considered failed\n", e.ID)
+			log.Printf("[CRITICAL] FAILURE DETECTED: Node %s is considered failed\n", e.ID)
 			delete(s.Members, e.ID)
 			if s.Introducer {
 				s.MemberLock.Unlock()
