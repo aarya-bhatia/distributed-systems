@@ -252,6 +252,27 @@ func receiverRoutine(s *server.Server) {
 	}
 }
 
+func startGossip(s *server.Server) {
+	s.Active = true
+	log.Println("[DEBUG] Updated Node ID to ", s.Self.SetUniqueID())
+	err := joinWithRetry(s)
+	if err != nil {
+		log.Fatal(err)
+	}
+	s.GossipChannel <- true
+}
+
+func stopGossip(s *server.Server) {
+	s.Active = false
+	s.GossipChannel <- false
+	s.MemberLock.Lock()
+	for ID := range s.Members {
+		delete(s.Members, ID)
+	}
+	s.MemberLock.Unlock()
+	s.TimerManager.StopAll()
+}
+
 // Handles the request received by the server
 // JOIN, PING, ID, LIST, KILL, START_GOSSIP, STOP_GOSSIP, CONFIG
 func handleRequest(s *server.Server, e server.ReceiverEvent) {
@@ -295,22 +316,10 @@ func handleRequest(s *server.Server, e server.ReceiverEvent) {
 		syscall.Kill(syscall.Getpid(), syscall.SIGINT)
 
 	case "START_GOSSIP":
-		s.Active = true
-		s.GossipChannel <- true
-		err := joinWithRetry(s)
-		if err != nil {
-			log.Fatal(err)
-		}
+		startGossip(s)
 
 	case "STOP_GOSSIP":
-		s.Active = false
-		s.GossipChannel <- false
-		s.MemberLock.Lock()
-		for ID := range s.Members {
-			delete(s.Members, ID)
-		}
-		s.MemberLock.Unlock()
-		s.TimerManager.StopAll()
+		stopGossip(s)
 
 	case "CONFIG":
 		handleConfigRequest(s, e)
