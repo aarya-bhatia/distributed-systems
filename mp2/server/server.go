@@ -113,7 +113,7 @@ func (server *Server) AddHost(Hostname string, Port int, ID string) (*Host, erro
 				member.ID = ID
 				server.Members[ID] = member
 				delete(server.Members, prevID)
-				// server.SaveMembersToFile()
+				server.SaveMembersToFile()
 				return member, nil
 			}
 		}
@@ -121,9 +121,11 @@ func (server *Server) AddHost(Hostname string, Port int, ID string) (*Host, erro
 
 	server.Members[ID] = NewHost(Hostname, Port, ID, addr)
 	log.Printf("Added new host: %s\n", server.Members[ID].Signature)
-	// if server.Introducer {
-	// 	server.SaveMembersToFile()
-	// }
+	if server.Introducer {
+		server.MemberLock.Unlock()
+		server.SaveMembersToFile()
+		server.MemberLock.Lock()
+	}
 	return server.Members[ID], nil
 }
 
