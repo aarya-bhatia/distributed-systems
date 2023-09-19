@@ -58,7 +58,7 @@ func main() {
 		}
 		defer f.Close()
 		log.SetOutput(f)
-		os.Stderr.WriteString(fmt.Sprintf("Log File: %s", logfile))
+		os.Stderr.WriteString(fmt.Sprintf("Log File: %s\n", logfile))
 	}
 
 	log.Printf("Server %s listening on port %d\n", id, port)
@@ -80,6 +80,7 @@ func main() {
 }
 
 // Sends membership list to random subset of peers every T_gossip period
+// Updates own counter and timestamp before sending the membership list
 func sendPings(s *server.Server) {
 	targets := selectRandomTargets(s, NODES_PER_ROUND)
 	if len(targets) == 0 {
@@ -134,7 +135,8 @@ func selectRandomTargets(s *server.Server, count int) []*server.Host {
 	return hosts[:count]
 }
 
-// Request introducer to join node
+// Request introducer to join node and receive initial membership list
+// If introducer is down, it will retry the request every JOIN_RETRY_TIMEOUT period.
 func joinWithRetry(s *server.Server) error {
 	request := s.GetJoinMessage()
 	messageChannel := make(chan string, 1)
@@ -185,6 +187,9 @@ func joinWithRetry(s *server.Server) error {
 	}
 }
 
+// Timeout signal received from timer
+// Either suspect node or mark failed
+// Updates the known_hosts file for introducer
 func handleTimeout(s *server.Server, e timer.TimerEvent) {
 	s.MemberLock.Lock()
 	defer s.MemberLock.Unlock()
@@ -193,13 +198,14 @@ func handleTimeout(s *server.Server, e timer.TimerEvent) {
 		if host.Suspected || s.SuspicionTimeout == 0 {
 			log.Printf("FAILURE DETECTED: Node %s is considered failed\n", e.ID)
 			delete(s.Members, e.ID)
-			s.MemberLock.Unlock()
-			s.SaveMembersToFile()
-			s.MemberLock.Lock()
+			if s.Introducer {
+				s.MemberLock.Unlock()
+				s.SaveMembersToFile()
+				s.MemberLock.Lock()
+			}
 		} else {
 			log.Printf("FAILURE SUSPECTED: Node %s is suspected of failure\n", e.ID)
 			host.Suspected = true
-
 			s.TimerManager.RestartTimer(e.ID, s.SuspicionTimeout)
 		}
 	}
@@ -234,9 +240,11 @@ func senderRoutine(s *server.Server) {
 				log.Println("Stopping gossip...")
 			}
 		case <-time.After(s.GossipPeriod):
-			if active {
-				sendPings(s)
-			}
+			break
+		}
+
+		if active {
+			sendPings(s)
 		}
 	}
 }
@@ -255,6 +263,8 @@ func receiverRoutine(s *server.Server) {
 	}
 }
 
+// Handles the request received by the server
+// JOIN, PING, ID, LIST, KILL, START_GOSSIP, STOP_GOSSIP, CONFIG
 func handleRequest(s *server.Server, e server.ReceiverEvent) {
 	log.Println("Request received: ", e)
 
@@ -313,11 +323,13 @@ func handleRequest(s *server.Server, e server.ReceiverEvent) {
 	}
 }
 
+// Start the node process and launch all the threads
 func startNode(s *server.Server) {
 	log.Printf("Node %s is starting...\n", s.Self.ID)
 	go receiverRoutine(s)
 	go senderRoutine(s)
 
+	// Blocks until either new message received or timer signals timeout
 	for {
 		select {
 		case e := <-s.TimerManager.TimeoutChannel:
@@ -328,6 +340,7 @@ func startNode(s *server.Server) {
 	}
 }
 
+// Function to handle the Join request by new node at Introducer
 func handleJoinRequest(s *server.Server, e server.ReceiverEvent) {
 	message := e.Message
 	lines := strings.Split(message, "\n")

@@ -215,7 +215,7 @@ func (server *Server) ProcessMembersList(message string) {
 
 		found, _ := server.Members[memberID]
 		if found.Counter == 0 || found.Counter < memberCounterInt {
-			log.Print("Try to start timer\n")
+			log.Println("Try to start timer")
 			found.Counter = memberCounterInt
 			found.UpdatedAt = timeNow
 			found.Suspected = false
