@@ -5,7 +5,6 @@ import (
 	"cs425/server"
 	"cs425/timer"
 	"fmt"
-	"log"
 	"math/rand"
 	"net"
 	"os"
@@ -14,6 +13,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	log "github.com/sirupsen/logrus"
 )
 
 const (
@@ -45,7 +46,9 @@ func main() {
 		log.Fatal(err)
 	}
 
+	log.SetLevel(log.DebugLevel)
 	if os.Getenv("DEBUG") != "TRUE" {
+		log.SetLevel(log.InfoLevel)
 		logfile := fmt.Sprintf("%s.log", s.Self.Signature)
 		f, err := os.OpenFile(logfile, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 		if err != nil {
@@ -56,7 +59,7 @@ func main() {
 		os.Stderr.WriteString(fmt.Sprintf("Log File: %s\n", logfile))
 	}
 
-	log.Printf("Server %s listening on port %d\n", s.Self.Signature, port)
+	log.Info(fmt.Sprintf("Server %s listening on port %d\n", s.Self.Signature, port))
 	defer s.Close()
 
 	if port == INTRODUCER_PORT {
@@ -82,7 +85,7 @@ func sendPings(s *server.Server) {
 		return
 	}
 
-	log.Printf("Sending gossip to %d hosts", len(targets))
+	log.Info(fmt.Sprintf("Sending gossip to %d hosts", len(targets)))
 	s.MemberLock.Lock()
 	s.Self.Counter++
 	s.Self.UpdatedAt = time.Now().UnixMilli()
@@ -97,7 +100,7 @@ func sendPings(s *server.Server) {
 			continue
 		}
 		s.TotalByte += n
-		log.Printf("Sent %d bytes to %s\n", n, target.Signature)
+		log.Debug(fmt.Sprintf("Sent %d bytes to %s\n", n, target.Signature))
 	}
 }
 
@@ -168,10 +171,10 @@ func joinWithRetry(s *server.Server) error {
 				continue
 			}
 			s.ProcessMembersList(lines[1])
-			log.Println("Node join completed.")
+			log.Info("Node join completed.")
 			return nil
 		case <-time.After(JOIN_RETRY_TIMEOUT):
-			fmt.Println("Timeout: Retrying join...")
+			log.Info("Timeout: Retrying join...")
 		}
 	}
 }
@@ -185,7 +188,7 @@ func handleTimeout(s *server.Server, e timer.TimerEvent) {
 
 	if host, ok := s.Members[e.ID]; ok {
 		if host.Suspected || s.SuspicionTimeout == 0 {
-			log.Printf("[CRITICAL] FAILURE DETECTED: Node %s is considered failed\n", e.ID)
+			log.Warn(fmt.Sprintf("FAILURE DETECTED: Node %s is considered failed\n", e.ID))
 			delete(s.Members, e.ID)
 			if s.Introducer {
 				s.MemberLock.Unlock()
@@ -193,7 +196,7 @@ func handleTimeout(s *server.Server, e timer.TimerEvent) {
 				s.MemberLock.Lock()
 			}
 		} else {
-			log.Printf("[CRITICAL] FAILURE SUSPECTED: Node %s is suspected of failure\n", e.ID)
+			log.Warn(fmt.Sprintf("FAILURE SUSPECTED: Node %s is suspected of failure\n", e.ID))
 			host.Suspected = true
 			s.TimerManager.RestartTimer(e.ID, s.SuspicionTimeout)
 		}
@@ -224,9 +227,9 @@ func senderRoutine(s *server.Server) {
 		select {
 		case active = <-s.GossipChannel:
 			if active {
-				log.Println("Starting gossip...")
+				log.Info("Starting gossip...")
 			} else {
-				log.Println("Stopping gossip...")
+				log.Info("Stopping gossip...")
 			}
 		case <-time.After(s.GossipPeriod):
 			break
@@ -243,7 +246,7 @@ func receiverRoutine(s *server.Server) {
 	for {
 		message, sender, err := s.GetPacket()
 		if err != nil {
-			log.Println(err)
+			log.Info(err)
 			continue
 		}
 
@@ -254,7 +257,7 @@ func receiverRoutine(s *server.Server) {
 
 func startGossip(s *server.Server) {
 	s.Active = true
-	log.Println("[DEBUG] Updated Node ID to ", s.Self.SetUniqueID())
+	log.Debug(fmt.Sprintf("Updated Node ID to ", s.Self.SetUniqueID()))
 	err := joinWithRetry(s)
 	if err != nil {
 		log.Fatal(err)
@@ -276,7 +279,7 @@ func stopGossip(s *server.Server) {
 // Handles the request received by the server
 // JOIN, PING, ID, LIST, KILL, START_GOSSIP, STOP_GOSSIP, CONFIG
 func handleRequest(s *server.Server, e server.ReceiverEvent) {
-	log.Println("[DEBUG] Request received: ", e)
+	log.Debug("Request received: \n", e)
 
 	lines := strings.Split(e.Message, "\n")
 	if len(lines) < 1 {
@@ -292,14 +295,14 @@ func handleRequest(s *server.Server, e server.ReceiverEvent) {
 
 	case "PING":
 		if rand.Intn(100) < s.DropRate {
-			log.Printf("[DEBUG] PING from %s dropped with drop rate %d %%\n", e, s.DropRate)
+			log.Debug(fmt.Sprintf("PING from %s dropped with drop rate %d %%\n", e, s.DropRate))
 			return
 		}
 		if len(lines) < 3 {
 			return
 		}
 		if lines[2] != s.Self.ID {
-			log.Printf("[DEBUG] Drop ping, receive PING towards %s, current process has id %s\n", lines[2], s.Self.ID)
+			log.Debug(fmt.Sprintf("Drop ping, receive PING towards %s, current process has id %s\n", lines[2], s.Self.ID))
 			return
 		}
 		if s.Active {
@@ -325,13 +328,13 @@ func handleRequest(s *server.Server, e server.ReceiverEvent) {
 		handleConfigRequest(s, e)
 
 	default:
-		log.Println("WARNING: Unknown request verb: ", verb)
+		log.Error("WARNING: Unknown request verb: ", verb)
 	}
 }
 
 // Start the node process and launch all the threads
 func startNode(s *server.Server) {
-	log.Printf("[DEBUG] Node %s is starting...\n", s.Self.ID)
+	log.Info(fmt.Sprintf("Node %s is starting...\n", s.Self.ID))
 	go receiverRoutine(s)
 	go senderRoutine(s)
 
@@ -372,7 +375,7 @@ func handleJoinRequest(s *server.Server, e server.ReceiverEvent) {
 
 	host, err := s.AddHost(senderAddress, senderPortInt, senderId)
 	if err != nil {
-		log.Printf("[DEBUG] Failed to add host: %s\n", err.Error())
+		log.Error(fmt.Sprintf("Failed to add host: %s\n", err.Error()))
 		reply := fmt.Sprintf("%s\n%s\n", JOIN_ERROR, err.Error())
 		s.Connection.WriteToUDP([]byte(reply), e.Sender)
 		return
@@ -381,13 +384,13 @@ func handleJoinRequest(s *server.Server, e server.ReceiverEvent) {
 	reply := fmt.Sprintf("%s\n%s\n", JOIN_OK, s.EncodeMembersList())
 	_, err = s.Connection.WriteToUDP([]byte(reply), host.Address)
 	if err != nil {
-		log.Println(err)
+		log.Error(err)
 	}
 }
 
 // Introducer process accepts new hosts and sends full membership list
 func loadKnownHosts(s *server.Server) {
-	log.Println("[DEBUG] Loading known hosts...")
+	log.Info("Loading known hosts...")
 	save_file, err := os.OpenFile(server.SAVE_FILENAME, os.O_CREATE|os.O_RDWR, 0644)
 	if err != nil {
 		log.Fatalf("Failed to open file: %s\n", err.Error())
@@ -401,5 +404,5 @@ func loadKnownHosts(s *server.Server) {
 		}
 	}
 
-	log.Printf("[INFO] Added %d hosts: %s\n", len(s.Members), s.EncodeMembersList())
+	log.Info(fmt.Sprintf("Added %d hosts: %s\n", len(s.Members), s.EncodeMembersList()))
 }

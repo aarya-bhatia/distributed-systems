@@ -1,9 +1,11 @@
 package timer
 
 import (
-	"log"
+	"fmt"
 	"sync"
 	"time"
+
+	log "github.com/sirupsen/logrus"
 )
 
 const (
@@ -26,18 +28,18 @@ type Timer struct {
 }
 
 func (timer *Timer) Start() {
-	log.Printf("Timer %s has started.\n", timer.ID)
+	log.Debug(fmt.Sprintf("Timer %s has started.\n", timer.ID))
 	select {
 	case event := <-timer.TimerChannel:
 		if event.EventType == TIMER_STOP_EVENT {
-			log.Printf("Timer %s has stopped.\n", timer.ID)
+			log.Debug(fmt.Sprintf("Timer %s has stopped.\n", timer.ID))
 			timer.Mutex.Lock()
 			timer.Alive = false
 			close(timer.TimerChannel)
 			timer.Mutex.Unlock()
 		}
 	case <-time.After(timer.TimeoutDuration):
-		log.Printf("Timer %s has timed out.\n", timer.ID)
+		log.Debug(fmt.Sprintf("Timer %s has timed out.\n", timer.ID))
 		timer.Mutex.Lock()
 		if !timer.Alive {
 			close(timer.TimerChannel)

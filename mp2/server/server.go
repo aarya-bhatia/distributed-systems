@@ -4,13 +4,14 @@ import (
 	"cs425/timer"
 	"errors"
 	"fmt"
-	"log"
 	"net"
 	"os"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	log "github.com/sirupsen/logrus"
 )
 
 const T_GOSSIP = 5 * time.Second   // Time duration between each gossip round
@@ -114,12 +115,12 @@ func (server *Server) AddHost(Hostname string, Port int, ID string) (*Host, erro
 	defer server.MemberLock.Unlock()
 
 	if found, ok := server.Members[ID]; ok {
-		log.Println("[DEBUG] Duplicate host: ", found)
+		log.Info("Duplicate host: ", found)
 		return nil, errors.New("A peer with this ID already exists")
 	}
 
 	server.Members[ID] = NewHost(Hostname, Port, ID, addr)
-	log.Printf("[CRITICAL] Added new host: %s\n", server.Members[ID].Signature)
+	log.Warn(fmt.Sprintf("Added new host: %s\n", server.Members[ID].Signature))
 	if server.Introducer {
 		server.MemberLock.Unlock()
 		server.SaveMembersToFile()
@@ -140,7 +141,7 @@ func (s *Server) SaveMembersToFile() {
 		log.Fatalf("Failed to write to file: %s\n", err.Error())
 	}
 
-	log.Println("Updated membership list in file")
+	log.Debug("Updated membership list in file")
 }
 
 func (server *Server) GetPacket() (message string, addr *net.UDPAddr, err error) {
@@ -150,7 +151,7 @@ func (server *Server) GetPacket() (message string, addr *net.UDPAddr, err error)
 		return "", nil, err
 	}
 	message = strings.TrimSpace(string(buffer[:n]))
-	log.Printf("Received %d bytes from %s\n", len(message), addr.String())
+	log.Debug(fmt.Sprintf("Received %d bytes from %s\n", len(message), addr.String()))
 	return message, addr, nil
 }
 
