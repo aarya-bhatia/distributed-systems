@@ -6,11 +6,18 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 )
+
+const T_GOSSIP = 5 * time.Second   // Time duration between each gossip round
+const T_TIMEOUT = 10 * time.Second // Time duration until a peer times out
+const T_CLEANUP = 5 * time.Second  // Time duration before peer is deleted
+
+const SAVE_FILENAME = "known_hosts"
 
 type Host struct {
 	Address   *net.UDPAddr
@@ -21,15 +28,26 @@ type Host struct {
 	Suspected bool  // whether the node is suspected of failure
 }
 
+type ReceiverEvent struct {
+	Message string
+	Sender  *net.UDPAddr
+}
+
 type Server struct {
-	Self         *Host
-	Connection   *net.UDPConn
-	Members      map[string]*Host
-	MemberLock   sync.Mutex
-	Introducer   bool
-	DropRate     int
-	TotalByte    int
-	TimerManager *timer.TimerManager
+	Active           bool
+	Self             *Host
+	Connection       *net.UDPConn
+	Members          map[string]*Host
+	MemberLock       sync.Mutex
+	Introducer       bool
+	DropRate         int
+	TotalByte        int
+	TimerManager     *timer.TimerManager
+	GossipPeriod     time.Duration
+	SuspicionTimeout time.Duration
+	GossipTimeout    time.Duration
+	GossipChannel    chan bool
+	ReceiverChannel  chan ReceiverEvent
 }
 
 func NewHost(Hostname string, Port int, ID string, Address *net.UDPAddr) *Host {
@@ -54,13 +72,20 @@ func NewServer(Hostname string, Port int, ID string) (*Server, error) {
 
 	server := &Server{}
 
+	server.Active = true
 	server.Self = NewHost(Hostname, Port, ID, addr)
 	server.Connection = conn
 	server.Members = make(map[string]*Host)
 	server.Introducer = false
 	server.TimerManager = timer.NewTimerManager()
 	server.DropRate = 0
+	server.TotalByte = 0
 	server.Members[ID] = server.Self // Add server to its own membership list
+	server.GossipPeriod = T_GOSSIP
+	server.GossipTimeout = T_TIMEOUT
+	server.SuspicionTimeout = T_CLEANUP
+	server.GossipChannel = make(chan bool)
+	server.ReceiverChannel = make(chan ReceiverEvent)
 
 	return server, nil
 }
@@ -75,19 +100,20 @@ func (server *Server) AddHost(Hostname string, Port int, ID string) (*Host, erro
 	defer server.MemberLock.Unlock()
 
 	if found, ok := server.Members[ID]; ok {
-		log.Println(found)
+		log.Println("Duplicate host: ", found)
 		return nil, errors.New("A peer with this ID already exists")
 	}
 
-	signPre := fmt.Sprintf("%s:%d", Hostname, Port)
+	signPrefix := fmt.Sprintf("%s:%d", Hostname, Port)
 
 	if server.Introducer {
 		for _, member := range server.Members {
-			if strings.Index(member.Signature, signPre) == 0 {
+			if strings.Index(member.Signature, signPrefix) == 0 {
 				prevID := member.ID
 				member.ID = ID
 				server.Members[ID] = member
 				delete(server.Members, prevID)
+				// server.SaveMembersToFile()
 				return member, nil
 			}
 		}
@@ -95,7 +121,25 @@ func (server *Server) AddHost(Hostname string, Port int, ID string) (*Host, erro
 
 	server.Members[ID] = NewHost(Hostname, Port, ID, addr)
 	log.Printf("Added new host: %s\n", server.Members[ID].Signature)
+	// if server.Introducer {
+	// 	server.SaveMembersToFile()
+	// }
 	return server.Members[ID], nil
+}
+
+// TODO: FIX THIS FUNCTION!!!!
+func (s *Server) SaveMembersToFile() {
+	save_file, err := os.OpenFile(SAVE_FILENAME, os.O_CREATE|os.O_TRUNC|os.O_RDWR, 0644)
+	if err != nil {
+		log.Fatalf("Failed to open file: %s\n", err.Error())
+	}
+	defer save_file.Close()
+	_, err = save_file.WriteString(s.EncodeMembersList() + "\n")
+	if err != nil {
+		log.Fatalf("Failed to write to file: %s\n", err.Error())
+	}
+
+	log.Println("Updated membership list in file")
 }
 
 func (server *Server) GetPacket() (message string, addr *net.UDPAddr, err error) {
@@ -109,16 +153,17 @@ func (server *Server) GetPacket() (message string, addr *net.UDPAddr, err error)
 	return message, addr, nil
 }
 
-func (server *Server) SendPacket(address string, port int, data []byte) (int, error) {
-	addr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", address, port))
-	if err != nil {
-		return 0, err
-	}
-	return server.Connection.WriteToUDP(data, addr)
-}
+// func (server *Server) SendPacket(address string, port int, data []byte) (int, error) {
+// 	addr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", address, port))
+// 	if err != nil {
+// 		return 0, err
+// 	}
+// 	return server.Connection.WriteToUDP(data, addr)
+// }
 
 func (server *Server) Close() {
 	server.Connection.Close()
+	server.TimerManager.Close()
 }
 
 func (server *Server) EncodeMembersList() string {
@@ -170,7 +215,7 @@ func (server *Server) ProcessMembersList(message string) {
 			found.Suspected = false
 
 			if memberID != server.Self.ID {
-				server.TimerManager.RestartTimer(memberID, timer.T_TIMEOUT)
+				server.TimerManager.RestartTimer(memberID, server.GossipTimeout)
 			}
 		}
 	}
