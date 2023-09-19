@@ -228,7 +228,9 @@ func (server *Server) StartAllTimers() {
 	server.MemberLock.Lock()
 	defer server.MemberLock.Unlock()
 	for ID := range server.Members {
-		server.TimerManager.RestartTimer(ID, server.GossipTimeout)
+		if ID != server.Self.ID {
+			server.TimerManager.RestartTimer(ID, server.GossipTimeout)
+		}
 	}
 }
 
