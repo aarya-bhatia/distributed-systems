@@ -88,10 +88,9 @@ func sendPings(s *server.Server) {
 	s.Self.UpdatedAt = time.Now().UnixMilli()
 	s.MemberLock.Unlock()
 
-	message := s.GetPingMessage()
 	for _, target := range targets {
-		messageWithTarget := message + fmt.Sprintf("%s\n", target.ID) // Concatinating target id in the end
-		n, err := s.Connection.WriteToUDP([]byte(messageWithTarget), target.Address)
+		message := s.GetPingMessage(target.ID)
+		n, err := s.Connection.WriteToUDP([]byte(message), target.Address)
 		if err != nil {
 			log.Println(err)
 			continue
@@ -273,11 +272,30 @@ func stopGossip(s *server.Server) {
 	s.TimerManager.StopAll()
 }
 
+func handlePingRequest(s *server.Server, e server.ReceiverEvent) {
+	lines := strings.Split(e.Message, "\n")
+	tokens := strings.Split(lines[0], " ")
+	if len(tokens) < 3 {
+		log.Printf("[DEBUG] Illegal header for PING request: %s\n", lines[0])
+		return
+	}
+
+	if rand.Intn(100) < s.DropRate {
+		log.Printf("[DEBUG] PING from %s dropped with drop rate %d %%\n", e, s.DropRate)
+		return
+	}
+
+	if tokens[2] != s.Self.ID {
+		log.Printf("[DEBUG] Dropped PING due to ID mismatch: %s\n", tokens[2])
+		return
+	}
+
+	s.ProcessMembersList(lines[1])
+}
+
 // Handles the request received by the server
 // JOIN, PING, ID, LIST, KILL, START_GOSSIP, STOP_GOSSIP, CONFIG
 func handleRequest(s *server.Server, e server.ReceiverEvent) {
-	log.Println("[DEBUG] Request received: ", e)
-
 	lines := strings.Split(e.Message, "\n")
 	if len(lines) < 1 {
 		return
@@ -286,31 +304,22 @@ func handleRequest(s *server.Server, e server.ReceiverEvent) {
 	header := lines[0]
 	verbs := strings.Split(header, " ")
 
+	log.Printf("[DEBUG] Request %s received from: %v\n", verbs[0], e.Sender)
+
 	switch verb := verbs[0]; verb {
 	case "JOIN":
 		handleJoinRequest(s, e)
 
 	case "PING":
-		if rand.Intn(100) < s.DropRate {
-			log.Printf("[DEBUG] PING from %s dropped with drop rate %d %%\n", e, s.DropRate)
-			return
-		}
-		if len(lines) < 3 {
-			return
-		}
-		if lines[2] != s.Self.ID {
-			log.Printf("[DEBUG] Drop ping, receive PING towards %s, current process has id %s\n", lines[2], s.Self.ID)
-			return
-		}
 		if s.Active {
-			s.ProcessMembersList(lines[1])
+			handlePingRequest(s, e)
 		}
 
 	case "ID":
 		s.Connection.WriteToUDP([]byte(fmt.Sprintf("%s\n", s.Self.ID)), e.Sender)
 
 	case "LIST":
-		s.Connection.WriteToUDP([]byte(fmt.Sprintf("OK\n%s\n", s.EncodeMembersList())), e.Sender)
+		s.Connection.WriteToUDP([]byte(fmt.Sprintf("OK\n%s\n", strings.ReplaceAll(s.EncodeMembersList(), ";", "\n"))), e.Sender)
 
 	case "KILL":
 		syscall.Kill(syscall.Getpid(), syscall.SIGINT)

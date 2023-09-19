@@ -232,6 +232,6 @@ func (s *Server) GetLeaveMessage() string {
 	return fmt.Sprintf("LEAVE %s\n", s.Self.Signature)
 }
 
-func (s *Server) GetPingMessage() string {
-	return fmt.Sprintf("PING %s\n%s\n", s.Self.Signature, s.EncodeMembersList())
+func (s *Server) GetPingMessage(targetID string) string {
+	return fmt.Sprintf("PING %s %s\n%s\n", s.Self.Signature, targetID, s.EncodeMembersList())
 }
