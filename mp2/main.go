@@ -97,11 +97,6 @@ func sendPings(s *server.Server) {
 	message := s.GetPingMessage()
 
 	for _, target := range targets {
-		// Determin if we should drop a message
-		if rand.Intn(100) < s.DropRate {
-			log.Printf("Message to %s dropped with drop rate %d %%\n", target.Address.String(), s.DropRate)
-			continue
-		}
 		n, err := s.Connection.WriteToUDP([]byte(message), target.Address)
 		if err != nil {
 			log.Println(err)
@@ -281,6 +276,10 @@ func handleRequest(s *server.Server, e server.ReceiverEvent) {
 		handleJoinRequest(s, e)
 
 	case "PING":
+		if rand.Intn(100) < s.DropRate {
+			log.Printf("PING from %s dropped with drop rate %d %%\n", e, s.DropRate)
+			return
+		}
 		if len(lines) < 2 {
 			return
 		}
