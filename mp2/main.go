@@ -34,6 +34,11 @@ func main() {
 		log.Fatalf("Usage: %s <hostname> <port>", program)
 	}
 
+	log.SetFormatter(&log.TextFormatter{
+		DisableColors: false,
+		FullTimestamp: true,
+	})
+
 	hostname := os.Args[1]
 	var port int
 	port, err := strconv.Atoi(os.Args[2])
@@ -257,7 +262,7 @@ func receiverRoutine(s *server.Server) {
 
 func startGossip(s *server.Server) {
 	s.Active = true
-	log.Debug(fmt.Sprintf("Updated Node ID to ", s.Self.SetUniqueID()))
+	log.Debug(fmt.Sprintf("Updated Node ID to %s", s.SetUniqueID()))
 	err := joinWithRetry(s)
 	if err != nil {
 		log.Fatal(err)
@@ -280,17 +285,17 @@ func handlePingRequest(s *server.Server, e server.ReceiverEvent) {
 	lines := strings.Split(e.Message, "\n")
 	tokens := strings.Split(lines[0], " ")
 	if len(tokens) < 3 {
-		log.Debug("Illegal header for PING request: %s\n", lines[0])
+		log.Debug(fmt.Sprintf("Illegal header for PING request: %s\n", lines[0]))
 		return
 	}
 
 	if rand.Intn(100) < s.DropRate {
-		log.Debug("PING from %s dropped with drop rate %d %%\n", e, s.DropRate)
+		log.Debug(fmt.Sprintf("PING from %s dropped with drop rate %d %%\n", e, s.DropRate))
 		return
 	}
 
 	if tokens[2] != s.Self.ID {
-		log.Debug("Dropped PING due to ID mismatch: %s\n", tokens[2])
+		log.Debug(fmt.Sprintf("Dropped PING due to ID mismatch: %s\n", tokens[2]))
 		return
 	}
 
