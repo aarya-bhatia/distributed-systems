@@ -89,8 +89,6 @@ func NewServer(Hostname string, Port int) (*Server, error) {
 	server := &Server{}
 
 	server.Self = NewHost(Hostname, Port, "", addr)
-	server.SetUniqueID()
-
 	server.Active = true
 	server.Connection = conn
 	server.Members = make(map[string]*Host)
@@ -104,6 +102,8 @@ func NewServer(Hostname string, Port int) (*Server, error) {
 	server.SuspicionTimeout = T_CLEANUP
 	server.GossipChannel = make(chan bool)
 	server.ReceiverChannel = make(chan ReceiverEvent)
+
+	server.SetUniqueID()
 
 	return server, nil
 }
