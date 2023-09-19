@@ -210,7 +210,7 @@ func (server *Server) ProcessMembersList(message string) {
 		}
 
 		found, _ := server.Members[memberID]
-		if found.Counter == 0 || found.Counter < memberCounterInt {
+		if found.Counter < memberCounterInt {
 			found.Counter = memberCounterInt
 			found.UpdatedAt = timeNow
 			found.Suspected = false
@@ -222,6 +222,14 @@ func (server *Server) ProcessMembersList(message string) {
 	}
 
 	server.MemberLock.Unlock()
+}
+
+func (server *Server) StartAllTimers() {
+	server.MemberLock.Lock()
+	defer server.MemberLock.Unlock()
+	for ID := range server.Members {
+		server.TimerManager.RestartTimer(ID, server.GossipTimeout)
+	}
 }
 
 func (s *Server) GetJoinMessage() string {

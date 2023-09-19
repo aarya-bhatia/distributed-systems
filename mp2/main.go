@@ -168,6 +168,7 @@ func joinWithRetry(s *server.Server) error {
 			}
 			s.ProcessMembersList(lines[1])
 			log.Println("Node join completed.")
+			s.StartAllTimers()
 			return nil
 		case <-time.After(JOIN_RETRY_TIMEOUT):
 			fmt.Println("Timeout: Retrying join...")
@@ -311,7 +312,7 @@ func handleRequest(s *server.Server, e server.ReceiverEvent) {
 		handleJoinRequest(s, e)
 
 	case "PING":
-		if s.Active {
+		if s.Active && len(lines) >= 2 {
 			handlePingRequest(s, e)
 		}
 
@@ -411,4 +412,5 @@ func loadKnownHosts(s *server.Server) {
 	}
 
 	log.Printf("[INFO] Added %d hosts: %s\n", len(s.Members), s.EncodeMembersList())
+	s.StartAllTimers()
 }
