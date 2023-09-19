@@ -246,7 +246,7 @@ func receiverRoutine(s *server.Server) {
 	for {
 		message, sender, err := s.GetPacket()
 		if err != nil {
-			log.Info(err)
+			log.Error(err)
 			continue
 		}
 
@@ -280,17 +280,17 @@ func handlePingRequest(s *server.Server, e server.ReceiverEvent) {
 	lines := strings.Split(e.Message, "\n")
 	tokens := strings.Split(lines[0], " ")
 	if len(tokens) < 3 {
-		log.Printf("[DEBUG] Illegal header for PING request: %s\n", lines[0])
+		log.Debug("Illegal header for PING request: %s\n", lines[0])
 		return
 	}
 
 	if rand.Intn(100) < s.DropRate {
-		log.Printf("[DEBUG] PING from %s dropped with drop rate %d %%\n", e, s.DropRate)
+		log.Debug("PING from %s dropped with drop rate %d %%\n", e, s.DropRate)
 		return
 	}
 
 	if tokens[2] != s.Self.ID {
-		log.Printf("[DEBUG] Dropped PING due to ID mismatch: %s\n", tokens[2])
+		log.Debug("Dropped PING due to ID mismatch: %s\n", tokens[2])
 		return
 	}
 
@@ -310,7 +310,7 @@ func handleRequest(s *server.Server, e server.ReceiverEvent) {
 	header := lines[0]
 	verbs := strings.Split(header, " ")
 
-	log.Printf("[DEBUG] Request %s received from: %v\n", verbs[0], e.Sender)
+	log.Debug(fmt.Sprintf("Request %s received from: %v\n", verbs[0], e.Sender))
 
 	switch verb := verbs[0]; verb {
 	case "JOIN":
