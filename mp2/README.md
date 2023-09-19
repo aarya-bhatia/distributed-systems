@@ -15,7 +15,7 @@ Protocol
     - Res: None
 
 3. Gossip membership list
-    - Req: PING `self`\n`mlist`\n
+    - Req: PING `self`\n`mlist`\n`target_id`\n
     - Res: None
 
 

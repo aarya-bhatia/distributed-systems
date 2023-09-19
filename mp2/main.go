@@ -88,16 +88,15 @@ func sendPings(s *server.Server) {
 	}
 
 	log.Printf("Sending gossip to %d hosts", len(targets))
-
 	s.MemberLock.Lock()
 	s.Self.Counter++
 	s.Self.UpdatedAt = time.Now().UnixMilli()
 	s.MemberLock.Unlock()
 
 	message := s.GetPingMessage()
-
 	for _, target := range targets {
-		n, err := s.Connection.WriteToUDP([]byte(message), target.Address)
+		messageWithTarget := message + fmt.Sprintf("%s\n", target.ID) // Concatinating target id in the end
+		n, err := s.Connection.WriteToUDP([]byte(messageWithTarget), target.Address)
 		if err != nil {
 			log.Println(err)
 			continue
@@ -191,7 +190,7 @@ func handleTimeout(s *server.Server, e timer.TimerEvent) {
 
 	if host, ok := s.Members[e.ID]; ok {
 		if host.Suspected || s.SuspicionTimeout == 0 {
-			log.Printf("FAILURE DETECTED: Node %s is considered failed\n", e.ID)
+			log.Printf("[CRITICAL]FAILURE DETECTED: Node %s is considered failed\n", e.ID)
 			delete(s.Members, e.ID)
 			if s.Introducer {
 				s.MemberLock.Unlock()
@@ -199,7 +198,7 @@ func handleTimeout(s *server.Server, e timer.TimerEvent) {
 				s.MemberLock.Lock()
 			}
 		} else {
-			log.Printf("FAILURE SUSPECTED: Node %s is suspected of failure\n", e.ID)
+			log.Printf("[CRITICAL] FAILURE SUSPECTED: Node %s is suspected of failure\n", e.ID)
 			host.Suspected = true
 			s.TimerManager.RestartTimer(e.ID, s.SuspicionTimeout)
 		}
@@ -261,7 +260,7 @@ func receiverRoutine(s *server.Server) {
 // Handles the request received by the server
 // JOIN, PING, ID, LIST, KILL, START_GOSSIP, STOP_GOSSIP, CONFIG
 func handleRequest(s *server.Server, e server.ReceiverEvent) {
-	log.Println("Request received: ", e)
+	log.Println("[DEBUG] Request received: ", e)
 
 	lines := strings.Split(e.Message, "\n")
 	if len(lines) < 1 {
@@ -277,10 +276,14 @@ func handleRequest(s *server.Server, e server.ReceiverEvent) {
 
 	case "PING":
 		if rand.Intn(100) < s.DropRate {
-			log.Printf("PING from %s dropped with drop rate %d %%\n", e, s.DropRate)
+			log.Printf("[DEBUG] PING from %s dropped with drop rate %d %%\n", e, s.DropRate)
 			return
 		}
-		if len(lines) < 2 {
+		if len(lines) < 3 {
+			return
+		}
+		if lines[2] != s.Self.ID {
+			log.Printf("[DEBUG] Drop ping, receive PING towards %s, current process has id %s\n", lines[2], s.Self.ID)
 			return
 		}
 		if s.Active {
@@ -324,7 +327,7 @@ func handleRequest(s *server.Server, e server.ReceiverEvent) {
 
 // Start the node process and launch all the threads
 func startNode(s *server.Server) {
-	log.Printf("Node %s is starting...\n", s.Self.ID)
+	log.Printf("[DEBUG] Node %s is starting...\n", s.Self.ID)
 	go receiverRoutine(s)
 	go senderRoutine(s)
 
@@ -339,7 +342,7 @@ func startNode(s *server.Server) {
 	}
 }
 
-// Function to handle the Join request by new node at Introducer
+// Function to handle the Join request by new node at any node
 func handleJoinRequest(s *server.Server, e server.ReceiverEvent) {
 	message := e.Message
 	lines := strings.Split(message, "\n")
@@ -365,7 +368,7 @@ func handleJoinRequest(s *server.Server, e server.ReceiverEvent) {
 
 	host, err := s.AddHost(senderAddress, senderPortInt, senderId)
 	if err != nil {
-		log.Printf("Failed to add host: %s\n", err.Error())
+		log.Printf("[DEBUG] Failed to add host: %s\n", err.Error())
 		reply := fmt.Sprintf("%s\n%s\n", JOIN_ERROR, err.Error())
 		s.Connection.WriteToUDP([]byte(reply), e.Sender)
 		return
@@ -380,7 +383,7 @@ func handleJoinRequest(s *server.Server, e server.ReceiverEvent) {
 
 // Introducer process accepts new hosts and sends full membership list
 func loadKnownHosts(s *server.Server) {
-	log.Println("Loading known hosts...")
+	log.Println("[DEBUG] Loading known hosts...")
 	save_file, err := os.OpenFile(server.SAVE_FILENAME, os.O_CREATE|os.O_RDWR, 0644)
 	if err != nil {
 		log.Fatalf("Failed to open file: %s\n", err.Error())
@@ -394,5 +397,5 @@ func loadKnownHosts(s *server.Server) {
 		}
 	}
 
-	log.Printf("Added %d hosts: %s\n", len(s.Members), s.EncodeMembersList())
+	log.Printf("[INFO] Added %d hosts: %s\n", len(s.Members), s.EncodeMembersList())
 }

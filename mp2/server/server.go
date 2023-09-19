@@ -100,30 +100,12 @@ func (server *Server) AddHost(Hostname string, Port int, ID string) (*Host, erro
 	defer server.MemberLock.Unlock()
 
 	if found, ok := server.Members[ID]; ok {
-		log.Println("Duplicate host: ", found)
+		log.Println("[DEBUG] Duplicate host: ", found)
 		return nil, errors.New("A peer with this ID already exists")
 	}
 
-	// signPrefix := fmt.Sprintf("%s:%d", Hostname, Port)
-
-	// if server.Introducer {
-	// 	for _, member := range server.Members {
-	// 		if strings.Index(member.Signature, signPrefix) == 0 {
-	// 			prevID := member.ID
-	// 			member.ID = ID
-	// 			server.Members[ID] = member
-	// 			delete(server.Members, prevID)
-	// 			log.Printf("Delete old id %s\n", prevID)
-	// 			server.MemberLock.Unlock()
-	// 			server.SaveMembersToFile()
-	// 			server.MemberLock.Lock()
-	// 			// return member, nil
-	// 		}
-	// 	}
-	// }
-
 	server.Members[ID] = NewHost(Hostname, Port, ID, addr)
-	log.Printf("Added new host: %s\n", server.Members[ID].Signature)
+	log.Printf("[CRITICAL] Added new host: %s\n", server.Members[ID].Signature)
 	if server.Introducer {
 		server.MemberLock.Unlock()
 		server.SaveMembersToFile()
@@ -215,7 +197,6 @@ func (server *Server) ProcessMembersList(message string) {
 
 		found, _ := server.Members[memberID]
 		if found.Counter == 0 || found.Counter < memberCounterInt {
-			log.Println("Try to start timer")
 			found.Counter = memberCounterInt
 			found.UpdatedAt = timeNow
 			found.Suspected = false
