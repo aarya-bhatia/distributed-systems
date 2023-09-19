@@ -193,9 +193,13 @@ func handleTimeout(s *server.Server, e timer.TimerEvent) {
 		if host.Suspected || s.SuspicionTimeout == 0 {
 			log.Printf("FAILURE DETECTED: Node %s is considered failed\n", e.ID)
 			delete(s.Members, e.ID)
+			s.MemberLock.Unlock()
+			s.SaveMembersToFile()
+			s.MemberLock.Lock()
 		} else {
 			log.Printf("FAILURE SUSPECTED: Node %s is suspected of failure\n", e.ID)
 			host.Suspected = true
+
 			s.TimerManager.RestartTimer(e.ID, s.SuspicionTimeout)
 		}
 	}
