@@ -20,6 +20,8 @@ const T_CLEANUP = 5 * time.Second  // Time duration before peer is deleted
 const SAVE_FILENAME = "known_hosts"
 
 type Host struct {
+	Hostname  string
+	Port      int
 	Address   *net.UDPAddr
 	Signature string
 	ID        string
@@ -53,6 +55,8 @@ type Server struct {
 func NewHost(Hostname string, Port int, ID string, Address *net.UDPAddr) *Host {
 	var host = &Host{}
 	host.ID = ID
+	host.Hostname = Hostname
+	host.Port = Port
 	host.Address = Address
 	host.Signature = fmt.Sprintf("%s:%d:%s", Hostname, Port, ID)
 	host.Counter = 0
@@ -60,7 +64,15 @@ func NewHost(Hostname string, Port int, ID string, Address *net.UDPAddr) *Host {
 	return host
 }
 
-func NewServer(Hostname string, Port int, ID string) (*Server, error) {
+func (host *Host) SetUniqueID() string {
+	Timestamp := fmt.Sprintf("%d", time.Now().UnixNano())
+	ID := fmt.Sprintf("%d%s", host.Port, Timestamp[:16])
+	host.ID = ID
+	host.Signature = fmt.Sprintf("%s:%d:%s", host.Hostname, host.Port, ID)
+	return ID
+}
+
+func NewServer(Hostname string, Port int) (*Server, error) {
 	addr, err := net.ResolveUDPAddr("udp", fmt.Sprintf(":%d", Port))
 	if err != nil {
 		return nil, err
@@ -72,15 +84,17 @@ func NewServer(Hostname string, Port int, ID string) (*Server, error) {
 
 	server := &Server{}
 
+	server.Self = NewHost(Hostname, Port, "", addr)
+	server.Self.SetUniqueID()
+
 	server.Active = true
-	server.Self = NewHost(Hostname, Port, ID, addr)
 	server.Connection = conn
 	server.Members = make(map[string]*Host)
 	server.Introducer = false
 	server.TimerManager = timer.NewTimerManager()
 	server.DropRate = 0
 	server.TotalByte = 0
-	server.Members[ID] = server.Self // Add server to its own membership list
+	server.Members[server.Self.ID] = server.Self // Add server to its own membership list
 	server.GossipPeriod = T_GOSSIP
 	server.GossipTimeout = T_TIMEOUT
 	server.SuspicionTimeout = T_CLEANUP
