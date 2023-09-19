@@ -65,11 +65,14 @@ func NewHost(Hostname string, Port int, ID string, Address *net.UDPAddr) *Host {
 	return host
 }
 
-func (host *Host) SetUniqueID() string {
+func (server *Server) SetUniqueID() string {
 	Timestamp := fmt.Sprintf("%d", time.Now().UnixNano())
-	ID := fmt.Sprintf("%d%s", host.Port, Timestamp[:16])
-	host.ID = ID
-	host.Signature = fmt.Sprintf("%s:%d:%s", host.Hostname, host.Port, ID)
+	ID := fmt.Sprintf("%d%s", server.Self.Port, Timestamp[:16])
+	server.Self.ID = ID
+	server.Self.Signature = fmt.Sprintf("%s:%d:%s", server.Self.Hostname, server.Self.Port, ID)
+	server.MemberLock.Lock()
+	defer server.MemberLock.Unlock()
+	server.Members[ID] = server.Self
 	return ID
 }
 
@@ -86,7 +89,7 @@ func NewServer(Hostname string, Port int) (*Server, error) {
 	server := &Server{}
 
 	server.Self = NewHost(Hostname, Port, "", addr)
-	server.Self.SetUniqueID()
+	server.SetUniqueID()
 
 	server.Active = true
 	server.Connection = conn
