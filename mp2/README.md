@@ -15,7 +15,10 @@ Protocol
     - Res: None
 
 3. Gossip membership list
-    - Req: PING `self`\n`mlist`\n`target_id`\n
+    - Req: PING `self` `target_id`\n`mlist`\n`target_id`\n
     - Res: None
 
 
+TODO
+
+- start/stop gossip logic for introducer
