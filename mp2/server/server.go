@@ -51,6 +51,7 @@ type Server struct {
 	GossipTimeout    time.Duration
 	GossipChannel    chan bool
 	ReceiverChannel  chan ReceiverEvent
+	InputChannel     chan string
 }
 
 func NewHost(Hostname string, Port int, ID string, Address *net.UDPAddr) *Host {
@@ -101,6 +102,7 @@ func NewServer(Hostname string, Port int) (*Server, error) {
 	server.SuspicionTimeout = 0
 	server.GossipChannel = make(chan bool)
 	server.ReceiverChannel = make(chan ReceiverEvent)
+	server.InputChannel = make(chan string)
 
 	server.SetUniqueID()
 
@@ -122,7 +124,7 @@ func (server *Server) AddHost(Hostname string, Port int, ID string) (*Host, erro
 	}
 
 	server.Members[ID] = NewHost(Hostname, Port, ID, addr)
-	log.Warn(fmt.Sprintf("Added new host: %s\n", server.Members[ID].Signature))
+	log.Warnf("Added new host: %s\n", server.Members[ID].Signature)
 	if server.Introducer {
 		server.MemberLock.Unlock()
 		server.SaveMembersToFile()
@@ -152,7 +154,7 @@ func (server *Server) GetPacket() (message string, addr *net.UDPAddr, err error)
 		return "", nil, err
 	}
 	message = strings.TrimSpace(string(buffer[:n]))
-	log.Debug(fmt.Sprintf("Received %d bytes from %s\n", len(message), addr.String()))
+	log.Debugf("Received %d bytes from %s\n", len(message), addr.String())
 	return message, addr, nil
 }
 
@@ -161,6 +163,7 @@ func (server *Server) Close() {
 	server.TimerManager.Close()
 	close(server.GossipChannel)
 	close(server.ReceiverChannel)
+	close(server.InputChannel)
 }
 
 func (server *Server) EncodeMembersList() string {
