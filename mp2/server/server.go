@@ -16,7 +16,7 @@ import (
 
 const T_GOSSIP = 5 * time.Second   // Time duration between each gossip round
 const T_TIMEOUT = 10 * time.Second // Time duration until a peer times out
-const T_CLEANUP = 5 * time.Second  // Time duration before peer is deleted
+const T_CLEANUP = 10 * time.Second // Time duration before peer is deleted
 
 const SAVE_FILENAME = "known_hosts"
 
@@ -96,10 +96,9 @@ func NewServer(Hostname string, Port int) (*Server, error) {
 	server.TimerManager = timer.NewTimerManager()
 	server.DropRate = 0
 	server.TotalByte = 0
-	server.Members[server.Self.ID] = server.Self // Add server to its own membership list
 	server.GossipPeriod = T_GOSSIP
 	server.GossipTimeout = T_TIMEOUT
-	server.SuspicionTimeout = T_CLEANUP
+	server.SuspicionTimeout = 0
 	server.GossipChannel = make(chan bool)
 	server.ReceiverChannel = make(chan ReceiverEvent)
 
@@ -132,7 +131,6 @@ func (server *Server) AddHost(Hostname string, Port int, ID string) (*Host, erro
 	return server.Members[ID], nil
 }
 
-// TODO: FIX THIS FUNCTION!!!!
 func (s *Server) SaveMembersToFile() {
 	save_file, err := os.OpenFile(SAVE_FILENAME, os.O_CREATE|os.O_TRUNC|os.O_RDWR, 0644)
 	if err != nil {
@@ -158,17 +156,11 @@ func (server *Server) GetPacket() (message string, addr *net.UDPAddr, err error)
 	return message, addr, nil
 }
 
-// func (server *Server) SendPacket(address string, port int, data []byte) (int, error) {
-// 	addr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", address, port))
-// 	if err != nil {
-// 		return 0, err
-// 	}
-// 	return server.Connection.WriteToUDP(data, addr)
-// }
-
 func (server *Server) Close() {
 	server.Connection.Close()
 	server.TimerManager.Close()
+	close(server.GossipChannel)
+	close(server.ReceiverChannel)
 }
 
 func (server *Server) EncodeMembersList() string {
@@ -196,6 +188,9 @@ func (server *Server) ProcessMembersList(message string) {
 
 		timeNow := time.Now().UnixMilli()
 		memberHost, memberPort, memberID, memberCounter := tokens[0], tokens[1], tokens[2], tokens[3]
+		if memberID == server.Self.ID {
+			continue
+		}
 
 		memberPortInt, err := strconv.Atoi(memberPort)
 		if err != nil {
