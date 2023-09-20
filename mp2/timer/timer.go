@@ -32,14 +32,14 @@ func (timer *Timer) Start() {
 	select {
 	case event := <-timer.TimerChannel:
 		if event.EventType == TIMER_STOP_EVENT {
-			log.Debug(fmt.Sprintf("Timer %s has stopped.\n", timer.ID))
+			log.Debugf("Timer %s has stopped.\n", timer.ID)
 			timer.Mutex.Lock()
 			timer.Alive = false
 			close(timer.TimerChannel)
 			timer.Mutex.Unlock()
 		}
 	case <-time.After(timer.TimeoutDuration):
-		log.Debug(fmt.Sprintf("Timer %s has timed out.\n", timer.ID))
+		log.Debugf("Timer %s has timed out.\n", timer.ID)
 		timer.Mutex.Lock()
 		if !timer.Alive {
 			close(timer.TimerChannel)

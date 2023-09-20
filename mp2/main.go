@@ -35,7 +35,7 @@ func main() {
 	}
 
 	log.SetFormatter(&log.TextFormatter{
-		DisableColors: true,
+		DisableColors: false,
 		FullTimestamp: true,
 	})
 
@@ -460,6 +460,7 @@ func handleJoinResponse(s *server.Server, e server.ReceiverEvent) {
 	s.Active = true
 	s.TimerManager.StopTimer(JOIN_TIMER_ID)
 	s.StartAllTimers()
+	printMembershipTable(s)
 	log.Info("Node join completed.")
 }
 
@@ -521,6 +522,8 @@ func handleJoinRequest(s *server.Server, e server.ReceiverEvent) {
 	if err != nil {
 		log.Error(err)
 	}
+
+	printMembershipTable(s)
 }
 
 // Introducer process accepts new hosts and sends full membership list
