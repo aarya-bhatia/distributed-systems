@@ -5,6 +5,7 @@ import (
 	"cs425/server"
 	"cs425/timer"
 	"fmt"
+	"github.com/jedib0t/go-pretty/v6/table"
 	log "github.com/sirupsen/logrus"
 	"math/rand"
 	"net"
@@ -33,9 +34,13 @@ func main() {
 	}
 
 	log.SetFormatter(&log.TextFormatter{
-		DisableColors: false,
+		DisableColors: true,
 		FullTimestamp: true,
 	})
+
+	log.SetReportCaller(false)
+	log.SetOutput(os.Stderr)
+	log.SetLevel(log.WarnLevel)
 
 	hostname := os.Args[1]
 	var port int
@@ -49,20 +54,20 @@ func main() {
 		log.Fatal(err)
 	}
 
-	log.SetLevel(log.DebugLevel)
-	if os.Getenv("DEBUG") != "TRUE" {
-		log.SetLevel(log.InfoLevel)
-		logfile := fmt.Sprintf("%s.log", s.Self.Signature)
-		f, err := os.OpenFile(logfile, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
-		if err != nil {
-			log.Fatal(err)
-		}
-		defer f.Close()
-		log.SetOutput(f)
-		os.Stderr.WriteString(fmt.Sprintf("Log File: %s\n", logfile))
-	}
+	// log.SetLevel(log.DebugLevel)
+	// if os.Getenv("DEBUG") != "TRUE" {
+	// 	log.SetLevel(log.InfoLevel)
+	// 	logfile := fmt.Sprintf("%s.log", s.Self.Signature)
+	// 	f, err := os.OpenFile(logfile, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+	// 	if err != nil {
+	// 		log.Fatal(err)
+	// 	}
+	// 	defer f.Close()
+	// 	log.SetOutput(f)
+	// 	os.Stderr.WriteString(fmt.Sprintf("Log File: %s\n", logfile))
+	// }
 
-	log.Info(fmt.Sprintf("Server %s listening on port %d\n", s.Self.Signature, port))
+	log.Infof("Server %s listening on port %d\n", s.Self.Signature, port)
 	defer s.Close()
 
 	if port == INTRODUCER_PORT {
@@ -80,6 +85,23 @@ func main() {
 	startNode(s)
 }
 
+// pretty print membership table
+func printMembershipTable(s *server.Server) {
+	t := table.NewWriter()
+	t.SetOutputMirror(os.Stdout)
+	t.AppendHeader(table.Row{"ID", "Hostname", "Port", "Status", "Counter", "UpdatedAt"})
+	rows := []table.Row{}
+	s.MemberLock.Lock()
+	defer s.MemberLock.Unlock()
+	for _, host := range s.Members {
+		rows = append(rows, table.Row{host.ID, host.Hostname, host.Port, host.Suspected, host.Counter, host.UpdatedAt})
+	}
+	t.AppendRows(rows)
+	t.AppendSeparator()
+	t.SetStyle(table.StyleLight)
+	t.Render()
+}
+
 // Sends membership list to random subset of peers every T_gossip period
 // Updates own counter and timestamp before sending the membership list
 func sendPings(s *server.Server) {
@@ -88,7 +110,7 @@ func sendPings(s *server.Server) {
 		return
 	}
 
-	log.Info(fmt.Sprintf("Sending gossip to %d hosts", len(targets)))
+	log.Infof("Sending gossip to %d hosts", len(targets))
 	s.MemberLock.Lock()
 	s.Self.Counter++
 	s.Self.UpdatedAt = time.Now().UnixMilli()
@@ -102,7 +124,7 @@ func sendPings(s *server.Server) {
 			continue
 		}
 		s.TotalByte += n
-		log.Debug(fmt.Sprintf("Sent %d bytes to %s\n", n, target.Signature))
+		log.Debugf("Sent %d bytes to %s\n", n, target.Signature)
 	}
 }
 
@@ -191,7 +213,7 @@ func handleTimeout(s *server.Server, e timer.TimerEvent) {
 
 	if host, ok := s.Members[e.ID]; ok {
 		if host.Suspected || s.SuspicionTimeout == 0 {
-			log.Warn(fmt.Sprintf("FAILURE DETECTED: Node %s is considered failed\n", e.ID))
+			log.Warnf("FAILURE DETECTED: Node %s is considered failed\n", e.ID)
 			delete(s.Members, e.ID)
 			if s.Introducer {
 				s.MemberLock.Unlock()
@@ -199,7 +221,7 @@ func handleTimeout(s *server.Server, e timer.TimerEvent) {
 				s.MemberLock.Lock()
 			}
 		} else {
-			log.Warn(fmt.Sprintf("FAILURE SUSPECTED: Node %s is suspected of failure\n", e.ID))
+			log.Warnf("FAILURE SUSPECTED: Node %s is suspected of failure\n", e.ID)
 			host.Suspected = true
 			s.TimerManager.RestartTimer(e.ID, s.SuspicionTimeout)
 		}
@@ -260,7 +282,7 @@ func receiverRoutine(s *server.Server) {
 
 func startGossip(s *server.Server) {
 	s.Active = true
-	log.Debug(fmt.Sprintf("Updated Node ID to %s", s.SetUniqueID()))
+	log.Debugf("Updated Node ID to %s", s.SetUniqueID())
 	err := joinWithRetry(s)
 	if err != nil {
 		log.Fatal(err)
@@ -283,17 +305,17 @@ func handlePingRequest(s *server.Server, e server.ReceiverEvent) {
 	lines := strings.Split(e.Message, "\n")
 	tokens := strings.Split(lines[0], " ")
 	if len(tokens) < 3 {
-		log.Debug(fmt.Sprintf("Illegal header for PING request: %s\n", lines[0]))
+		log.Debugf("Illegal header for PING request: %s\n", lines[0])
 		return
 	}
 
 	if rand.Intn(100) < s.DropRate {
-		log.Debug(fmt.Sprintf("PING from %s dropped with drop rate %d %%\n", e, s.DropRate))
+		log.Debugf("PING from %s dropped with drop rate %d %%\n", e, s.DropRate)
 		return
 	}
 
 	if tokens[2] != s.Self.ID {
-		log.Debug(fmt.Sprintf("Dropped PING due to ID mismatch: %s\n", tokens[2]))
+		log.Debugf("Dropped PING due to ID mismatch: %s\n", tokens[2])
 		return
 	}
 
@@ -328,7 +350,7 @@ func handleRequest(s *server.Server, e server.ReceiverEvent) {
 	header := lines[0]
 	tokens := strings.Split(header, " ")
 
-	log.Debug(fmt.Sprintf("Request %s received from: %v\n", tokens[0], e.Sender))
+	log.Debugf("Request %s received from: %v\n", tokens[0], e.Sender)
 
 	switch verb := strings.ToUpper(tokens[0]); verb {
 	case "JOIN":
@@ -341,6 +363,9 @@ func handleRequest(s *server.Server, e server.ReceiverEvent) {
 
 	case "ID":
 		s.Connection.WriteToUDP([]byte(fmt.Sprintf("%s\n", s.Self.ID)), e.Sender)
+
+	case "PRINT":
+		printMembershipTable(s)
 
 	case "LIST":
 		s.Connection.WriteToUDP([]byte(fmt.Sprintf("OK\n%s\n", strings.ReplaceAll(s.EncodeMembersList(), ";", "\n"))), e.Sender)
@@ -377,11 +402,34 @@ func handleRequest(s *server.Server, e server.ReceiverEvent) {
 	}
 }
 
+// Listen for commands on stdin
+func inputRoutine(s *server.Server) {
+	scanner := bufio.NewScanner(os.Stdin)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		s.InputChannel <- line
+	}
+
+	if err := scanner.Err(); err != nil {
+		log.Warn("Error reading from stdin:", err)
+	}
+}
+
+func handleCommand(s *server.Server, command string) {
+	switch strings.ToUpper(command) {
+	case "PRINT":
+		printMembershipTable(s)
+	case "KILL":
+		log.Fatalf("Kill command received!")
+	}
+}
+
 // Start the node process and launch all the threads
 func startNode(s *server.Server) {
-	log.Info(fmt.Sprintf("Node %s is starting...\n", s.Self.ID))
+	log.Infof("Node %s is starting...\n", s.Self.ID)
 	go receiverRoutine(s)
 	go senderRoutine(s)
+	go inputRoutine(s)
 
 	// Blocks until either new message received or timer signals timeout
 	for {
@@ -390,6 +438,8 @@ func startNode(s *server.Server) {
 			handleTimeout(s, e)
 		case e := <-s.ReceiverChannel:
 			handleRequest(s, e)
+		case e := <-s.InputChannel:
+			handleCommand(s, e)
 		}
 	}
 }
@@ -420,7 +470,7 @@ func handleJoinRequest(s *server.Server, e server.ReceiverEvent) {
 
 	host, err := s.AddHost(senderAddress, senderPortInt, senderId)
 	if err != nil {
-		log.Error(fmt.Sprintf("Failed to add host: %s\n", err.Error()))
+		log.Errorf("Failed to add host: %s\n", err.Error())
 		reply := fmt.Sprintf("%s\n%s\n", JOIN_ERROR, err.Error())
 		s.Connection.WriteToUDP([]byte(reply), e.Sender)
 		return
@@ -449,6 +499,6 @@ func loadKnownHosts(s *server.Server) {
 		}
 	}
 
-	log.Info(fmt.Sprintf("Added %d hosts: %s\n", len(s.Members), s.EncodeMembersList()))
+	log.Infof("Added %d hosts: %s\n", len(s.Members), s.EncodeMembersList())
 	s.StartAllTimers()
 }
