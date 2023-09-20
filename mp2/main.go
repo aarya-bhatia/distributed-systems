@@ -89,12 +89,13 @@ func main() {
 func printMembershipTable(s *server.Server) {
 	t := table.NewWriter()
 	t.SetOutputMirror(os.Stdout)
-	t.AppendHeader(table.Row{"ID", "Hostname", "Port", "Status", "Counter", "UpdatedAt"})
+	t.AppendHeader(table.Row{"ID", "HOSTNAME", "PORT", "COUNTER", "UPDATED_AT", "SUSPECTED"})
 	rows := []table.Row{}
 	s.MemberLock.Lock()
 	defer s.MemberLock.Unlock()
 	for _, host := range s.Members {
-		rows = append(rows, table.Row{host.ID, host.Hostname, host.Port, host.Suspected, host.Counter, host.UpdatedAt})
+		t := time.Unix(0, host.UpdatedAt).Format("2006-01-02 15:04:05 MST")
+		rows = append(rows, table.Row{host.ID, host.Hostname, host.Port, host.Counter, t, host.Suspected})
 	}
 	t.AppendRows(rows)
 	t.AppendSeparator()
@@ -416,11 +417,33 @@ func inputRoutine(s *server.Server) {
 }
 
 func handleCommand(s *server.Server, command string) {
-	switch strings.ToUpper(command) {
-	case "PRINT":
+	commands := []string{"list_mem: print membership table", "list_self: print id of node",
+		"kill: crash server", "join: start gossiping", "leave: stop gossiping", "sus_on: enable gossip suspicion",
+		"sus_off: disable gossip suspicion", "help: list all commands"}
+
+	switch strings.ToLower(command) {
+	case "list_mem":
 		printMembershipTable(s)
-	case "KILL":
+	case "list_self":
+		fmt.Println(s.Self.ID)
+	case "kill":
 		log.Fatalf("Kill command received!")
+	case "join":
+		startGossip(s)
+		fmt.Println("OK")
+	case "leave":
+		stopGossip(s)
+		fmt.Println("OK")
+	case "sus_on":
+		s.SuspicionTimeout = server.T_CLEANUP
+		fmt.Printf("Suspicion Timeout: %f sec\n", s.SuspicionTimeout.Seconds())
+	case "sus_off":
+		s.SuspicionTimeout = 0
+		fmt.Println("OK")
+	case "help":
+		for i := range commands {
+			fmt.Printf("%d. %s\n", i+1, commands[i])
+		}
 	}
 }
 
