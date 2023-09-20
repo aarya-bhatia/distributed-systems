@@ -87,12 +87,12 @@ func main() {
 
 // pretty print membership table
 func printMembershipTable(s *server.Server) {
+	s.MemberLock.Lock()
+	defer s.MemberLock.Unlock()
 	t := table.NewWriter()
 	t.SetOutputMirror(os.Stdout)
 	t.AppendHeader(table.Row{"ID", "HOSTNAME", "PORT", "COUNTER", "UPDATED_AT", "SUSPECTED"})
 	rows := []table.Row{}
-	s.MemberLock.Lock()
-	defer s.MemberLock.Unlock()
 	for _, host := range s.Members {
 		t := time.Unix(0, host.UpdatedAt).Format("2006-01-02 15:04:05 MST")
 		rows = append(rows, table.Row{host.ID, host.Hostname, host.Port, host.Counter, t, host.Suspected})
@@ -131,14 +131,15 @@ func sendPings(s *server.Server) {
 
 // Selects at most 'count' number of hosts from list
 func selectRandomTargets(s *server.Server, count int) []*server.Host {
-	var hosts = []*server.Host{}
 	s.MemberLock.Lock()
+	defer s.MemberLock.Unlock()
+
+	var hosts = []*server.Host{}
 	for _, host := range s.Members {
 		if host.ID != s.Self.ID {
 			hosts = append(hosts, host)
 		}
 	}
-	s.MemberLock.Unlock()
 
 	// shuffle the array
 	for i := len(hosts) - 1; i > 0; i-- {
@@ -166,7 +167,7 @@ func handleTimeout(s *server.Server, e timer.TimerEvent) {
 	if e.ID == JOIN_TIMER_ID && !s.Active {
 		log.Info("Timeout: Retrying JOIN.")
 		sendJoinRequest(s)
-		s.TimerManager.RestartTimer(e.ID, JOIN_RETRY_TIMEOUT)
+		s.MemberLock.Unlock()
 		return
 	}
 
@@ -442,7 +443,7 @@ func sendJoinRequest(s *server.Server) {
 		return
 	}
 
-	s.TimerManager.StartTimer(JOIN_TIMER_ID, JOIN_RETRY_TIMEOUT)
+	s.TimerManager.RestartTimer(JOIN_TIMER_ID, JOIN_RETRY_TIMEOUT)
 
 	log.Println("Sent join request!")
 
@@ -456,9 +457,9 @@ func handleJoinResponse(s *server.Server, e server.ReceiverEvent) {
 	if len(lines) < 2 {
 		return
 	}
-	s.ProcessMembersList(lines[1], false)
-	s.Active = true
 	s.TimerManager.StopTimer(JOIN_TIMER_ID)
+	s.Active = true
+	s.ProcessMembersList(lines[1], false)
 	s.StartAllTimers()
 	printMembershipTable(s)
 	log.Info("Node join completed.")

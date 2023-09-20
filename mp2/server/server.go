@@ -17,6 +17,7 @@ import (
 const T_GOSSIP = 5 * time.Second   // Time duration between each gossip round
 const T_TIMEOUT = 10 * time.Second // Time duration until a peer times out
 const T_CLEANUP = 10 * time.Second // Time duration before peer is deleted
+const MAX_RECENTLY_DELETED = 10
 
 const SAVE_FILENAME = "known_hosts"
 
@@ -52,6 +53,7 @@ type Server struct {
 	GossipChannel    chan bool
 	ReceiverChannel  chan ReceiverEvent
 	InputChannel     chan string
+	RecentlyDeleted  map[string]bool
 }
 
 func NewHost(Hostname string, Port int, ID string, Address *net.UDPAddr) *Host {
@@ -103,11 +105,28 @@ func NewServer(Hostname string, Port int) (*Server, error) {
 	server.GossipChannel = make(chan bool)
 	server.ReceiverChannel = make(chan ReceiverEvent)
 	server.InputChannel = make(chan string)
+	server.RecentlyDeleted = make(map[string]bool)
 
 	server.SetUniqueID()
 
 	return server, nil
 }
+
+// func (server *Server) RemoveHost(ID string) {
+// 	server.MemberLock.Lock()
+// 	defer server.MemberLock.Unlock()
+// 	found, ok := server.Members[ID]
+// 	if !ok {
+// 		return
+// 	}
+//
+// 	if len(server.RecentlyDeleted) == MAX_RECENTLY_DELETED {
+// 		server.RecentlyDeleted = append(server.RecentlyDeleted[1:], )
+// 	}
+//
+// 	delete(server.Members, ID)
+// 	server.TimerManager.StopTimer(ID)
+// }
 
 func (server *Server) AddHost(Hostname string, Port int, ID string) (*Host, error) {
 	addr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", Hostname, Port))
