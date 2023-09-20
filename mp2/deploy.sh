@@ -3,7 +3,7 @@
 passwd_file="/home/aarya/passwd"
 netid="aaryab2"
 
-SCRIPTS="scripts"
+SCRIPTS="."
 
 if [ ! -f $passwd_file ]; then
 	echo Password file not found: $passwd_file

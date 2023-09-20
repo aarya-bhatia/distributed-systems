@@ -8,17 +8,21 @@ mkdir -p .ssh/
 [ -e ssh_cs425.pub ] && mv ssh_cs425.pub .ssh/cs425.pub
 [ -e ssh_config ] && mv ssh_config .ssh/config
 
-if [ ! -d mp1 ]; then
-	git clone ssh://git@gitlab.engr.illinois.edu/aaryab2/mp1.git mp1
+if [ ! -d cs425 ]; then
+	git clone ssh://git@gitlab.engr.illinois.edu/aaryab2/cs425.git cs425
 	if [ ! $? -eq 0 ]; then
 		echo "Failed to clone repository"
 		exit 1
 	fi
 fi
 
-cd mp1
+rm -rf mp1; # old repo
+
+cd cs425
 git checkout main
 git pull origin main
+
+cd mp2
 make clean
 make
 
@@ -36,8 +40,11 @@ if [ -z $id ] || [ -z $host ] || [ -z $port ]; then
 fi
 
 echo $id, $host, $port
-
-pkill -f bin/server
-nohup bin/server $port >stdout 2>&1 &
+pkill -f ./main
+nohup ./main $host $port >log 2>&1 &
 echo "Server $id running at $host:$port"
+
+# pkill -f bin/server
+# nohup bin/server $port >stdout 2>&1 &
+
 
