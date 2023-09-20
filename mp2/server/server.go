@@ -90,7 +90,7 @@ func NewServer(Hostname string, Port int) (*Server, error) {
 	server := &Server{}
 
 	server.Self = NewHost(Hostname, Port, "", addr)
-	server.Active = true
+	server.Active = false
 	server.Connection = conn
 	server.Members = make(map[string]*Host)
 	server.Introducer = false

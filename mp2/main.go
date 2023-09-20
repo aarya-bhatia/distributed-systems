@@ -24,6 +24,7 @@ const (
 	JOIN_ERROR            = "JOIN_ERROR"
 	ERROR_ILLEGAL_REQUEST = JOIN_ERROR + "\n" + "Illegal Request" + "\n"
 	JOIN_RETRY_TIMEOUT    = time.Second * 10
+	JOIN_TIMER_ID         = "JOIN_TIMER"
 )
 
 // Starts a UDP server on specified port
@@ -72,16 +73,15 @@ func main() {
 
 	if port == INTRODUCER_PORT {
 		s.Introducer = true
+		s.Active = true
 		loadKnownHosts(s)
 		startNode(s)
 		return
 	}
 
-	err = joinWithRetry(s)
-	if err != nil {
-		log.Fatal(err)
-	}
-
+	s.Introducer = false
+	s.Active = false
+	sendJoinRequest(s)
 	startNode(s)
 }
 
@@ -152,59 +152,6 @@ func selectRandomTargets(s *server.Server, count int) []*server.Host {
 	return hosts[:count]
 }
 
-// Request introducer to join node and receive initial membership list
-// If introducer is down, it will retry the request every JOIN_RETRY_TIMEOUT period.
-func joinWithRetry(s *server.Server) error {
-	request := s.GetJoinMessage()
-	messageChannel := make(chan string, 1)
-
-	go func() {
-		for {
-			message, _, err := s.GetPacket()
-
-			if err != nil {
-				log.Fatalf("Error reading packet: %s", err.Error())
-			}
-
-			if strings.Index(message, JOIN_OK) == 0 {
-				messageChannel <- message
-				break
-			}
-
-			if strings.Index(message, JOIN_ERROR) == 0 {
-				log.Fatalf("Failed to join: %s", message)
-			}
-		}
-	}()
-
-	addr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", INTRODUCER_HOST, INTRODUCER_PORT))
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	for {
-		s.Connection.WriteToUDP([]byte(request), addr)
-
-		if err != nil {
-			return err
-		}
-
-		select {
-		case messageReply := <-messageChannel:
-			lines := strings.Split(messageReply, "\n")
-			if len(lines) < 2 {
-				continue
-			}
-			s.ProcessMembersList(lines[1], false)
-			log.Info("Node join completed.")
-			s.StartAllTimers()
-			return nil
-		case <-time.After(JOIN_RETRY_TIMEOUT):
-			log.Info("Timeout: Retrying join...")
-		}
-	}
-}
-
 // Timeout signal received from timer
 // Either suspect node or mark failed
 // Updates the known_hosts file for introducer
@@ -213,6 +160,13 @@ func handleTimeout(s *server.Server, e timer.TimerEvent) {
 
 	if e.ID == s.Self.ID {
 		s.MemberLock.Unlock()
+		return
+	}
+
+	if e.ID == JOIN_TIMER_ID && !s.Active {
+		log.Info("Timeout: Retrying JOIN.")
+		sendJoinRequest(s)
+		s.TimerManager.RestartTimer(e.ID, JOIN_RETRY_TIMEOUT)
 		return
 	}
 
@@ -293,13 +247,10 @@ func receiverRoutine(s *server.Server) {
 }
 
 func startGossip(s *server.Server) {
-	s.Active = true
-	log.Debugf("Updated Node ID to %s", s.SetUniqueID())
-	err := joinWithRetry(s)
-	if err != nil {
-		log.Fatal(err)
-	}
+	ID := s.SetUniqueID()
+	log.Debugf("Updated Node ID to %s", ID)
 	s.GossipChannel <- true
+	sendJoinRequest(s)
 }
 
 func stopGossip(s *server.Server) {
@@ -314,7 +265,16 @@ func stopGossip(s *server.Server) {
 }
 
 func handlePingRequest(s *server.Server, e server.ReceiverEvent) {
+	if !s.Active {
+		log.Debugf("PING from %s dropped as server is inactive\n", e)
+		return
+	}
+
 	lines := strings.Split(e.Message, "\n")
+	if len(lines) < 2 {
+		return
+	}
+
 	tokens := strings.Split(lines[0], " ")
 	if len(tokens) < 3 {
 		log.Debugf("Illegal header for PING request: %s\n", lines[0])
@@ -349,6 +309,19 @@ func handleListSus(s *server.Server, e server.ReceiverEvent) {
 	s.Connection.WriteToUDP([]byte(reply), e.Sender)
 }
 
+func handleSusRequest(s *server.Server, e server.ReceiverEvent) {
+	lines := strings.Split(e.Message, "\n")
+	tokens := strings.Split(lines[0], " ")
+	if len(tokens) < 2 {
+		return
+	}
+	if strings.ToUpper(tokens[1]) == "ON" {
+		s.SuspicionTimeout = server.T_CLEANUP
+	} else if strings.ToUpper(tokens[1]) == "OFF" {
+		s.SuspicionTimeout = 0
+	}
+}
+
 // Handles the request received by the server
 // JOIN, PING, ID, LIST, KILL, START_GOSSIP, STOP_GOSSIP, CONFIG, SUS ON, SUS OFF, LIST_SUS
 func handleRequest(s *server.Server, e server.ReceiverEvent) {
@@ -366,22 +339,22 @@ func handleRequest(s *server.Server, e server.ReceiverEvent) {
 	case "JOIN":
 		handleJoinRequest(s, e)
 
+	case "JOIN_OK":
+		handleJoinResponse(s, e)
+
+	case "JOIN_ERROR":
+		log.Fatalf("Failed to join: %s", e.Message)
+
 	case "PING":
-		if s.Active && len(lines) >= 2 {
-			handlePingRequest(s, e)
-		}
+		handlePingRequest(s, e)
 
 	case "ID":
 		s.Connection.WriteToUDP([]byte(fmt.Sprintf("%s\n", s.Self.ID)), e.Sender)
-
-	case "PRINT":
-		printMembershipTable(s)
 
 	case "LIST":
 		s.Connection.WriteToUDP([]byte(fmt.Sprintf("OK\n%s\n", strings.ReplaceAll(s.EncodeMembersList(), ";", "\n"))), e.Sender)
 
 	case "KILL":
-		// syscall.Kill(syscall.Getpid(), syscall.SIGINT)
 		log.Fatalf("Kill request received\n")
 
 	case "START_GOSSIP":
@@ -394,21 +367,13 @@ func handleRequest(s *server.Server, e server.ReceiverEvent) {
 		handleConfigRequest(s, e)
 
 	case "SUS":
-		if len(tokens) < 2 {
-			return
-		}
-
-		if strings.ToUpper(tokens[1]) == "ON" {
-			s.SuspicionTimeout = server.T_CLEANUP
-		} else if strings.ToUpper(tokens[1]) == "OFF" {
-			s.SuspicionTimeout = 0
-		}
+		handleSusRequest(s, e)
 
 	case "LIST_SUS":
 		handleListSus(s, e)
 
 	default:
-		log.Error("WARNING: Unknown request verb: ", verb)
+		log.Warn("Unknown request verb: ", verb)
 	}
 }
 
@@ -460,12 +425,51 @@ func handleCommand(s *server.Server, command string) {
 	}
 }
 
+// Send request to join node and start timer
+func sendJoinRequest(s *server.Server) {
+	if s.Introducer || s.Active {
+		return
+	}
+
+	addr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", INTRODUCER_HOST, INTRODUCER_PORT))
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	_, err = s.Connection.WriteToUDP([]byte(s.GetJoinMessage()), addr)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+
+	s.TimerManager.StartTimer(JOIN_TIMER_ID, JOIN_RETRY_TIMEOUT)
+
+	log.Println("Sent join request!")
+
+}
+
+func handleJoinResponse(s *server.Server, e server.ReceiverEvent) {
+	if s.Introducer {
+		return
+	}
+	lines := strings.Split(e.Message, "\n")
+	if len(lines) < 2 {
+		return
+	}
+	s.ProcessMembersList(lines[1], false)
+	s.Active = true
+	s.TimerManager.StopTimer(JOIN_TIMER_ID)
+	s.StartAllTimers()
+	log.Info("Node join completed.")
+}
+
 // Start the node process and launch all the threads
 func startNode(s *server.Server) {
 	log.Infof("Node %s is starting...\n", s.Self.ID)
-	go receiverRoutine(s)
-	go senderRoutine(s)
-	go inputRoutine(s)
+
+	go receiverRoutine(s) // to receive requests from network
+	go senderRoutine(s)   // to send gossip messages
+	go inputRoutine(s)    // to receive requests from stdin
 
 	// Blocks until either new message received or timer signals timeout
 	for {
