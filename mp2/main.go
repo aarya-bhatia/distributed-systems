@@ -302,8 +302,23 @@ func handlePingRequest(s *server.Server, e server.ReceiverEvent) {
 	s.ProcessMembersList(lines[1])
 }
 
+func handleListSus(s *server.Server, e server.ReceiverEvent) {
+	s.MemberLock.Lock()
+	defer s.MemberLock.Unlock()
+	susMembers := []string{}
+
+	for _, host := range s.Members {
+		if host.Suspected {
+			susMembers = append(susMembers, host.Signature)
+		}
+	}
+
+	reply := fmt.Sprintf("OK\n%s\n", strings.Join(susMembers, "\n"))
+	s.Connection.WriteToUDP([]byte(reply), e.Sender)
+}
+
 // Handles the request received by the server
-// JOIN, PING, ID, LIST, KILL, START_GOSSIP, STOP_GOSSIP, CONFIG
+// JOIN, PING, ID, LIST, KILL, START_GOSSIP, STOP_GOSSIP, CONFIG, SUS ON, SUS OFF, LIST_SUS
 func handleRequest(s *server.Server, e server.ReceiverEvent) {
 	log.Debug("Request received: \n", e)
 
@@ -313,11 +328,11 @@ func handleRequest(s *server.Server, e server.ReceiverEvent) {
 	}
 
 	header := lines[0]
-	verbs := strings.Split(header, " ")
+	tokens := strings.Split(header, " ")
 
-	log.Debug(fmt.Sprintf("Request %s received from: %v\n", verbs[0], e.Sender))
+	log.Debug(fmt.Sprintf("Request %s received from: %v\n", tokens[0], e.Sender))
 
-	switch verb := verbs[0]; verb {
+	switch verb := strings.ToUpper(tokens[0]); verb {
 	case "JOIN":
 		handleJoinRequest(s, e)
 
@@ -343,6 +358,20 @@ func handleRequest(s *server.Server, e server.ReceiverEvent) {
 
 	case "CONFIG":
 		handleConfigRequest(s, e)
+
+	case "SUS":
+		if len(tokens) < 2 {
+			return
+		}
+
+		if strings.ToUpper(tokens[1]) == "ON" {
+			s.SuspicionTimeout = server.T_CLEANUP
+		} else if strings.ToUpper(tokens[1]) == "OFF" {
+			s.SuspicionTimeout = 0
+		}
+
+	case "LIST_SUS":
+		handleListSus(s, e)
 
 	default:
 		log.Error("WARNING: Unknown request verb: ", verb)
