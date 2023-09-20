@@ -23,7 +23,7 @@ const (
 	JOIN_OK               = "JOIN_OK"
 	JOIN_ERROR            = "JOIN_ERROR"
 	ERROR_ILLEGAL_REQUEST = JOIN_ERROR + "\n" + "Illegal Request" + "\n"
-	JOIN_RETRY_TIMEOUT    = time.Second * 5
+	JOIN_RETRY_TIMEOUT    = time.Second * 10
 )
 
 // Starts a UDP server on specified port
@@ -40,7 +40,7 @@ func main() {
 
 	log.SetReportCaller(false)
 	log.SetOutput(os.Stderr)
-	log.SetLevel(log.WarnLevel)
+	log.SetLevel(log.DebugLevel)
 
 	hostname := os.Args[1]
 	var port int
@@ -195,7 +195,7 @@ func joinWithRetry(s *server.Server) error {
 			if len(lines) < 2 {
 				continue
 			}
-			s.ProcessMembersList(lines[1])
+			s.ProcessMembersList(lines[1], false)
 			log.Info("Node join completed.")
 			s.StartAllTimers()
 			return nil
@@ -210,7 +210,11 @@ func joinWithRetry(s *server.Server) error {
 // Updates the known_hosts file for introducer
 func handleTimeout(s *server.Server, e timer.TimerEvent) {
 	s.MemberLock.Lock()
-	defer s.MemberLock.Unlock()
+
+	if e.ID == s.Self.ID {
+		s.MemberLock.Unlock()
+		return
+	}
 
 	if host, ok := s.Members[e.ID]; ok {
 		if host.Suspected || s.SuspicionTimeout == 0 {
@@ -226,7 +230,14 @@ func handleTimeout(s *server.Server, e timer.TimerEvent) {
 			host.Suspected = true
 			s.TimerManager.RestartTimer(e.ID, s.SuspicionTimeout)
 		}
+
+		s.MemberLock.Unlock()
+		printMembershipTable(s)
+		return
 	}
+
+	s.MemberLock.Unlock()
+
 }
 
 // Handle config command: CONFIG <field to change> <value>
@@ -320,7 +331,7 @@ func handlePingRequest(s *server.Server, e server.ReceiverEvent) {
 		return
 	}
 
-	s.ProcessMembersList(lines[1])
+	s.ProcessMembersList(lines[1], true)
 }
 
 func handleListSus(s *server.Server, e server.ReceiverEvent) {
@@ -341,8 +352,6 @@ func handleListSus(s *server.Server, e server.ReceiverEvent) {
 // Handles the request received by the server
 // JOIN, PING, ID, LIST, KILL, START_GOSSIP, STOP_GOSSIP, CONFIG, SUS ON, SUS OFF, LIST_SUS
 func handleRequest(s *server.Server, e server.ReceiverEvent) {
-	log.Debug("Request received: \n", e)
-
 	lines := strings.Split(e.Message, "\n")
 	if len(lines) < 1 {
 		return
@@ -422,8 +431,12 @@ func handleCommand(s *server.Server, command string) {
 		"sus_off: disable gossip suspicion", "help: list all commands"}
 
 	switch strings.ToLower(command) {
+	case "ls":
+		fallthrough
 	case "list_mem":
 		printMembershipTable(s)
+	case "id":
+		fallthrough
 	case "list_self":
 		fmt.Println(s.Self.ID)
 	case "kill":
@@ -518,7 +531,7 @@ func loadKnownHosts(s *server.Server) {
 	if scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 		if len(line) > 0 {
-			s.ProcessMembersList(line)
+			s.ProcessMembersList(line, false)
 		}
 	}
 

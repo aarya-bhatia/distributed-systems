@@ -179,7 +179,7 @@ func (server *Server) EncodeMembersList() string {
 	return strings.Join(arr, ";")
 }
 
-func (server *Server) ProcessMembersList(message string) {
+func (server *Server) ProcessMembersList(message string, withRestartTimer bool) {
 	server.MemberLock.Lock()
 
 	members := strings.Split(message, ";")
@@ -191,6 +191,7 @@ func (server *Server) ProcessMembersList(message string) {
 
 		timeNow := time.Now().UnixMilli()
 		memberHost, memberPort, memberID, memberCounter := tokens[0], tokens[1], tokens[2], tokens[3]
+
 		if memberID == server.Self.ID {
 			continue
 		}
@@ -217,7 +218,7 @@ func (server *Server) ProcessMembersList(message string) {
 			found.UpdatedAt = timeNow
 			found.Suspected = false
 
-			if memberID != server.Self.ID {
+			if withRestartTimer {
 				server.TimerManager.RestartTimer(memberID, server.GossipTimeout)
 			}
 		}
