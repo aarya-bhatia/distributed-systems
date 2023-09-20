@@ -5,16 +5,14 @@ import (
 	"cs425/server"
 	"cs425/timer"
 	"fmt"
+	log "github.com/sirupsen/logrus"
 	"math/rand"
 	"net"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
-
-	log "github.com/sirupsen/logrus"
 )
 
 const (
@@ -348,7 +346,8 @@ func handleRequest(s *server.Server, e server.ReceiverEvent) {
 		s.Connection.WriteToUDP([]byte(fmt.Sprintf("OK\n%s\n", strings.ReplaceAll(s.EncodeMembersList(), ";", "\n"))), e.Sender)
 
 	case "KILL":
-		syscall.Kill(syscall.Getpid(), syscall.SIGINT)
+		// syscall.Kill(syscall.Getpid(), syscall.SIGINT)
+		log.Fatalf("Kill request received\n")
 
 	case "START_GOSSIP":
 		startGossip(s)
