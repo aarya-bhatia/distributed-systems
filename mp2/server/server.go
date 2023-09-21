@@ -4,14 +4,12 @@ import (
 	"cs425/timer"
 	"errors"
 	"fmt"
+	log "github.com/sirupsen/logrus"
 	"net"
-	"os"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
-
-	log "github.com/sirupsen/logrus"
 )
 
 const T_GOSSIP = 5 * time.Second   // Time duration between each gossip round
@@ -43,7 +41,6 @@ type Server struct {
 	Connection       *net.UDPConn
 	Members          map[string]*Host
 	MemberLock       sync.Mutex
-	Introducer       bool
 	DropRate         int
 	TotalByte        int
 	TimerManager     *timer.TimerManager
@@ -53,7 +50,7 @@ type Server struct {
 	GossipChannel    chan bool
 	ReceiverChannel  chan ReceiverEvent
 	InputChannel     chan string
-	RecentlyDeleted  map[string]bool
+	// RecentlyDeleted  map[string]bool
 }
 
 func NewHost(Hostname string, Port int, ID string, Address *net.UDPAddr) *Host {
@@ -69,12 +66,13 @@ func NewHost(Hostname string, Port int, ID string, Address *net.UDPAddr) *Host {
 }
 
 func (server *Server) SetUniqueID() string {
+	server.MemberLock.Lock()
+	defer server.MemberLock.Unlock()
+
 	Timestamp := fmt.Sprintf("%d", time.Now().UnixNano())
 	ID := fmt.Sprintf("%d%s", server.Self.Port, Timestamp[:16])
 	server.Self.ID = ID
 	server.Self.Signature = fmt.Sprintf("%s:%d:%s", server.Self.Hostname, server.Self.Port, ID)
-	server.MemberLock.Lock()
-	defer server.MemberLock.Unlock()
 	server.Members[ID] = server.Self
 	return ID
 }
@@ -95,7 +93,6 @@ func NewServer(Hostname string, Port int) (*Server, error) {
 	server.Active = false
 	server.Connection = conn
 	server.Members = make(map[string]*Host)
-	server.Introducer = false
 	server.TimerManager = timer.NewTimerManager()
 	server.DropRate = 0
 	server.TotalByte = 0
@@ -105,7 +102,7 @@ func NewServer(Hostname string, Port int) (*Server, error) {
 	server.GossipChannel = make(chan bool)
 	server.ReceiverChannel = make(chan ReceiverEvent)
 	server.InputChannel = make(chan string)
-	server.RecentlyDeleted = make(map[string]bool)
+	// server.RecentlyDeleted = make(map[string]bool)
 
 	server.SetUniqueID()
 
@@ -129,13 +126,13 @@ func NewServer(Hostname string, Port int) (*Server, error) {
 // }
 
 func (server *Server) AddHost(Hostname string, Port int, ID string) (*Host, error) {
+	server.MemberLock.Lock()
+	defer server.MemberLock.Unlock()
+
 	addr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", Hostname, Port))
 	if err != nil {
 		return nil, err
 	}
-
-	server.MemberLock.Lock()
-	defer server.MemberLock.Unlock()
 
 	if found, ok := server.Members[ID]; ok {
 		log.Info("Duplicate host: ", found)
@@ -144,26 +141,7 @@ func (server *Server) AddHost(Hostname string, Port int, ID string) (*Host, erro
 
 	server.Members[ID] = NewHost(Hostname, Port, ID, addr)
 	log.Warnf("Added new host: %s\n", server.Members[ID].Signature)
-	if server.Introducer {
-		server.MemberLock.Unlock()
-		server.SaveMembersToFile()
-		server.MemberLock.Lock()
-	}
 	return server.Members[ID], nil
-}
-
-func (s *Server) SaveMembersToFile() {
-	save_file, err := os.OpenFile(SAVE_FILENAME, os.O_CREATE|os.O_TRUNC|os.O_RDWR, 0644)
-	if err != nil {
-		log.Fatalf("Failed to open file: %s\n", err.Error())
-	}
-	defer save_file.Close()
-	_, err = save_file.WriteString(s.EncodeMembersList() + "\n")
-	if err != nil {
-		log.Fatalf("Failed to write to file: %s\n", err.Error())
-	}
-
-	log.Debug("Updated membership list in file")
 }
 
 func (server *Server) GetPacket() (message string, addr *net.UDPAddr, err error) {
@@ -186,15 +164,13 @@ func (server *Server) Close() {
 }
 
 func (server *Server) EncodeMembersList() string {
-	var arr = []string{}
-
 	server.MemberLock.Lock()
 	defer server.MemberLock.Unlock()
 
+	var arr = []string{}
 	for _, host := range server.Members {
 		arr = append(arr, fmt.Sprintf("%s:%d:%d", host.Signature, host.Counter, host.UpdatedAt))
 	}
-
 	return strings.Join(arr, ";")
 }
 
@@ -249,6 +225,7 @@ func (server *Server) ProcessMembersList(message string, withRestartTimer bool) 
 func (server *Server) StartAllTimers() {
 	server.MemberLock.Lock()
 	defer server.MemberLock.Unlock()
+
 	for ID := range server.Members {
 		if ID != server.Self.ID {
 			server.TimerManager.RestartTimer(ID, server.GossipTimeout)

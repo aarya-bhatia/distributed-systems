@@ -16,22 +16,32 @@ import (
 	"time"
 )
 
-const (
-	NODES_PER_ROUND       = 2           // Number of random peers to send gossip every round
-	INTRODUCER_HOST       = "127.0.0.1" // TODO: Update this with VM1 in prod
-	INTRODUCER_PORT       = 6001
-	JOIN_OK               = "JOIN_OK"
-	JOIN_ERROR            = "JOIN_ERROR"
-	ERROR_ILLEGAL_REQUEST = JOIN_ERROR + "\n" + "Illegal Request" + "\n"
-	JOIN_RETRY_TIMEOUT    = time.Second * 10
-	JOIN_TIMER_ID         = "JOIN_TIMER"
-)
+const JOIN_RETRY_TIMEOUT = time.Second * 10
+const JOIN_OK = "JOIN_OK"
+const JOIN_ERROR = "JOIN_ERROR"
+const JOIN_TIMER_ID = "JOIN_TIMER"
+const DEFAULT_PORT = 6000
+const NODES_PER_ROUND = 3 // Number of random peers to send gossip every round
+const ERROR_ILLEGAL_REQUEST = JOIN_ERROR + "\n" + "Illegal Request" + "\n"
+
+var CLUSTER = [...]string{
+	"fa23-cs425-0701.cs.illinois.edu",
+	"fa23-cs425-0702.cs.illinois.edu",
+	"fa23-cs425-0703.cs.illinois.edu",
+	"fa23-cs425-0704.cs.illinois.edu",
+	"fa23-cs425-0705.cs.illinois.edu",
+	"fa23-cs425-0706.cs.illinois.edu",
+	"fa23-cs425-0707.cs.illinois.edu",
+	"fa23-cs425-0708.cs.illinois.edu",
+	"fa23-cs425-0709.cs.illinois.edu",
+	"fa23-cs425-0710.cs.illinois.edu",
+}
 
 // Starts a UDP server on specified port
 func main() {
-	if len(os.Args) < 3 {
+	if len(os.Args) < 2 {
 		program := filepath.Base(os.Args[0])
-		log.Fatalf("Usage: %s <hostname> <port>", program)
+		log.Fatalf("Usage: %s <hostname> [<port>]", program)
 	}
 
 	log.SetFormatter(&log.TextFormatter{
@@ -44,10 +54,15 @@ func main() {
 	log.SetLevel(log.DebugLevel)
 
 	hostname := os.Args[1]
-	var port int
-	port, err := strconv.Atoi(os.Args[2])
-	if err != nil {
-		log.Fatal(err)
+
+	var port int = DEFAULT_PORT
+	var err error
+
+	if len(os.Args) >= 3 {
+		port, err = strconv.Atoi(os.Args[2])
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
 
 	s, err := server.NewServer(hostname, port)
@@ -70,18 +85,6 @@ func main() {
 
 	log.Infof("Server %s listening on port %d\n", s.Self.Signature, port)
 	defer s.Close()
-
-	if port == INTRODUCER_PORT {
-		s.Introducer = true
-		s.Active = true
-		loadKnownHosts(s)
-		startNode(s)
-		return
-	}
-
-	s.Introducer = false
-	s.Active = false
-	sendJoinRequest(s)
 	startNode(s)
 }
 
@@ -112,6 +115,7 @@ func sendPings(s *server.Server) {
 	}
 
 	log.Infof("Sending gossip to %d hosts", len(targets))
+
 	s.MemberLock.Lock()
 	s.Self.Counter++
 	s.Self.UpdatedAt = time.Now().UnixMilli()
@@ -158,16 +162,15 @@ func selectRandomTargets(s *server.Server, count int) []*server.Host {
 // Updates the known_hosts file for introducer
 func handleTimeout(s *server.Server, e timer.TimerEvent) {
 	s.MemberLock.Lock()
+	defer s.MemberLock.Unlock()
 
 	if e.ID == s.Self.ID {
-		s.MemberLock.Unlock()
 		return
 	}
 
 	if e.ID == JOIN_TIMER_ID && !s.Active {
 		log.Info("Timeout: Retrying JOIN.")
 		sendJoinRequest(s)
-		s.MemberLock.Unlock()
 		return
 	}
 
@@ -175,11 +178,6 @@ func handleTimeout(s *server.Server, e timer.TimerEvent) {
 		if host.Suspected || s.SuspicionTimeout == 0 {
 			log.Warnf("FAILURE DETECTED: Node %s is considered failed\n", e.ID)
 			delete(s.Members, e.ID)
-			if s.Introducer {
-				s.MemberLock.Unlock()
-				s.SaveMembersToFile()
-				s.MemberLock.Lock()
-			}
 		} else {
 			log.Warnf("FAILURE SUSPECTED: Node %s is suspected of failure\n", e.ID)
 			host.Suspected = true
@@ -188,11 +186,10 @@ func handleTimeout(s *server.Server, e timer.TimerEvent) {
 
 		s.MemberLock.Unlock()
 		printMembershipTable(s)
+		s.MemberLock.Lock()
+
 		return
 	}
-
-	s.MemberLock.Unlock()
-
 }
 
 // Handle config command: CONFIG <field to change> <value>
@@ -336,41 +333,41 @@ func handleRequest(s *server.Server, e server.ReceiverEvent) {
 
 	log.Debugf("Request %s received from: %v\n", tokens[0], e.Sender)
 
-	switch verb := strings.ToUpper(tokens[0]); verb {
-	case "JOIN":
+	switch verb := strings.ToLower(tokens[0]); verb {
+	case "join":
 		handleJoinRequest(s, e)
 
-	case "JOIN_OK":
+	case "join_ok":
 		handleJoinResponse(s, e)
 
-	case "JOIN_ERROR":
-		log.Fatalf("Failed to join: %s", e.Message)
+	case "join_error":
+		log.Warnf("Failed to join: %s", e.Message)
 
-	case "PING":
+	case "ping":
 		handlePingRequest(s, e)
 
-	case "ID":
+	case "id":
 		s.Connection.WriteToUDP([]byte(fmt.Sprintf("%s\n", s.Self.ID)), e.Sender)
 
-	case "LIST":
+	case "ls":
 		s.Connection.WriteToUDP([]byte(fmt.Sprintf("OK\n%s\n", strings.ReplaceAll(s.EncodeMembersList(), ";", "\n"))), e.Sender)
 
-	case "KILL":
+	case "kill":
 		log.Fatalf("Kill request received\n")
 
-	case "START_GOSSIP":
+	case "start_gossip":
 		startGossip(s)
 
-	case "STOP_GOSSIP":
+	case "stop_gossip":
 		stopGossip(s)
 
-	case "CONFIG":
+	case "config":
 		handleConfigRequest(s, e)
 
-	case "SUS":
+	case "sus":
 		handleSusRequest(s, e)
 
-	case "LIST_SUS":
+	case "list_sus":
 		handleListSus(s, e)
 
 	default:
@@ -397,28 +394,40 @@ func handleCommand(s *server.Server, command string) {
 		"sus_off: disable gossip suspicion", "help: list all commands"}
 
 	switch strings.ToLower(command) {
+
 	case "ls":
 		fallthrough
 	case "list_mem":
 		printMembershipTable(s)
+
 	case "id":
 		fallthrough
 	case "list_self":
 		fmt.Println(s.Self.ID)
+
 	case "kill":
 		log.Fatalf("Kill command received!")
+
+	case "start_gossip":
+		fallthrough
 	case "join":
 		startGossip(s)
 		fmt.Println("OK")
+
+	case "stop_gossip":
+		fallthrough
 	case "leave":
 		stopGossip(s)
 		fmt.Println("OK")
+
 	case "sus_on":
 		s.SuspicionTimeout = server.T_CLEANUP
 		fmt.Printf("Suspicion Timeout: %f sec\n", s.SuspicionTimeout.Seconds())
+
 	case "sus_off":
 		s.SuspicionTimeout = 0
 		fmt.Println("OK")
+
 	case "help":
 		for i := range commands {
 			fmt.Printf("%d. %s\n", i+1, commands[i])
@@ -428,41 +437,43 @@ func handleCommand(s *server.Server, command string) {
 
 // Send request to join node and start timer
 func sendJoinRequest(s *server.Server) {
-	if s.Introducer || s.Active {
-		return
-	}
+	msg := s.GetJoinMessage()
 
-	addr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", INTRODUCER_HOST, INTRODUCER_PORT))
-	if err != nil {
-		log.Fatal(err)
-	}
+	for _, vm := range CLUSTER {
+		if vm == s.Self.Hostname {
+			continue
+		}
 
-	_, err = s.Connection.WriteToUDP([]byte(s.GetJoinMessage()), addr)
-	if err != nil {
-		log.Println(err)
-		return
+		addr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", vm, DEFAULT_PORT))
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		_, err = s.Connection.WriteToUDP([]byte(msg), addr)
+		if err != nil {
+			log.Println(err)
+			continue
+		}
+
+		log.Printf("Sent join request to %s:%d\n", vm, DEFAULT_PORT)
 	}
 
 	s.TimerManager.RestartTimer(JOIN_TIMER_ID, JOIN_RETRY_TIMEOUT)
-
-	log.Println("Sent join request!")
-
 }
 
 func handleJoinResponse(s *server.Server, e server.ReceiverEvent) {
-	if s.Introducer {
-		return
-	}
 	lines := strings.Split(e.Message, "\n")
-	if len(lines) < 2 {
+	if len(lines) < 2 || s.Active {
 		return
 	}
+
 	s.TimerManager.StopTimer(JOIN_TIMER_ID)
-	s.Active = true
 	s.ProcessMembersList(lines[1], false)
 	s.StartAllTimers()
-	printMembershipTable(s)
+	s.Active = true
 	log.Info("Node join completed.")
+
+	printMembershipTable(s)
 }
 
 // Start the node process and launch all the threads
@@ -473,7 +484,9 @@ func startNode(s *server.Server) {
 	go senderRoutine(s)   // to send gossip messages
 	go inputRoutine(s)    // to receive requests from stdin
 
-	// Blocks until either new message received or timer signals timeout
+	sendJoinRequest(s)
+
+	// Blocks until either new message received or timer sends a signal
 	for {
 		select {
 		case e := <-s.TimerManager.TimeoutChannel:
@@ -525,24 +538,4 @@ func handleJoinRequest(s *server.Server, e server.ReceiverEvent) {
 	}
 
 	printMembershipTable(s)
-}
-
-// Introducer process accepts new hosts and sends full membership list
-func loadKnownHosts(s *server.Server) {
-	log.Info("Loading known hosts...")
-	save_file, err := os.OpenFile(server.SAVE_FILENAME, os.O_CREATE|os.O_RDWR, 0644)
-	if err != nil {
-		log.Fatalf("Failed to open file: %s\n", err.Error())
-	}
-	defer save_file.Close()
-	scanner := bufio.NewScanner(save_file)
-	if scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if len(line) > 0 {
-			s.ProcessMembersList(line, false)
-		}
-	}
-
-	log.Infof("Added %d hosts: %s\n", len(s.Members), s.EncodeMembersList())
-	s.StartAllTimers()
 }
