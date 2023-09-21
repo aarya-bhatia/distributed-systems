@@ -1,5 +1,7 @@
 #!/bin/bash
 
+GIT_BRANCH=aarya
+
 MP1_LOGS=$HOME/mp1.log
 MP2_LOGS=$HOME/mp2.log
 
@@ -25,17 +27,17 @@ if [ ! -d $CS425_REPO ]; then
 fi
 
 cd $CS425_REPO
-git checkout main
-git pull origin main
+git checkout $GIT_BRANCH || git checkout -b $GIT_BRANCH
+git pull origin $GIT_BRANCH
 
 cd $CS425_REPO/mp1
-make clean; make
+make
 pkill -f bin/server
 nohup bin/server $MP1_PORT >$MP1_LOGS 2>&1 &
 echo "MP1 Server is running at $(hostname):$MP1_PORT$"
 
 cd $CS425_REPO/mp2
-make clean; make
+make
 pkill -f ./main
 nohup ./main $(hostname) $MP2_PORT >$MP2_LOGS 2>&1 &
 echo "MP2 Server is running at $(hostname):$MP2_PORT$"
