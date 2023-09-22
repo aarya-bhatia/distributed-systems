@@ -193,7 +193,7 @@ func sendPings(s *server.Server) {
 		return
 	}
 
-	log.Infof("Sending gossip to %d hosts", len(targets))
+	log.Debugf("Sending gossip to %d hosts", len(targets))
 
 	s.MemberLock.Lock()
 	s.Self.Counter++
@@ -401,6 +401,12 @@ func handlePingRequest(s *server.Server, e server.ReceiverEvent) {
 func handleListSus(s *server.Server, e server.ReceiverEvent) {
 	s.MemberLock.Lock()
 	defer s.MemberLock.Unlock()
+
+	if s.SuspicionTimeout == 0 {
+		log.Warn("Suspicion mode is turned off. Enter `sus on` to enable it.")
+		return
+	}
+
 	susMembers := []string{}
 
 	for _, host := range s.Members {
