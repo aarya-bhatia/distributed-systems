@@ -24,17 +24,34 @@ const DEFAULT_PORT = 6000
 const NODES_PER_ROUND = 3 // Number of random peers to send gossip every round
 const ERROR_ILLEGAL_REQUEST = JOIN_ERROR + "\n" + "Illegal Request" + "\n"
 
-var CLUSTER = [...]string{
-	"fa23-cs425-0701.cs.illinois.edu",
-	"fa23-cs425-0702.cs.illinois.edu",
-	"fa23-cs425-0703.cs.illinois.edu",
-	"fa23-cs425-0704.cs.illinois.edu",
-	"fa23-cs425-0705.cs.illinois.edu",
-	"fa23-cs425-0706.cs.illinois.edu",
-	"fa23-cs425-0707.cs.illinois.edu",
-	"fa23-cs425-0708.cs.illinois.edu",
-	"fa23-cs425-0709.cs.illinois.edu",
-	"fa23-cs425-0710.cs.illinois.edu",
+type Node struct {
+	Hostname string
+	Port     int
+}
+
+var cluster = []Node{
+	{"fa23-cs425-0701.cs.illinois.edu", DEFAULT_PORT},
+	{"fa23-cs425-0702.cs.illinois.edu", DEFAULT_PORT},
+	{"fa23-cs425-0703.cs.illinois.edu", DEFAULT_PORT},
+	{"fa23-cs425-0704.cs.illinois.edu", DEFAULT_PORT},
+	{"fa23-cs425-0705.cs.illinois.edu", DEFAULT_PORT},
+	{"fa23-cs425-0706.cs.illinois.edu", DEFAULT_PORT},
+	{"fa23-cs425-0707.cs.illinois.edu", DEFAULT_PORT},
+	{"fa23-cs425-0708.cs.illinois.edu", DEFAULT_PORT},
+	{"fa23-cs425-0709.cs.illinois.edu", DEFAULT_PORT},
+	{"fa23-cs425-0710.cs.illinois.edu", DEFAULT_PORT},
+}
+
+var local_cluster = []Node{
+	{"localhost", 6001},
+	{"localhost", 6002},
+	{"localhost", 6003},
+	{"localhost", 6004},
+	{"localhost", 6005},
+}
+
+func IsIntroducer(s *server.Server) bool {
+	return s.Self.Hostname == cluster[0].Hostname && s.Self.Port == cluster[0].Port
 }
 
 // Starts a UDP server on specified port
@@ -53,6 +70,13 @@ func main() {
 	log.SetOutput(os.Stderr)
 	log.SetLevel(log.DebugLevel)
 
+	if os.Getenv("ENV") == "development" {
+		cluster = local_cluster
+		log.Info("Using local cluster")
+	}
+
+	log.Debug(cluster)
+
 	hostname := os.Args[1]
 
 	var port int = DEFAULT_PORT
@@ -68,6 +92,10 @@ func main() {
 	s, err := server.NewServer(hostname, port)
 	if err != nil {
 		log.Fatal(err)
+	}
+
+	if IsIntroducer(s) {
+		s.Active = true
 	}
 
 	// log.SetLevel(log.DebugLevel)
@@ -159,7 +187,6 @@ func selectRandomTargets(s *server.Server, count int) []*server.Host {
 
 // Timeout signal received from timer
 // Either suspect node or mark failed
-// Updates the known_hosts file for introducer
 func handleTimeout(s *server.Server, e timer.TimerEvent) {
 	s.MemberLock.Lock()
 	defer s.MemberLock.Unlock()
@@ -168,9 +195,17 @@ func handleTimeout(s *server.Server, e timer.TimerEvent) {
 		return
 	}
 
-	if e.ID == JOIN_TIMER_ID && !s.Active {
-		log.Info("Timeout: Retrying JOIN.")
-		sendJoinRequest(s)
+	if e.ID == JOIN_TIMER_ID {
+		if IsIntroducer(s) {
+			if len(s.Members) <= 1 {
+				log.Info("Timeout: Retrying JOIN.")
+				sendJoinRequest(s)
+			}
+		} else if !s.Active {
+			log.Info("Timeout: Retrying JOIN.")
+			sendJoinRequest(s)
+		}
+
 		return
 	}
 
@@ -245,6 +280,10 @@ func receiverRoutine(s *server.Server) {
 }
 
 func startGossip(s *server.Server) {
+	if IsIntroducer(s) {
+		return
+	}
+
 	ID := s.SetUniqueID()
 	log.Debugf("Updated Node ID to %s", ID)
 	s.GossipChannel <- true
@@ -252,6 +291,10 @@ func startGossip(s *server.Server) {
 }
 
 func stopGossip(s *server.Server) {
+	if IsIntroducer(s) {
+		return
+	}
+
 	s.Active = false
 	s.GossipChannel <- false
 	s.MemberLock.Lock()
@@ -439,23 +482,37 @@ func handleCommand(s *server.Server, command string) {
 func sendJoinRequest(s *server.Server) {
 	msg := s.GetJoinMessage()
 
-	for _, vm := range CLUSTER {
-		if vm == s.Self.Hostname {
-			continue
+	if IsIntroducer(s) {
+		for _, vm := range cluster {
+			if vm.Hostname == s.Self.Hostname && vm.Port == s.Self.Port {
+				continue
+			}
+
+			addr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", vm.Hostname, vm.Port))
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			_, err = s.Connection.WriteToUDP([]byte(msg), addr)
+			if err != nil {
+				log.Println(err)
+				continue
+			}
+
+			log.Printf("Sent join request to %s:%d\n", vm.Hostname, vm.Port)
 		}
 
-		addr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", vm, DEFAULT_PORT))
+	} else {
+
+		introducer := cluster[0]
+
+		addr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", introducer.Hostname, introducer.Port))
 		if err != nil {
 			log.Fatal(err)
 		}
 
-		_, err = s.Connection.WriteToUDP([]byte(msg), addr)
-		if err != nil {
-			log.Println(err)
-			continue
-		}
-
-		log.Printf("Sent join request to %s:%d\n", vm, DEFAULT_PORT)
+		s.Connection.WriteToUDP([]byte(msg), addr)
+		log.Printf("Sent join request to %s:%d\n", introducer.Hostname, introducer.Port)
 	}
 
 	s.TimerManager.RestartTimer(JOIN_TIMER_ID, JOIN_RETRY_TIMEOUT)
@@ -463,7 +520,7 @@ func sendJoinRequest(s *server.Server) {
 
 func handleJoinResponse(s *server.Server, e server.ReceiverEvent) {
 	lines := strings.Split(e.Message, "\n")
-	if len(lines) < 2 || s.Active {
+	if len(lines) < 2 || (s.Active && !IsIntroducer(s)) {
 		return
 	}
 
@@ -501,7 +558,7 @@ func startNode(s *server.Server) {
 
 // Function to handle the Join request by new node at any node
 func handleJoinRequest(s *server.Server, e server.ReceiverEvent) {
-	if !s.Active {
+	if !s.Active && !IsIntroducer(s) {
 		return
 	}
 
