@@ -57,7 +57,7 @@ func NewHost(Hostname string, Port int, ID string, Address *net.UDPAddr) *Host {
 	host.Address = Address
 	host.Signature = fmt.Sprintf("%s:%d:%s", Hostname, Port, ID)
 	host.Counter = 0
-	host.UpdatedAt = 0
+	host.UpdatedAt = time.Now().UnixMilli()
 	return host
 }
 
