@@ -439,23 +439,37 @@ func handleCommand(s *server.Server, command string) {
 func sendJoinRequest(s *server.Server) {
 	msg := s.GetJoinMessage()
 
-	for _, vm := range CLUSTER {
-		if vm == s.Self.Hostname {
-			continue
+	introducer := CLUSTER[0]
+
+	if introducer == s.Self.Hostname {
+		for _, vm := range CLUSTER {
+			if vm == s.Self.Hostname {
+				continue
+			}
+
+			addr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", vm, DEFAULT_PORT))
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			_, err = s.Connection.WriteToUDP([]byte(msg), addr)
+			if err != nil {
+				log.Println(err)
+				continue
+			}
+
+			log.Printf("Sent join request to %s:%d\n", vm, DEFAULT_PORT)
 		}
 
-		addr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", vm, DEFAULT_PORT))
+	} else {
+
+		addr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", introducer, DEFAULT_PORT))
 		if err != nil {
 			log.Fatal(err)
 		}
 
-		_, err = s.Connection.WriteToUDP([]byte(msg), addr)
-		if err != nil {
-			log.Println(err)
-			continue
-		}
-
-		log.Printf("Sent join request to %s:%d\n", vm, DEFAULT_PORT)
+		s.Connection.WriteToUDP([]byte(msg), addr)
+		log.Printf("Sent join request to %s:%d\n", introducer, DEFAULT_PORT)
 	}
 
 	s.TimerManager.RestartTimer(JOIN_TIMER_ID, JOIN_RETRY_TIMEOUT)
