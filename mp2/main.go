@@ -22,7 +22,7 @@ const JOIN_OK = "JOIN_OK"
 const JOIN_ERROR = "JOIN_ERROR"
 const JOIN_TIMER_ID = "JOIN_TIMER"
 const DEFAULT_PORT = 6000
-const NODES_PER_ROUND = 3 // Number of random peers to send gossip every round
+const NODES_PER_ROUND = 2 // Number of random peers to send gossip every round
 const ERROR_ILLEGAL_REQUEST = JOIN_ERROR + "\n" + "Illegal Request" + "\n"
 
 type Node struct {
@@ -62,6 +62,7 @@ func main() {
 	var hostname string
 	var level string
 	var env string
+	var withSuspicion bool
 
 	systemHostname, err := os.Hostname()
 	if err != nil {
@@ -72,6 +73,7 @@ func main() {
 	flag.StringVar(&hostname, "h", systemHostname, "server hostname")
 	flag.StringVar(&level, "l", "DEBUG", "log level")
 	flag.StringVar(&env, "e", "production", "environment: development, production")
+	flag.BoolVar(&withSuspicion, "s", false, "gossip with suspicion")
 	flag.Parse()
 
 	if hostname == "localhost" || hostname == "127.0.0.1" {
@@ -106,6 +108,10 @@ func main() {
 	s, err := server.NewServer(hostname, port)
 	if err != nil {
 		log.Fatal(err)
+	}
+
+	if withSuspicion {
+		s.SuspicionTimeout = server.T_CLEANUP
 	}
 
 	if IsIntroducer(s) {
@@ -221,7 +227,7 @@ func selectRandomTargets(s *server.Server, count int) []*server.Host {
 
 	var hosts = []*server.Host{}
 	for _, host := range s.Members {
-		if host.ID != s.Self.ID {
+		if host.ID != s.Self.ID && !host.Suspected {
 			hosts = append(hosts, host)
 		}
 	}
@@ -399,6 +405,7 @@ func handlePingRequest(s *server.Server, e server.ReceiverEvent) {
 	}
 
 	s.ProcessMembersList(lines[1], true)
+	printMembershipTable(s)
 }
 
 func handleListSus(s *server.Server, e server.ReceiverEvent) {
@@ -536,8 +543,12 @@ func handleCommand(s *server.Server, command string) {
 		fmt.Println("OK")
 
 	case "sus_on":
-		s.SuspicionTimeout = server.T_CLEANUP
-		fmt.Printf("Suspicion Timeout: %f sec\n", s.SuspicionTimeout.Seconds())
+		if s.SuspicionTimeout != 0 {
+			fmt.Printf("Suspicion is already enabled: %f sec\n", s.SuspicionTimeout.Seconds())
+		} else {
+			s.SuspicionTimeout = server.T_CLEANUP
+			fmt.Printf("Suspicion Timeout: %f sec\n", s.SuspicionTimeout.Seconds())
+		}
 
 	case "sus_off":
 		s.SuspicionTimeout = 0
