@@ -4,18 +4,19 @@ import (
 	"bufio"
 	"cs425/server"
 	"cs425/timer"
+	"flag"
 	"fmt"
 	"github.com/jedib0t/go-pretty/v6/table"
 	log "github.com/sirupsen/logrus"
 	"math/rand"
 	"net"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 )
 
+const GHOST_REMOVAL_PERIOD = time.Second * 5
 const JOIN_RETRY_TIMEOUT = time.Second * 10
 const JOIN_OK = "JOIN_OK"
 const JOIN_ERROR = "JOIN_ERROR"
@@ -56,9 +57,27 @@ func IsIntroducer(s *server.Server) bool {
 
 // Starts a UDP server on specified port
 func main() {
-	if len(os.Args) < 2 {
-		program := filepath.Base(os.Args[0])
-		log.Fatalf("Usage: %s <hostname> [<port>]", program)
+	var err error
+	var port int
+	var hostname string
+	var level string
+	var env string
+
+	systemHostname, err := os.Hostname()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	flag.IntVar(&port, "p", DEFAULT_PORT, "server port number")
+	flag.StringVar(&hostname, "h", systemHostname, "server hostname")
+	flag.StringVar(&level, "l", "DEBUG", "log level")
+	flag.StringVar(&env, "e", "production", "environment")
+	flag.Parse()
+
+	if env == "development" {
+		cluster = local_cluster
+		hostname = "localhost"
+		log.Info("Using local cluster")
 	}
 
 	log.SetFormatter(&log.TextFormatter{
@@ -68,26 +87,17 @@ func main() {
 
 	log.SetReportCaller(false)
 	log.SetOutput(os.Stderr)
-	log.SetLevel(log.DebugLevel)
 
-	if os.Getenv("ENV") == "development" {
-		cluster = local_cluster
-		log.Info("Using local cluster")
+	switch strings.ToLower(level) {
+	case "debug":
+		log.SetLevel(log.DebugLevel)
+	case "info":
+		log.SetLevel(log.InfoLevel)
+	case "warn":
+		log.SetLevel(log.WarnLevel)
 	}
 
 	log.Debug(cluster)
-
-	hostname := os.Args[1]
-
-	var port int = DEFAULT_PORT
-	var err error
-
-	if len(os.Args) >= 3 {
-		port, err = strconv.Atoi(os.Args[2])
-		if err != nil {
-			log.Fatal(err)
-		}
-	}
 
 	s, err := server.NewServer(hostname, port)
 	if err != nil {
@@ -96,6 +106,7 @@ func main() {
 
 	if IsIntroducer(s) {
 		s.Active = true
+		log.Info("Introducer is online...")
 	}
 
 	// log.SetLevel(log.DebugLevel)
@@ -116,13 +127,49 @@ func main() {
 	startNode(s)
 }
 
+func ghostEntryRemover(s *server.Server) {
+	for {
+		time.Sleep(GHOST_REMOVAL_PERIOD)
+
+		seen := make(map[string]string)
+		s.MemberLock.Lock()
+		c := 0
+
+		for ID, member := range s.Members {
+			address := fmt.Sprintf("%s:%d", member.Hostname, member.Port)
+			found, ok := seen[address]
+			if ok {
+				if s.Members[found].UpdatedAt > member.UpdatedAt {
+					log.Warn("Deleting ghost entry", found)
+					delete(s.Members, ID)
+					c += 1
+					continue
+				} else if s.Members[found].UpdatedAt < member.UpdatedAt {
+					log.Warn("Deleting ghost entry", ID)
+					delete(s.Members, found)
+					c += 1
+					seen[address] = ID
+				}
+			} else {
+				seen[address] = ID
+			}
+		}
+
+		if c == 0 {
+			log.Debug("No ghost entry found")
+		}
+
+		s.MemberLock.Unlock()
+	}
+}
+
 // pretty print membership table
 func printMembershipTable(s *server.Server) {
 	s.MemberLock.Lock()
 	defer s.MemberLock.Unlock()
 	t := table.NewWriter()
 	t.SetOutputMirror(os.Stdout)
-	t.AppendHeader(table.Row{"ID", "ADDRESS", "COUNTER", "UPDATED", "SUS"})
+	t.AppendHeader(table.Row{"ID", "ADDRESS", "COUNT", "UPDATED", "SUS"})
 	rows := []table.Row{}
 	for _, host := range s.Members {
 		// t := time.Unix(0, host.UpdatedAt).Format("15:04:05")
@@ -537,9 +584,10 @@ func handleJoinResponse(s *server.Server, e server.ReceiverEvent) {
 func startNode(s *server.Server) {
 	log.Infof("Node %s is starting...\n", s.Self.ID)
 
-	go receiverRoutine(s) // to receive requests from network
-	go senderRoutine(s)   // to send gossip messages
-	go inputRoutine(s)    // to receive requests from stdin
+	go receiverRoutine(s)   // to receive requests from network
+	go senderRoutine(s)     // to send gossip messages
+	go inputRoutine(s)      // to receive requests from stdin
+	go ghostEntryRemover(s) // periodically remove ghost entries from member table
 
 	sendJoinRequest(s)
 
