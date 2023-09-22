@@ -501,6 +501,10 @@ func startNode(s *server.Server) {
 
 // Function to handle the Join request by new node at any node
 func handleJoinRequest(s *server.Server, e server.ReceiverEvent) {
+	if !s.Active {
+		return
+	}
+
 	message := e.Message
 	lines := strings.Split(message, "\n")
 	tokens := strings.Split(lines[0], " ")
