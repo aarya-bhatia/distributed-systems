@@ -24,7 +24,7 @@ cluster=(
 timeout=3
 
 for vm in "${cluster[@]}"; do
-	echo "vm: $vm"
+	echo "VM: $vm"
 	ping -W $timeout -c 1 $vm
 
 	if [ $? -eq 0 ]; then
@@ -34,5 +34,7 @@ for vm in "${cluster[@]}"; do
 	else
 		echo "Failed to connect to $vm"
 	fi
+
+	sleep 2
 done
 
