@@ -591,6 +591,8 @@ func handleJoinResponse(s *server.Server, e server.ReceiverEvent) {
 		return
 	}
 
+	log.Info("Join accepted by ", e.Sender)
+
 	s.TimerManager.StopTimer(JOIN_TIMER_ID)
 	s.ProcessMembersList(lines[1], false)
 	s.StartAllTimers()
