@@ -122,11 +122,11 @@ func printMembershipTable(s *server.Server) {
 	defer s.MemberLock.Unlock()
 	t := table.NewWriter()
 	t.SetOutputMirror(os.Stdout)
-	t.AppendHeader(table.Row{"ID", "HOSTNAME", "PORT", "COUNTER", "UPDATED_AT", "SUSPECTED"})
+	t.AppendHeader(table.Row{"ID", "ADDRESS", "COUNTER", "UPDATED", "SUS"})
 	rows := []table.Row{}
 	for _, host := range s.Members {
-		t := time.Unix(0, host.UpdatedAt).Format("2006-01-02 15:04:05 MST")
-		rows = append(rows, table.Row{host.ID, host.Hostname, host.Port, host.Counter, t, host.Suspected})
+		// t := time.Unix(0, host.UpdatedAt).Format("15:04:05")
+		rows = append(rows, table.Row{host.ID, fmt.Sprintf("%s:%d", host.Hostname, host.Port), host.Counter, host.UpdatedAt, host.Suspected})
 	}
 	t.AppendRows(rows)
 	t.AppendSeparator()
@@ -600,4 +600,3 @@ func handleJoinRequest(s *server.Server, e server.ReceiverEvent) {
 
 	printMembershipTable(s)
 }
-
