@@ -12,9 +12,9 @@ import (
 	"time"
 )
 
-const T_GOSSIP = 3 * time.Second  // Time duration between each gossip round
-const T_TIMEOUT = 8 * time.Second // Time duration until a peer times out
-const T_CLEANUP = 8 * time.Second // Time duration before peer is deleted
+const T_GOSSIP = 2 * time.Second  // Time duration between each gossip round
+const T_TIMEOUT = 5 * time.Second // Time duration until a peer times out
+const T_CLEANUP = 5 * time.Second // Time duration before peer is deleted
 
 type Host struct {
 	Hostname  string
