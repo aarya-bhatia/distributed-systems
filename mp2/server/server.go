@@ -4,17 +4,19 @@ import (
 	"cs425/timer"
 	"errors"
 	"fmt"
+	"github.com/jedib0t/go-pretty/v6/table"
 	log "github.com/sirupsen/logrus"
 	"net"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 )
 
-const T_GOSSIP = 2 * time.Second  // Time duration between each gossip round
-const T_TIMEOUT = 5 * time.Second // Time duration until a peer times out
-const T_CLEANUP = 5 * time.Second // Time duration before peer is deleted
+const T_GOSSIP = 500 * time.Millisecond   // Time duration between each gossip round
+const T_TIMEOUT = 2500 * time.Millisecond // Time duration until a peer times out
+const T_CLEANUP = 2 * T_TIMEOUT           // Time duration before peer is deleted
 
 type Host struct {
 	Hostname  string
@@ -120,6 +122,11 @@ func (server *Server) AddHost(Hostname string, Port int, ID string) (*Host, erro
 
 	server.Members[ID] = NewHost(Hostname, Port, ID, addr)
 	log.Warnf("Added new host: %s\n", server.Members[ID].Signature)
+
+	server.MemberLock.Unlock()
+	server.PrintMembershipTable()
+	server.MemberLock.Lock()
+
 	return server.Members[ID], nil
 }
 
@@ -142,12 +149,16 @@ func (server *Server) Close() {
 	close(server.InputChannel)
 }
 
-func (server *Server) EncodeMembersList() string {
+func (server *Server) EncodeMembersList(hideSuspected bool) string {
 	server.MemberLock.Lock()
 	defer server.MemberLock.Unlock()
 
 	var arr = []string{}
 	for _, host := range server.Members {
+		if hideSuspected && host.Suspected {
+			continue
+		}
+
 		arr = append(arr, fmt.Sprintf("%s:%d:%d", host.Signature, host.Counter, host.UpdatedAt))
 	}
 	return strings.Join(arr, ";")
@@ -155,6 +166,7 @@ func (server *Server) EncodeMembersList() string {
 
 func (server *Server) ProcessMembersList(message string, withRestartTimer bool) {
 	server.MemberLock.Lock()
+	defer server.MemberLock.Unlock()
 
 	members := strings.Split(message, ";")
 	for _, member := range members {
@@ -197,8 +209,6 @@ func (server *Server) ProcessMembersList(message string, withRestartTimer bool) 
 			}
 		}
 	}
-
-	server.MemberLock.Unlock()
 }
 
 func (server *Server) StartAllTimers() {
@@ -221,5 +231,23 @@ func (s *Server) GetLeaveMessage() string {
 }
 
 func (s *Server) GetPingMessage(targetID string) string {
-	return fmt.Sprintf("PING %s %s\n%s\n", s.Self.Signature, targetID, s.EncodeMembersList())
+	return fmt.Sprintf("PING %s %s\n%s\n", s.Self.Signature, targetID, s.EncodeMembersList(true))
+}
+
+// pretty print membership table
+func (s *Server) PrintMembershipTable() {
+	s.MemberLock.Lock()
+	defer s.MemberLock.Unlock()
+
+	t := table.NewWriter()
+	t.SetOutputMirror(os.Stdout)
+	t.AppendHeader(table.Row{"ID", "ADDRESS", "COUNT", "UPDATED", "SUS"})
+	rows := []table.Row{}
+	for _, host := range s.Members {
+		rows = append(rows, table.Row{host.ID, fmt.Sprintf("%s:%d", host.Hostname, host.Port), host.Counter, host.UpdatedAt, host.Suspected})
+	}
+	t.AppendRows(rows)
+	t.AppendSeparator()
+	t.SetStyle(table.StyleLight)
+	t.Render()
 }
