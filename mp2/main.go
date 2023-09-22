@@ -131,39 +131,36 @@ func main() {
 	startNode(s)
 }
 
+// remove ghost entries from member table
 func ghostEntryRemover(s *server.Server) {
-	for {
-		time.Sleep(GHOST_REMOVAL_PERIOD)
+	s.MemberLock.Lock()
+	defer s.MemberLock.Unlock()
 
-		seen := make(map[string]string)
-		s.MemberLock.Lock()
-		c := 0
+	seen := make(map[string]string)
+	c := 0
 
-		for ID, member := range s.Members {
-			address := fmt.Sprintf("%s:%d", member.Hostname, member.Port)
-			found, ok := seen[address]
-			if ok {
-				if s.Members[found].UpdatedAt > member.UpdatedAt {
-					log.Warn("Deleting ghost entry ", found)
-					delete(s.Members, ID)
-					c += 1
-					continue
-				} else if s.Members[found].UpdatedAt < member.UpdatedAt {
-					log.Warn("Deleting ghost entry ", ID)
-					delete(s.Members, found)
-					c += 1
-					seen[address] = ID
-				}
-			} else {
+	for ID, member := range s.Members {
+		address := fmt.Sprintf("%s:%d", member.Hostname, member.Port)
+		found, ok := seen[address]
+		if ok {
+			if s.Members[found].UpdatedAt > member.UpdatedAt {
+				log.Warn("Deleting ghost entry ", found)
+				delete(s.Members, ID)
+				c += 1
+				continue
+			} else if s.Members[found].UpdatedAt < member.UpdatedAt {
+				log.Warn("Deleting ghost entry ", ID)
+				delete(s.Members, found)
+				c += 1
 				seen[address] = ID
 			}
+		} else {
+			seen[address] = ID
 		}
+	}
 
-		if c == 0 {
-			log.Debug("No ghost entry found")
-		}
-
-		s.MemberLock.Unlock()
+	if c == 0 {
+		log.Debug("No ghost entry found")
 	}
 }
 
@@ -311,6 +308,7 @@ func senderRoutine(s *server.Server) {
 		}
 
 		if active {
+			ghostEntryRemover(s)
 			sendPings(s)
 		}
 	}
@@ -606,10 +604,9 @@ func handleJoinResponse(s *server.Server, e server.ReceiverEvent) {
 func startNode(s *server.Server) {
 	log.Infof("Node %s is starting...\n", s.Self.ID)
 
-	go receiverRoutine(s)   // to receive requests from network
-	go senderRoutine(s)     // to send gossip messages
-	go inputRoutine(s)      // to receive requests from stdin
-	go ghostEntryRemover(s) // periodically remove ghost entries from member table
+	go receiverRoutine(s) // to receive requests from network
+	go senderRoutine(s)   // to send gossip messages
+	go inputRoutine(s)    // to receive requests from stdin
 
 	sendJoinRequest(s)
 
