@@ -71,8 +71,12 @@ func main() {
 	flag.IntVar(&port, "p", DEFAULT_PORT, "server port number")
 	flag.StringVar(&hostname, "h", systemHostname, "server hostname")
 	flag.StringVar(&level, "l", "DEBUG", "log level")
-	flag.StringVar(&env, "e", "production", "environment")
+	flag.StringVar(&env, "e", "production", "environment: development, production")
 	flag.Parse()
+
+	if hostname == "localhost" || hostname == "127.0.0.1" {
+		env = "development"
+	}
 
 	if env == "development" {
 		cluster = local_cluster
@@ -140,12 +144,12 @@ func ghostEntryRemover(s *server.Server) {
 			found, ok := seen[address]
 			if ok {
 				if s.Members[found].UpdatedAt > member.UpdatedAt {
-					log.Warn("Deleting ghost entry", found)
+					log.Warn("Deleting ghost entry ", found)
 					delete(s.Members, ID)
 					c += 1
 					continue
 				} else if s.Members[found].UpdatedAt < member.UpdatedAt {
-					log.Warn("Deleting ghost entry", ID)
+					log.Warn("Deleting ghost entry ", ID)
 					delete(s.Members, found)
 					c += 1
 					seen[address] = ID
@@ -328,6 +332,12 @@ func receiverRoutine(s *server.Server) {
 
 func startGossip(s *server.Server) {
 	if IsIntroducer(s) {
+		log.Warn("Introducer is always active")
+		return
+	}
+
+	if s.Active {
+		log.Warn("server is already active")
 		return
 	}
 
@@ -339,6 +349,12 @@ func startGossip(s *server.Server) {
 
 func stopGossip(s *server.Server) {
 	if IsIntroducer(s) {
+		log.Warn("Introducer is always active")
+		return
+	}
+
+	if !s.Active {
+		log.Warn("server is already inactive")
 		return
 	}
 
