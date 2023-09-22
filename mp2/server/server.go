@@ -246,6 +246,10 @@ func (s *Server) PrintMembershipTable() {
 	for _, host := range s.Members {
 		rows = append(rows, table.Row{host.ID, fmt.Sprintf("%s:%d", host.Hostname, host.Port), host.Counter, host.UpdatedAt, host.Suspected})
 	}
+	t.SortBy([]table.SortBy{
+		{Name: "COUNT", Mode: table.DscNumeric},
+	})
+
 	t.AppendRows(rows)
 	t.AppendSeparator()
 	t.SetStyle(table.StyleLight)
