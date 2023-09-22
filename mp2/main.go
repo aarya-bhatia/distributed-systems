@@ -139,23 +139,28 @@ func ghostEntryRemover(s *server.Server) {
 	seen := make(map[string]string)
 	c := 0
 
-	for ID, member := range s.Members {
+	for cur, member := range s.Members {
 		address := fmt.Sprintf("%s:%d", member.Hostname, member.Port)
-		found, ok := seen[address]
-		if ok {
-			if s.Members[found].UpdatedAt > member.UpdatedAt {
-				log.Warn("Deleting ghost entry ", found)
-				delete(s.Members, ID)
-				c += 1
-				continue
-			} else if s.Members[found].UpdatedAt < member.UpdatedAt {
-				log.Warn("Deleting ghost entry ", ID)
-				delete(s.Members, found)
-				c += 1
-				seen[address] = ID
-			}
-		} else {
-			seen[address] = ID
+		prev, ok := seen[address]
+		if !ok {
+			seen[address] = cur
+			continue
+		}
+
+		prevUpdateTime := s.Members[prev].UpdatedAt
+		curUpdateTime := member.UpdatedAt
+
+		log.Debugf("prev %s, cur %s, prev update: %d, cur update: %d", prev, cur, prevUpdateTime, curUpdateTime)
+
+		if prevUpdateTime > curUpdateTime { // previous entry was updated more recently than current entry
+			log.Warn("Deleting ghost entry ", cur)
+			delete(s.Members, cur)
+			c += 1
+		} else if prevUpdateTime < curUpdateTime { // current entry was updated more recently than previous entry
+			log.Warn("Deleting ghost entry ", prev)
+			delete(s.Members, prev)
+			c += 1
+			seen[address] = cur
 		}
 	}
 
@@ -308,7 +313,7 @@ func senderRoutine(s *server.Server) {
 		}
 
 		if active {
-			ghostEntryRemover(s)
+			// ghostEntryRemover(s)
 			sendPings(s)
 		}
 	}
