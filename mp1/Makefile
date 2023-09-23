@@ -2,8 +2,11 @@ CC=g++
 INCLUDES=-Isrc
 CFLAGS=-DDEBUG -D_GNU_SOURCE -std=c++14 -g \
 	   -Wall -Wextra -Werror -Wno-pointer-arith -pedantic -O0 \
+	  -Wno-gnu-zero-variadic-macro-arguments \
+	  -Wno-deprecated-declarations \
 	   -gdwarf-4 -MMD -MP $(INCLUDES) -c
-LDFLAGS=-Llib -pthread
+
+LDFLAGS=-pthread
 # LINKLIBS += -fsanitize=thread
 
 .PHONY: all clean
