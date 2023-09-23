@@ -192,7 +192,7 @@ func selectRandomTargets(s *server.Server, count int) []*server.Host {
 
 	var hosts = []*server.Host{}
 	for _, host := range s.Members {
-		if host.ID != s.Self.ID && !host.Suspected {
+		if host.ID != s.Self.ID && host.State == server.NODE_ALIVE {
 			hosts = append(hosts, host)
 		}
 	}
@@ -241,36 +241,27 @@ func HandleTimeout(s *server.Server, e timer.TimerEvent) {
 		return
 	}
 
-	if host.Failed {
+	if host.State == server.NODE_ALIVE {
+		if s.Protocol == server.GOSSIP_PROTOCOL {
+			log.Warnf("FAILURE DETECTED: Node %s is considered failed\n", e.ID)
+			host.State = server.NODE_FAILED
+		} else {
+			log.Warnf("FAILURE SUSPECTED: Node %s is suspected of failure\n", e.ID)
+			host.State = server.NODE_SUSPECTED
+		}
+		s.RestartTimer(e.ID, host.State)
+	} else if host.State == server.NODE_SUSPECTED {
+		log.Warnf("FAILURE DETECTED: Node %s is considered failed\n", e.ID)
+		host.State = server.NODE_FAILED
+		s.RestartTimer(e.ID, host.State)
+	} else if host.State == server.NODE_FAILED {
 		log.Warn("Deleting node from membership list...", e.ID)
 		delete(s.Members, e.ID)
-		return
-	}
-
-	if !host.Suspected {
-		log.Warnf("FAILURE SUSPECTED: Node %s is suspected of failure\n", e.ID)
-		host.Suspected = true
-		s.TimerManager.RestartTimer(e.ID, s.SuspicionTimeout)
-		return
-	}
-
-	log.Warnf("FAILURE DETECTED: Node %s is considered failed\n", e.ID)
-	host.Failed = true
-
-	if s.Protocol == server.GOSSIP_PROTOCOL {
-		delete(s.Members, e.ID)
-	}
-
-	if s.Protocol == server.GOSPSIP_SUSPICION_PROTOCOL {
-		log.Debug("Starting final cleanup timer")
-		s.TimerManager.RestartTimer(e.ID, server.T_FINAL)
 	}
 
 	s.MemberLock.Unlock()
 	s.PrintMembershipTable()
 	s.MemberLock.Lock()
-
-	return
 }
 
 // This routine gossips the membership list every GossipPeriod.
@@ -286,7 +277,7 @@ func senderRoutine(s *server.Server) {
 			} else {
 				log.Info("Stopping gossip...")
 			}
-		case <-time.After(s.GossipPeriod):
+		case <-time.After(server.T_GOSSIP):
 			break
 		}
 

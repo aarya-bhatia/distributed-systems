@@ -86,7 +86,7 @@ func HandleRequest(s *server.Server, e server.ReceiverEvent) {
 		s.Connection.WriteToUDP([]byte(fmt.Sprintf("%s\n", s.Self.ID)), e.Sender)
 
 	case "ls":
-		s.Connection.WriteToUDP([]byte(fmt.Sprintf("OK\n%s\n", strings.ReplaceAll(s.EncodeMembersList(false), ";", "\n"))), e.Sender)
+		s.Connection.WriteToUDP([]byte(fmt.Sprintf("OK\n%s\n", strings.ReplaceAll(s.EncodeMembersList(), ";", "\n"))), e.Sender)
 
 	case "kill":
 		log.Fatalf("Kill request received\n")
@@ -178,7 +178,7 @@ func HandleListSus(s *server.Server, e server.ReceiverEvent) {
 	arr := []string{}
 
 	for _, host := range s.Members {
-		if host.Suspected {
+		if host.State == server.NODE_SUSPECTED {
 			arr = append(arr, host.Signature)
 		}
 	}
@@ -236,7 +236,7 @@ func HandleJoinRequest(s *server.Server, e server.ReceiverEvent) {
 		return
 	}
 
-	reply := fmt.Sprintf("%s\n%s\n", JOIN_OK, s.EncodeMembersList(true))
+	reply := fmt.Sprintf("%s\n%s\n", JOIN_OK, s.EncodeMembersList())
 	_, err = s.Connection.WriteToUDP([]byte(reply), host.Address)
 	if err != nil {
 		log.Error(err)
