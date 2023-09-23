@@ -192,7 +192,7 @@ func selectRandomTargets(s *server.Server, count int) []*server.Host {
 
 	var hosts = []*server.Host{}
 	for _, host := range s.Members {
-		if host.ID != s.Self.ID && host.State == server.NODE_ALIVE {
+		if host.ID != s.Self.ID {
 			hosts = append(hosts, host)
 		}
 	}
@@ -243,19 +243,19 @@ func HandleTimeout(s *server.Server, e timer.TimerEvent) {
 
 	if host.State == server.NODE_ALIVE {
 		if s.Protocol == server.GOSSIP_PROTOCOL {
-			log.Warnf("FAILURE DETECTED: Node %s is considered failed\n", e.ID)
+			log.Warnf("FAILURE DETECTED: Node %s is considered failed\n", host.Signature)
 			host.State = server.NODE_FAILED
 		} else {
-			log.Warnf("FAILURE SUSPECTED: Node %s is suspected of failure\n", e.ID)
+			log.Warnf("FAILURE SUSPECTED: Node %s is suspected of failure\n", host.Signature)
 			host.State = server.NODE_SUSPECTED
 		}
 		s.RestartTimer(e.ID, host.State)
 	} else if host.State == server.NODE_SUSPECTED {
-		log.Warnf("FAILURE DETECTED: Node %s is considered failed\n", e.ID)
+		log.Warnf("FAILURE DETECTED: Node %s is considered failed\n", host.Signature)
 		host.State = server.NODE_FAILED
 		s.RestartTimer(e.ID, host.State)
 	} else if host.State == server.NODE_FAILED {
-		log.Warn("Deleting node from membership list...", e.ID)
+		log.Warn("Deleting node from membership list...", host.Signature)
 		delete(s.Members, e.ID)
 	}
 
