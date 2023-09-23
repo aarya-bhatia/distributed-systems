@@ -4,20 +4,33 @@ import (
 	"cs425/timer"
 	"errors"
 	"fmt"
+	"github.com/jedib0t/go-pretty/v6/table"
 	log "github.com/sirupsen/logrus"
 	"net"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 )
 
-const T_GOSSIP = 5 * time.Second   // Time duration between each gossip round
-const T_TIMEOUT = 10 * time.Second // Time duration until a peer times out
-const T_CLEANUP = 10 * time.Second // Time duration before peer is deleted
-const MAX_RECENTLY_DELETED = 10
+const (
+	GOSSIP_PROTOCOL            = 0
+	GOSPSIP_SUSPICION_PROTOCOL = 1
+)
 
-const SAVE_FILENAME = "known_hosts"
+const (
+	NODE_ALIVE     = 0
+	NODE_SUSPECTED = 1
+	NODE_FAILED    = 2
+)
+
+const (
+	T_GOSSIP  = 2000 * time.Millisecond
+	T_SUSPECT = 4000 * time.Millisecond
+	T_FAIL    = 4000 * time.Millisecond
+	T_CLEANUP = 8000 * time.Millisecond
+)
 
 type Host struct {
 	Hostname  string
@@ -27,7 +40,7 @@ type Host struct {
 	ID        string
 	Counter   int   // heartbeat counter
 	UpdatedAt int64 // local timestamp when counter last updated
-	Suspected bool  // whether the node is suspected of failure
+	State     int
 }
 
 type ReceiverEvent struct {
@@ -36,21 +49,18 @@ type ReceiverEvent struct {
 }
 
 type Server struct {
-	Active           bool
-	Self             *Host
-	Connection       *net.UDPConn
-	Members          map[string]*Host
-	MemberLock       sync.Mutex
-	DropRate         int
-	TotalByte        int
-	TimerManager     *timer.TimerManager
-	GossipPeriod     time.Duration
-	SuspicionTimeout time.Duration
-	GossipTimeout    time.Duration
-	GossipChannel    chan bool
-	ReceiverChannel  chan ReceiverEvent
-	InputChannel     chan string
-	// RecentlyDeleted  map[string]bool
+	Active          bool
+	Self            *Host
+	Connection      *net.UDPConn
+	Members         map[string]*Host
+	MemberLock      sync.Mutex
+	DropRate        int
+	TotalByte       int
+	TimerManager    *timer.TimerManager
+	GossipChannel   chan bool
+	ReceiverChannel chan ReceiverEvent
+	InputChannel    chan string
+	Protocol        int
 }
 
 func NewHost(Hostname string, Port int, ID string, Address *net.UDPAddr) *Host {
@@ -61,7 +71,8 @@ func NewHost(Hostname string, Port int, ID string, Address *net.UDPAddr) *Host {
 	host.Address = Address
 	host.Signature = fmt.Sprintf("%s:%d:%s", Hostname, Port, ID)
 	host.Counter = 0
-	host.UpdatedAt = 0
+	host.UpdatedAt = time.Now().UnixMilli()
+	host.State = NODE_ALIVE
 	return host
 }
 
@@ -96,34 +107,15 @@ func NewServer(Hostname string, Port int) (*Server, error) {
 	server.TimerManager = timer.NewTimerManager()
 	server.DropRate = 0
 	server.TotalByte = 0
-	server.GossipPeriod = T_GOSSIP
-	server.GossipTimeout = T_TIMEOUT
-	server.SuspicionTimeout = 0
 	server.GossipChannel = make(chan bool)
 	server.ReceiverChannel = make(chan ReceiverEvent)
 	server.InputChannel = make(chan string)
-	// server.RecentlyDeleted = make(map[string]bool)
+	server.Protocol = GOSSIP_PROTOCOL
 
 	server.SetUniqueID()
 
 	return server, nil
 }
-
-// func (server *Server) RemoveHost(ID string) {
-// 	server.MemberLock.Lock()
-// 	defer server.MemberLock.Unlock()
-// 	found, ok := server.Members[ID]
-// 	if !ok {
-// 		return
-// 	}
-//
-// 	if len(server.RecentlyDeleted) == MAX_RECENTLY_DELETED {
-// 		server.RecentlyDeleted = append(server.RecentlyDeleted[1:], )
-// 	}
-//
-// 	delete(server.Members, ID)
-// 	server.TimerManager.StopTimer(ID)
-// }
 
 func (server *Server) AddHost(Hostname string, Port int, ID string) (*Host, error) {
 	server.MemberLock.Lock()
@@ -141,6 +133,11 @@ func (server *Server) AddHost(Hostname string, Port int, ID string) (*Host, erro
 
 	server.Members[ID] = NewHost(Hostname, Port, ID, addr)
 	log.Warnf("Added new host: %s\n", server.Members[ID].Signature)
+
+	server.MemberLock.Unlock()
+	server.PrintMembershipTable()
+	server.MemberLock.Lock()
+
 	return server.Members[ID], nil
 }
 
@@ -163,84 +160,154 @@ func (server *Server) Close() {
 	close(server.InputChannel)
 }
 
+// Each member is encoded as "host:port:id:counter:state"
 func (server *Server) EncodeMembersList() string {
 	server.MemberLock.Lock()
 	defer server.MemberLock.Unlock()
 
 	var arr = []string{}
 	for _, host := range server.Members {
-		arr = append(arr, fmt.Sprintf("%s:%d:%d", host.Signature, host.Counter, host.UpdatedAt))
+		arr = append(arr, fmt.Sprintf("%s:%d:%s:%d:%d", host.Hostname, host.Port, host.ID, host.Counter, host.State))
 	}
 	return strings.Join(arr, ";")
-}
-
-func (server *Server) ProcessMembersList(message string, withRestartTimer bool) {
-	server.MemberLock.Lock()
-
-	members := strings.Split(message, ";")
-	for _, member := range members {
-		tokens := strings.Split(member, ":")
-		if len(tokens) < 4 {
-			continue
-		}
-
-		timeNow := time.Now().UnixMilli()
-		memberHost, memberPort, memberID, memberCounter := tokens[0], tokens[1], tokens[2], tokens[3]
-
-		if memberID == server.Self.ID {
-			continue
-		}
-
-		memberPortInt, err := strconv.Atoi(memberPort)
-		if err != nil {
-			continue
-		}
-
-		memberCounterInt, err := strconv.Atoi(memberCounter)
-		if err != nil {
-			continue
-		}
-
-		if _, ok := server.Members[memberID]; !ok {
-			server.MemberLock.Unlock()
-			server.AddHost(memberHost, memberPortInt, memberID)
-			server.MemberLock.Lock()
-		}
-
-		found, _ := server.Members[memberID]
-		if found.Counter < memberCounterInt {
-			found.Counter = memberCounterInt
-			found.UpdatedAt = timeNow
-			found.Suspected = false
-
-			if withRestartTimer {
-				server.TimerManager.RestartTimer(memberID, server.GossipTimeout)
-			}
-		}
-	}
-
-	server.MemberLock.Unlock()
-}
-
-func (server *Server) StartAllTimers() {
-	server.MemberLock.Lock()
-	defer server.MemberLock.Unlock()
-
-	for ID := range server.Members {
-		if ID != server.Self.ID {
-			server.TimerManager.RestartTimer(ID, server.GossipTimeout)
-		}
-	}
 }
 
 func (s *Server) GetJoinMessage() string {
 	return fmt.Sprintf("JOIN %s\n", s.Self.Signature)
 }
 
-func (s *Server) GetLeaveMessage() string {
-	return fmt.Sprintf("LEAVE %s\n", s.Self.Signature)
-}
-
 func (s *Server) GetPingMessage(targetID string) string {
 	return fmt.Sprintf("PING %s %s\n%s\n", s.Self.Signature, targetID, s.EncodeMembersList())
+}
+
+func StateToString(state int) string {
+	if state == NODE_ALIVE {
+		return "alive"
+	} else if state == NODE_SUSPECTED {
+		return "suspected"
+	} else if state == NODE_FAILED {
+		return "failed"
+	}
+	return "unkown"
+}
+
+// pretty print membership table
+func (s *Server) PrintMembershipTable() {
+	s.MemberLock.Lock()
+	defer s.MemberLock.Unlock()
+
+	t := table.NewWriter()
+	t.SetOutputMirror(os.Stdout)
+	t.AppendHeader(table.Row{"ID", "ADDRESS", "COUNT", "UPDATED", "STATE"})
+
+	rows := []table.Row{}
+
+	for _, host := range s.Members {
+		rows = append(rows, table.Row{
+			host.ID, fmt.Sprintf("%s:%d", host.Hostname, host.Port),
+			host.Counter, host.UpdatedAt, StateToString(host.State),
+		})
+	}
+
+	t.SortBy([]table.SortBy{
+		{Name: "COUNT", Mode: table.DscNumeric},
+	})
+
+	t.AppendRows(rows)
+	t.AppendSeparator()
+	t.SetStyle(table.StyleLight)
+	t.Render()
+}
+
+func (s *Server) RestartTimer(ID string, state int) {
+	if state == NODE_ALIVE {
+		if s.Protocol == GOSSIP_PROTOCOL {
+			s.TimerManager.RestartTimer(ID, T_FAIL)
+		} else {
+			s.TimerManager.RestartTimer(ID, T_SUSPECT)
+		}
+	} else if state == NODE_SUSPECTED {
+		s.TimerManager.RestartTimer(ID, T_FAIL)
+	} else if state == NODE_FAILED {
+		s.TimerManager.RestartTimer(ID, T_CLEANUP)
+	}
+}
+
+// To merge membership tables
+func (s *Server) processRow(tokens []string) {
+	s.MemberLock.Lock()
+	defer s.MemberLock.Unlock()
+
+	if len(tokens) < 5 {
+		return
+	}
+
+	timeNow := time.Now().UnixMilli()
+
+	host, portStr, ID, countStr, stateStr := tokens[0], tokens[1], tokens[2], tokens[3], tokens[4]
+	port, _ := strconv.Atoi(portStr)
+	count, _ := strconv.Atoi(countStr)
+	state, _ := strconv.Atoi(stateStr)
+
+	// Handle entry for current server
+	if ID == s.Self.ID {
+		if state == NODE_FAILED {
+			// TODO: Restart Gossip with new ID.
+			log.Fatal("Node has failed!")
+		}
+		return
+	}
+
+	found, ok := s.Members[ID]
+
+	// Do not add a failed node back
+	if !ok && state == NODE_FAILED {
+		return
+	}
+
+	// New member
+	if !ok {
+		s.MemberLock.Unlock()
+		s.AddHost(host, port, ID)
+		s.MemberLock.Lock()
+
+		// Update new member
+		if newMember, ok := s.Members[ID]; ok {
+			newMember.Counter = count
+			newMember.UpdatedAt = timeNow
+			newMember.State = state
+			s.RestartTimer(ID, state)
+		}
+		return
+	}
+
+	// failed state overrides everything
+	if found.State == NODE_FAILED {
+		return
+	}
+
+	// higher count overrides alive or suspected state
+	if found.Counter < count {
+		found.Counter = count
+		found.UpdatedAt = timeNow
+		found.State = state
+		s.RestartTimer(ID, state)
+		return
+	}
+
+	// within same counter, suspected or failed state overrides alive state
+	if found.Counter == count && found.State == NODE_ALIVE && state != NODE_ALIVE {
+		found.State = state
+		found.UpdatedAt = timeNow
+		s.RestartTimer(ID, state)
+		return
+	}
+}
+
+func (s *Server) ProcessMembersList(message string) {
+	members := strings.Split(message, ";")
+	for _, member := range members {
+		tokens := strings.Split(member, ":")
+		s.processRow(tokens)
+	}
 }

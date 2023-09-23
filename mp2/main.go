@@ -4,14 +4,12 @@ import (
 	"bufio"
 	"cs425/server"
 	"cs425/timer"
+	"flag"
 	"fmt"
-	"github.com/jedib0t/go-pretty/v6/table"
 	log "github.com/sirupsen/logrus"
 	"math/rand"
 	"net"
 	"os"
-	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -21,27 +19,64 @@ const JOIN_OK = "JOIN_OK"
 const JOIN_ERROR = "JOIN_ERROR"
 const JOIN_TIMER_ID = "JOIN_TIMER"
 const DEFAULT_PORT = 6000
-const NODES_PER_ROUND = 3 // Number of random peers to send gossip every round
+const NODES_PER_ROUND = 5 // Number of random peers to send gossip every round
 const ERROR_ILLEGAL_REQUEST = JOIN_ERROR + "\n" + "Illegal Request" + "\n"
 
-var CLUSTER = [...]string{
-	"fa23-cs425-0701.cs.illinois.edu",
-	"fa23-cs425-0702.cs.illinois.edu",
-	"fa23-cs425-0703.cs.illinois.edu",
-	"fa23-cs425-0704.cs.illinois.edu",
-	"fa23-cs425-0705.cs.illinois.edu",
-	"fa23-cs425-0706.cs.illinois.edu",
-	"fa23-cs425-0707.cs.illinois.edu",
-	"fa23-cs425-0708.cs.illinois.edu",
-	"fa23-cs425-0709.cs.illinois.edu",
-	"fa23-cs425-0710.cs.illinois.edu",
+type Node struct {
+	Hostname string
+	Port     int
+}
+
+var cluster = []Node{
+	{"fa23-cs425-0701.cs.illinois.edu", DEFAULT_PORT},
+	{"fa23-cs425-0702.cs.illinois.edu", DEFAULT_PORT},
+	{"fa23-cs425-0703.cs.illinois.edu", DEFAULT_PORT},
+	{"fa23-cs425-0704.cs.illinois.edu", DEFAULT_PORT},
+	{"fa23-cs425-0705.cs.illinois.edu", DEFAULT_PORT},
+	{"fa23-cs425-0706.cs.illinois.edu", DEFAULT_PORT},
+	{"fa23-cs425-0707.cs.illinois.edu", DEFAULT_PORT},
+	{"fa23-cs425-0708.cs.illinois.edu", DEFAULT_PORT},
+	{"fa23-cs425-0709.cs.illinois.edu", DEFAULT_PORT},
+	{"fa23-cs425-0710.cs.illinois.edu", DEFAULT_PORT},
+}
+
+var local_cluster = []Node{
+	{"localhost", 6001},
+	{"localhost", 6002},
+	{"localhost", 6003},
+	{"localhost", 6004},
+	{"localhost", 6005},
 }
 
 // Starts a UDP server on specified port
 func main() {
-	if len(os.Args) < 2 {
-		program := filepath.Base(os.Args[0])
-		log.Fatalf("Usage: %s <hostname> [<port>]", program)
+	var err error
+	var port int
+	var hostname string
+	var level string
+	var env string
+	var withSuspicion bool
+
+	systemHostname, err := os.Hostname()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	flag.IntVar(&port, "p", DEFAULT_PORT, "server port number")
+	flag.StringVar(&hostname, "h", systemHostname, "server hostname")
+	flag.StringVar(&level, "l", "DEBUG", "log level")
+	flag.StringVar(&env, "e", "production", "environment: development, production")
+	flag.BoolVar(&withSuspicion, "s", false, "gossip with suspicion")
+	flag.Parse()
+
+	if hostname == "localhost" || hostname == "127.0.0.1" {
+		env = "development"
+	}
+
+	if env == "development" {
+		cluster = local_cluster
+		hostname = "localhost"
+		log.Info("Using local cluster")
 	}
 
 	log.SetFormatter(&log.TextFormatter{
@@ -51,23 +86,30 @@ func main() {
 
 	log.SetReportCaller(false)
 	log.SetOutput(os.Stderr)
-	log.SetLevel(log.DebugLevel)
 
-	hostname := os.Args[1]
-
-	var port int = DEFAULT_PORT
-	var err error
-
-	if len(os.Args) >= 3 {
-		port, err = strconv.Atoi(os.Args[2])
-		if err != nil {
-			log.Fatal(err)
-		}
+	switch strings.ToLower(level) {
+	case "debug":
+		log.SetLevel(log.DebugLevel)
+	case "info":
+		log.SetLevel(log.InfoLevel)
+	case "warn":
+		log.SetLevel(log.WarnLevel)
 	}
+
+	log.Debug(cluster)
 
 	s, err := server.NewServer(hostname, port)
 	if err != nil {
 		log.Fatal(err)
+	}
+
+	if withSuspicion {
+		s.Protocol = server.GOSPSIP_SUSPICION_PROTOCOL
+	}
+
+	if IsIntroducer(s) {
+		s.Active = true
+		log.Info("Introducer is online...")
 	}
 
 	// log.SetLevel(log.DebugLevel)
@@ -88,22 +130,32 @@ func main() {
 	startNode(s)
 }
 
-// pretty print membership table
-func printMembershipTable(s *server.Server) {
-	s.MemberLock.Lock()
-	defer s.MemberLock.Unlock()
-	t := table.NewWriter()
-	t.SetOutputMirror(os.Stdout)
-	t.AppendHeader(table.Row{"ID", "HOSTNAME", "PORT", "COUNTER", "UPDATED_AT", "SUSPECTED"})
-	rows := []table.Row{}
-	for _, host := range s.Members {
-		t := time.Unix(0, host.UpdatedAt).Format("2006-01-02 15:04:05 MST")
-		rows = append(rows, table.Row{host.ID, host.Hostname, host.Port, host.Counter, t, host.Suspected})
+// Fix the first node as the introducer
+func IsIntroducer(s *server.Server) bool {
+	return s.Self.Hostname == cluster[0].Hostname && s.Self.Port == cluster[0].Port
+}
+
+// Start the node process and launch all the threads
+func startNode(s *server.Server) {
+	log.Infof("Node %s is starting...\n", s.Self.ID)
+
+	go receiverRoutine(s) // to receive requests from network
+	go senderRoutine(s)   // to send gossip messages
+	go inputRoutine(s)    // to receive requests from stdin
+
+	sendJoinRequest(s)
+
+	// Blocks until either new message received or timer sends a signal
+	for {
+		select {
+		case e := <-s.TimerManager.TimeoutChannel:
+			HandleTimeout(s, e)
+		case e := <-s.ReceiverChannel:
+			HandleRequest(s, e)
+		case e := <-s.InputChannel:
+			HandleCommand(s, e)
+		}
 	}
-	t.AppendRows(rows)
-	t.AppendSeparator()
-	t.SetStyle(table.StyleLight)
-	t.Render()
 }
 
 // Sends membership list to random subset of peers every T_gossip period
@@ -114,7 +166,7 @@ func sendPings(s *server.Server) {
 		return
 	}
 
-	log.Infof("Sending gossip to %d hosts", len(targets))
+	log.Debugf("Sending gossip to %d hosts", len(targets))
 
 	s.MemberLock.Lock()
 	s.Self.Counter++
@@ -140,7 +192,7 @@ func selectRandomTargets(s *server.Server, count int) []*server.Host {
 
 	var hosts = []*server.Host{}
 	for _, host := range s.Members {
-		if host.ID != s.Self.ID {
+		if host.ID != s.Self.ID && host.State == server.NODE_ALIVE {
 			hosts = append(hosts, host)
 		}
 	}
@@ -159,52 +211,57 @@ func selectRandomTargets(s *server.Server, count int) []*server.Host {
 
 // Timeout signal received from timer
 // Either suspect node or mark failed
-// Updates the known_hosts file for introducer
-func handleTimeout(s *server.Server, e timer.TimerEvent) {
+func HandleTimeout(s *server.Server, e timer.TimerEvent) {
 	s.MemberLock.Lock()
 	defer s.MemberLock.Unlock()
 
+	// should never happen btw
 	if e.ID == s.Self.ID {
 		return
 	}
 
-	if e.ID == JOIN_TIMER_ID && !s.Active {
-		log.Info("Timeout: Retrying JOIN.")
-		sendJoinRequest(s)
+	if e.ID == JOIN_TIMER_ID {
+		if IsIntroducer(s) {
+			if len(s.Members) <= 1 {
+				log.Info("Timeout: Retrying JOIN.")
+				sendJoinRequest(s)
+			}
+		} else if !s.Active {
+			log.Info("Timeout: Retrying JOIN.")
+			sendJoinRequest(s)
+		}
+
 		return
 	}
 
-	if host, ok := s.Members[e.ID]; ok {
-		if host.Suspected || s.SuspicionTimeout == 0 {
+	host, ok := s.Members[e.ID]
+
+	// Ignore timeout for node which does not exist
+	if !ok {
+		return
+	}
+
+	if host.State == server.NODE_ALIVE {
+		if s.Protocol == server.GOSSIP_PROTOCOL {
 			log.Warnf("FAILURE DETECTED: Node %s is considered failed\n", e.ID)
-			delete(s.Members, e.ID)
+			host.State = server.NODE_FAILED
 		} else {
 			log.Warnf("FAILURE SUSPECTED: Node %s is suspected of failure\n", e.ID)
-			host.Suspected = true
-			s.TimerManager.RestartTimer(e.ID, s.SuspicionTimeout)
+			host.State = server.NODE_SUSPECTED
 		}
-
-		s.MemberLock.Unlock()
-		printMembershipTable(s)
-		s.MemberLock.Lock()
-
-		return
+		s.RestartTimer(e.ID, host.State)
+	} else if host.State == server.NODE_SUSPECTED {
+		log.Warnf("FAILURE DETECTED: Node %s is considered failed\n", e.ID)
+		host.State = server.NODE_FAILED
+		s.RestartTimer(e.ID, host.State)
+	} else if host.State == server.NODE_FAILED {
+		log.Warn("Deleting node from membership list...", e.ID)
+		delete(s.Members, e.ID)
 	}
-}
 
-// Handle config command: CONFIG <field to change> <value>
-func handleConfigRequest(s *server.Server, e server.ReceiverEvent) {
-	words := strings.Split(e.Message, " ")
-	if len(words) < 3 {
-		return
-	}
-	if words[1] == "DROPRATE" {
-		dropRate, err := strconv.Atoi(words[2])
-		if err != nil {
-			return
-		}
-		s.DropRate = dropRate
-	}
+	s.MemberLock.Unlock()
+	s.PrintMembershipTable()
+	s.MemberLock.Lock()
 }
 
 // This routine gossips the membership list every GossipPeriod.
@@ -220,11 +277,12 @@ func senderRoutine(s *server.Server) {
 			} else {
 				log.Info("Stopping gossip...")
 			}
-		case <-time.After(s.GossipPeriod):
+		case <-time.After(server.T_GOSSIP):
 			break
 		}
 
 		if active {
+			// ghostEntryRemover(s)
 			sendPings(s)
 		}
 	}
@@ -245,6 +303,16 @@ func receiverRoutine(s *server.Server) {
 }
 
 func startGossip(s *server.Server) {
+	if IsIntroducer(s) {
+		log.Warn("Introducer is always active")
+		return
+	}
+
+	if s.Active {
+		log.Warn("server is already active")
+		return
+	}
+
 	ID := s.SetUniqueID()
 	log.Debugf("Updated Node ID to %s", ID)
 	s.GossipChannel <- true
@@ -252,6 +320,16 @@ func startGossip(s *server.Server) {
 }
 
 func stopGossip(s *server.Server) {
+	if IsIntroducer(s) {
+		log.Warn("Introducer is always active")
+		return
+	}
+
+	if !s.Active {
+		log.Warn("server is already inactive")
+		return
+	}
+
 	s.Active = false
 	s.GossipChannel <- false
 	s.MemberLock.Lock()
@@ -260,119 +338,6 @@ func stopGossip(s *server.Server) {
 	}
 	s.MemberLock.Unlock()
 	s.TimerManager.StopAll()
-}
-
-func handlePingRequest(s *server.Server, e server.ReceiverEvent) {
-	if !s.Active {
-		log.Debugf("PING from %s dropped as server is inactive\n", e)
-		return
-	}
-
-	lines := strings.Split(e.Message, "\n")
-	if len(lines) < 2 {
-		return
-	}
-
-	tokens := strings.Split(lines[0], " ")
-	if len(tokens) < 3 {
-		log.Debugf("Illegal header for PING request: %s\n", lines[0])
-		return
-	}
-
-	if rand.Intn(100) < s.DropRate {
-		log.Debugf("PING from %s dropped with drop rate %d %%\n", e, s.DropRate)
-		return
-	}
-
-	if tokens[2] != s.Self.ID {
-		log.Debugf("Dropped PING due to ID mismatch: %s\n", tokens[2])
-		return
-	}
-
-	s.ProcessMembersList(lines[1], true)
-}
-
-func handleListSus(s *server.Server, e server.ReceiverEvent) {
-	s.MemberLock.Lock()
-	defer s.MemberLock.Unlock()
-	susMembers := []string{}
-
-	for _, host := range s.Members {
-		if host.Suspected {
-			susMembers = append(susMembers, host.Signature)
-		}
-	}
-
-	reply := fmt.Sprintf("OK\n%s\n", strings.Join(susMembers, "\n"))
-	s.Connection.WriteToUDP([]byte(reply), e.Sender)
-}
-
-func handleSusRequest(s *server.Server, e server.ReceiverEvent) {
-	lines := strings.Split(e.Message, "\n")
-	tokens := strings.Split(lines[0], " ")
-	if len(tokens) < 2 {
-		return
-	}
-	if strings.ToUpper(tokens[1]) == "ON" {
-		s.SuspicionTimeout = server.T_CLEANUP
-	} else if strings.ToUpper(tokens[1]) == "OFF" {
-		s.SuspicionTimeout = 0
-	}
-}
-
-// Handles the request received by the server
-// JOIN, PING, ID, LIST, KILL, START_GOSSIP, STOP_GOSSIP, CONFIG, SUS ON, SUS OFF, LIST_SUS
-func handleRequest(s *server.Server, e server.ReceiverEvent) {
-	lines := strings.Split(e.Message, "\n")
-	if len(lines) < 1 {
-		return
-	}
-
-	header := lines[0]
-	tokens := strings.Split(header, " ")
-
-	log.Debugf("Request %s received from: %v\n", tokens[0], e.Sender)
-
-	switch verb := strings.ToLower(tokens[0]); verb {
-	case "join":
-		handleJoinRequest(s, e)
-
-	case "join_ok":
-		handleJoinResponse(s, e)
-
-	case "join_error":
-		log.Warnf("Failed to join: %s", e.Message)
-
-	case "ping":
-		handlePingRequest(s, e)
-
-	case "id":
-		s.Connection.WriteToUDP([]byte(fmt.Sprintf("%s\n", s.Self.ID)), e.Sender)
-
-	case "ls":
-		s.Connection.WriteToUDP([]byte(fmt.Sprintf("OK\n%s\n", strings.ReplaceAll(s.EncodeMembersList(), ";", "\n"))), e.Sender)
-
-	case "kill":
-		log.Fatalf("Kill request received\n")
-
-	case "start_gossip":
-		startGossip(s)
-
-	case "stop_gossip":
-		stopGossip(s)
-
-	case "config":
-		handleConfigRequest(s, e)
-
-	case "sus":
-		handleSusRequest(s, e)
-
-	case "list_sus":
-		handleListSus(s, e)
-
-	default:
-		log.Warn("Unknown request verb: ", verb)
-	}
 }
 
 // Listen for commands on stdin
@@ -388,158 +353,42 @@ func inputRoutine(s *server.Server) {
 	}
 }
 
-func handleCommand(s *server.Server, command string) {
-	commands := []string{"list_mem: print membership table", "list_self: print id of node",
-		"kill: crash server", "join: start gossiping", "leave: stop gossiping", "sus_on: enable gossip suspicion",
-		"sus_off: disable gossip suspicion", "help: list all commands"}
-
-	switch strings.ToLower(command) {
-
-	case "ls":
-		fallthrough
-	case "list_mem":
-		printMembershipTable(s)
-
-	case "id":
-		fallthrough
-	case "list_self":
-		fmt.Println(s.Self.ID)
-
-	case "kill":
-		log.Fatalf("Kill command received!")
-
-	case "start_gossip":
-		fallthrough
-	case "join":
-		startGossip(s)
-		fmt.Println("OK")
-
-	case "stop_gossip":
-		fallthrough
-	case "leave":
-		stopGossip(s)
-		fmt.Println("OK")
-
-	case "sus_on":
-		s.SuspicionTimeout = server.T_CLEANUP
-		fmt.Printf("Suspicion Timeout: %f sec\n", s.SuspicionTimeout.Seconds())
-
-	case "sus_off":
-		s.SuspicionTimeout = 0
-		fmt.Println("OK")
-
-	case "help":
-		for i := range commands {
-			fmt.Printf("%d. %s\n", i+1, commands[i])
-		}
-	}
-}
-
 // Send request to join node and start timer
 func sendJoinRequest(s *server.Server) {
 	msg := s.GetJoinMessage()
 
-	for _, vm := range CLUSTER {
-		if vm == s.Self.Hostname {
-			continue
+	if IsIntroducer(s) {
+		for _, vm := range cluster {
+			if vm.Hostname == s.Self.Hostname && vm.Port == s.Self.Port {
+				continue
+			}
+
+			addr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", vm.Hostname, vm.Port))
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			_, err = s.Connection.WriteToUDP([]byte(msg), addr)
+			if err != nil {
+				log.Println(err)
+				continue
+			}
+
+			log.Printf("Sent join request to %s:%d\n", vm.Hostname, vm.Port)
 		}
 
-		addr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", vm, DEFAULT_PORT))
+	} else {
+
+		introducer := cluster[0]
+
+		addr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", introducer.Hostname, introducer.Port))
 		if err != nil {
 			log.Fatal(err)
 		}
 
-		_, err = s.Connection.WriteToUDP([]byte(msg), addr)
-		if err != nil {
-			log.Println(err)
-			continue
-		}
-
-		log.Printf("Sent join request to %s:%d\n", vm, DEFAULT_PORT)
+		s.Connection.WriteToUDP([]byte(msg), addr)
+		log.Printf("Sent join request to %s:%d\n", introducer.Hostname, introducer.Port)
 	}
 
 	s.TimerManager.RestartTimer(JOIN_TIMER_ID, JOIN_RETRY_TIMEOUT)
-}
-
-func handleJoinResponse(s *server.Server, e server.ReceiverEvent) {
-	lines := strings.Split(e.Message, "\n")
-	if len(lines) < 2 || s.Active {
-		return
-	}
-
-	s.TimerManager.StopTimer(JOIN_TIMER_ID)
-	s.ProcessMembersList(lines[1], false)
-	s.StartAllTimers()
-	s.Active = true
-	log.Info("Node join completed.")
-
-	printMembershipTable(s)
-}
-
-// Start the node process and launch all the threads
-func startNode(s *server.Server) {
-	log.Infof("Node %s is starting...\n", s.Self.ID)
-
-	go receiverRoutine(s) // to receive requests from network
-	go senderRoutine(s)   // to send gossip messages
-	go inputRoutine(s)    // to receive requests from stdin
-
-	sendJoinRequest(s)
-
-	// Blocks until either new message received or timer sends a signal
-	for {
-		select {
-		case e := <-s.TimerManager.TimeoutChannel:
-			handleTimeout(s, e)
-		case e := <-s.ReceiverChannel:
-			handleRequest(s, e)
-		case e := <-s.InputChannel:
-			handleCommand(s, e)
-		}
-	}
-}
-
-// Function to handle the Join request by new node at any node
-func handleJoinRequest(s *server.Server, e server.ReceiverEvent) {
-	if !s.Active {
-		return
-	}
-
-	message := e.Message
-	lines := strings.Split(message, "\n")
-	tokens := strings.Split(lines[0], " ")
-	if len(tokens) < 2 {
-		s.Connection.WriteToUDP([]byte(ERROR_ILLEGAL_REQUEST), e.Sender)
-		return
-	}
-
-	senderInfo := tokens[1]
-	tokens = strings.Split(senderInfo, ":")
-	if len(tokens) < 3 {
-		s.Connection.WriteToUDP([]byte(ERROR_ILLEGAL_REQUEST), e.Sender)
-		return
-	}
-
-	senderAddress, senderPort, senderId := tokens[0], tokens[1], tokens[2]
-	senderPortInt, err := strconv.Atoi(senderPort)
-	if err != nil {
-		s.Connection.WriteToUDP([]byte(ERROR_ILLEGAL_REQUEST), e.Sender)
-		return
-	}
-
-	host, err := s.AddHost(senderAddress, senderPortInt, senderId)
-	if err != nil {
-		log.Errorf("Failed to add host: %s\n", err.Error())
-		reply := fmt.Sprintf("%s\n%s\n", JOIN_ERROR, err.Error())
-		s.Connection.WriteToUDP([]byte(reply), e.Sender)
-		return
-	}
-
-	reply := fmt.Sprintf("%s\n%s\n", JOIN_OK, s.EncodeMembersList())
-	_, err = s.Connection.WriteToUDP([]byte(reply), host.Address)
-	if err != nil {
-		log.Error(err)
-	}
-
-	printMembershipTable(s)
 }
