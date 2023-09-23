@@ -104,7 +104,7 @@ func main() {
 	}
 
 	if withSuspicion {
-		s.SuspicionTimeout = server.T_CLEANUP
+		s.Protocol = server.GOSPSIP_SUSPICION_PROTOCOL
 	}
 
 	if IsIntroducer(s) {
@@ -157,7 +157,6 @@ func startNode(s *server.Server) {
 		}
 	}
 }
-
 
 // Sends membership list to random subset of peers every T_gossip period
 // Updates own counter and timestamp before sending the membership list
@@ -216,6 +215,7 @@ func HandleTimeout(s *server.Server, e timer.TimerEvent) {
 	s.MemberLock.Lock()
 	defer s.MemberLock.Unlock()
 
+	// should never happen btw
 	if e.ID == s.Self.ID {
 		return
 	}
@@ -234,25 +234,43 @@ func HandleTimeout(s *server.Server, e timer.TimerEvent) {
 		return
 	}
 
-	if host, ok := s.Members[e.ID]; ok {
-		if host.Suspected || s.SuspicionTimeout == 0 {
-			log.Warnf("FAILURE DETECTED: Node %s is considered failed\n", e.ID)
-			delete(s.Members, e.ID)
-			s.MemberLock.Unlock()
-			// sendNotification(s, fmt.Sprintf("FAILURE %s\n", e.ID))
-			s.MemberLock.Lock()
-		} else {
-			log.Warnf("FAILURE SUSPECTED: Node %s is suspected of failure\n", e.ID)
-			host.Suspected = true
-			s.TimerManager.RestartTimer(e.ID, s.SuspicionTimeout)
-		}
+	host, ok := s.Members[e.ID]
 
-		s.MemberLock.Unlock()
-		s.PrintMembershipTable()
-		s.MemberLock.Lock()
-
+	// Ignore timeout for node which does not exist
+	if !ok {
 		return
 	}
+
+	if host.Failed {
+		log.Warn("Deleting node from membership list...", e.ID)
+		delete(s.Members, e.ID)
+		return
+	}
+
+	if !host.Suspected {
+		log.Warnf("FAILURE SUSPECTED: Node %s is suspected of failure\n", e.ID)
+		host.Suspected = true
+		s.TimerManager.RestartTimer(e.ID, s.SuspicionTimeout)
+		return
+	}
+
+	log.Warnf("FAILURE DETECTED: Node %s is considered failed\n", e.ID)
+	host.Failed = true
+
+	if s.Protocol == server.GOSSIP_PROTOCOL {
+		delete(s.Members, e.ID)
+	}
+
+	if s.Protocol == server.GOSPSIP_SUSPICION_PROTOCOL {
+		log.Debug("Starting final cleanup timer")
+		s.TimerManager.RestartTimer(e.ID, server.T_FINAL)
+	}
+
+	s.MemberLock.Unlock()
+	s.PrintMembershipTable()
+	s.MemberLock.Lock()
+
+	return
 }
 
 // This routine gossips the membership list every GossipPeriod.

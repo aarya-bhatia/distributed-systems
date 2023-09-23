@@ -42,15 +42,11 @@ func HandleCommand(s *server.Server, command string) {
 		fmt.Println("OK")
 
 	case "sus_on":
-		if s.SuspicionTimeout != 0 {
-			fmt.Printf("Suspicion is already enabled: %f sec\n", s.SuspicionTimeout.Seconds())
-		} else {
-			s.SuspicionTimeout = server.T_CLEANUP
-			fmt.Printf("Suspicion Timeout: %f sec\n", s.SuspicionTimeout.Seconds())
-		}
+		s.Protocol = server.GOSPSIP_SUSPICION_PROTOCOL
+		fmt.Println("OK")
 
 	case "sus_off":
-		s.SuspicionTimeout = 0
+		s.Protocol = server.GOSSIP_PROTOCOL
 		fmt.Println("OK")
 
 	case "help":
@@ -124,8 +120,8 @@ func HandleJoinResponse(s *server.Server, e server.ReceiverEvent) {
 	log.Info("Join accepted by ", e.Sender)
 
 	s.TimerManager.StopTimer(JOIN_TIMER_ID)
-	s.ProcessMembersList(lines[1], false)
-	s.StartAllTimers()
+	s.ProcessMembersList(lines[1])
+	// s.StartAllTimers()
 	s.Active = true
 	log.Info("Node join completed.")
 }
@@ -172,27 +168,22 @@ func HandlePingRequest(s *server.Server, e server.ReceiverEvent) {
 		return
 	}
 
-	s.ProcessMembersList(lines[1], true)
+	s.ProcessMembersList(lines[1])
 }
 
 func HandleListSus(s *server.Server, e server.ReceiverEvent) {
 	s.MemberLock.Lock()
 	defer s.MemberLock.Unlock()
 
-	if s.SuspicionTimeout == 0 {
-		log.Warn("Suspicion mode is turned off. Enter `sus on` to enable it.")
-		return
-	}
-
-	susMembers := []string{}
+	arr := []string{}
 
 	for _, host := range s.Members {
 		if host.Suspected {
-			susMembers = append(susMembers, host.Signature)
+			arr = append(arr, host.Signature)
 		}
 	}
 
-	reply := fmt.Sprintf("OK\n%s\n", strings.Join(susMembers, "\n"))
+	reply := fmt.Sprintf("OK\n%s\n", strings.Join(arr, "\n"))
 	s.Connection.WriteToUDP([]byte(reply), e.Sender)
 }
 
@@ -203,9 +194,9 @@ func HandleSusRequest(s *server.Server, e server.ReceiverEvent) {
 		return
 	}
 	if strings.ToUpper(tokens[1]) == "ON" {
-		s.SuspicionTimeout = server.T_CLEANUP
+		s.Protocol = server.GOSPSIP_SUSPICION_PROTOCOL
 	} else if strings.ToUpper(tokens[1]) == "OFF" {
-		s.SuspicionTimeout = 0
+		s.Protocol = server.GOSSIP_PROTOCOL
 	}
 }
 
