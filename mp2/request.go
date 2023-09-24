@@ -3,10 +3,12 @@ package main
 import (
 	"cs425/server"
 	"fmt"
-	log "github.com/sirupsen/logrus"
 	"math/rand"
 	"strconv"
 	"strings"
+	"time"
+
+	log "github.com/sirupsen/logrus"
 )
 
 func HandleCommand(s *server.Server, command string) {
@@ -27,7 +29,7 @@ func HandleCommand(s *server.Server, command string) {
 		fmt.Println(s.Self.ID)
 
 	case "kill":
-		log.Fatalf("Kill command received!")
+		log.Fatalf("Kill command received at %d milliseconds", time.Now().UnixMilli())
 
 	case "start_gossip":
 		fallthrough

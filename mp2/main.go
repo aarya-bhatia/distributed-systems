@@ -241,17 +241,22 @@ func HandleTimeout(s *server.Server, e timer.TimerEvent) {
 		return
 	}
 
+	// currentTime := time.Now()
+	// // Format the current time as "hour:minute:second:millisecond"
+	// timestamp := currentTime.Format("15:04:05:000")
+	timestamp := time.Now().UnixMilli()
+
 	if host.State == server.NODE_ALIVE {
 		if s.Protocol == server.GOSSIP_PROTOCOL {
-			log.Warnf("FAILURE DETECTED: Node %s is considered failed\n", host.Signature)
+			log.Warnf("FAILURE DETECTED: (%d) Node %s is considered failed\n", timestamp, host.Signature)
 			host.State = server.NODE_FAILED
 		} else {
-			log.Warnf("FAILURE SUSPECTED: Node %s is suspected of failure\n", host.Signature)
+			log.Warnf("FAILURE SUSPECTED: (%d) Node %s is suspected of failure\n", timestamp, host.Signature)
 			host.State = server.NODE_SUSPECTED
 		}
 		s.RestartTimer(e.ID, host.State)
 	} else if host.State == server.NODE_SUSPECTED {
-		log.Warnf("FAILURE DETECTED: Node %s is considered failed\n", host.Signature)
+		log.Warnf("FAILURE DETECTED: (%d) Node %s is considered failed\n", timestamp, host.Signature)
 		host.State = server.NODE_FAILED
 		s.RestartTimer(e.ID, host.State)
 	} else if host.State == server.NODE_FAILED {
