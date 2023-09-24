@@ -6,8 +6,8 @@ import (
 	"log"
 	"os"
 	"os/exec"
-	"path/filepath"
-	"time"
+	// "path/filepath"
+	// "time"
 )
 
 func main() {
@@ -56,22 +56,22 @@ func main() {
 
 	client := RunClient(args)
 
-	var timestamp string = time.Now().Format("20060102150405")
+	// var timestamp string = time.Now().Format("20060102150405")
 
-	reportFile, err := os.OpenFile(filepath.Join(reportsDirectory, timestamp), os.O_CREATE|os.O_WRONLY, DEFAULT_FILE_MODE)
+	// reportFile, err := os.OpenFile(filepath.Join(reportsDirectory, timestamp), os.O_CREATE|os.O_WRONLY, DEFAULT_FILE_MODE)
+	//
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
 
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	fmt.Println("---Meta data---")
-
+	// fmt.Println("---Meta data---")
+	//
 	var count uint = 0
 
 	for _, host := range client.hosts {
-		hostSignature := fmt.Sprintf("%s %s:%s", host.id, host.host, host.port)
-		fmt.Printf("%s, lines: %d, data: %d bytes, latency: %s (%v nanoseconds) \n", hostSignature, host.lines, host.dataSize, host.latency, host.latencyNano)
-		reportFile.Write([]byte(fmt.Sprintf("%s,%s,%s,%d,%v,%d\n", host.id, host.host, host.port, host.lines, host.latencyNano, host.dataSize)))
+		// hostSignature := fmt.Sprintf("%s %s:%s", host.id, host.host, host.port)
+		// fmt.Printf("%s, lines: %d, data: %d bytes, latency: %s (%v nanoseconds) \n", hostSignature, host.lines, host.dataSize, host.latency, host.latencyNano)
+		// reportFile.Write([]byte(fmt.Sprintf("%s,%s,%s,%d,%v,%d\n", host.id, host.host, host.port, host.lines, host.latencyNano, host.dataSize)))
 		if host.status == STATUS_SUCCESS {
 			count += 1
 		}
