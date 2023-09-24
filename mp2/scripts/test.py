@@ -25,18 +25,21 @@ def main():
         cmd = words[0]
         target = words[1]
         if target == 'all':
-            target = range(1, 11)
+            target = range(1, len(hosts) + 1)
         else:
             vms = words[1].split(',')
             target = []
             for vm in vms:
-                target.append(vm)
+                if vm in hosts:
+                    target.append(vm)
+                else:
+                    print(f"WARNING: Node {vm} does not exist")
         print(f"sending {cmd} to {target}")
         for host in target:
             host = str(host)
             sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             sock.settimeout(0.2)
-            
+
             host_name = hosts[host]["host_name"]
             host_port = int(hosts[host]["port"])
             sock.sendto(bytes(cmd, "utf-8"), (host_name, host_port))

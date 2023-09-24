@@ -25,17 +25,24 @@ const (
 	NODE_FAILED    = 2
 )
 
-const (
-	// T_GOSSIP  = 300 * time.Millisecond
-	// T_FAIL    = 1500 * time.Millisecond
-	// T_CLEANUP = 3000 * time.Millisecond
-	// T_SUSPECT = 1500 * time.Millisecond
-
+var (
 	T_GOSSIP  = 300 * time.Millisecond
-	T_FAIL    = 1500 * time.Millisecond
-	T_CLEANUP = 3000 * time.Millisecond
+	T_FAIL    = 4000 * time.Millisecond
+	T_CLEANUP = 8000 * time.Millisecond
 	T_SUSPECT = 1500 * time.Millisecond
 )
+
+func (s *Server) ChangeProtocol(protocol int) {
+	if protocol == GOSPSIP_SUSPICION_PROTOCOL {
+		s.Protocol = GOSPSIP_SUSPICION_PROTOCOL
+		T_FAIL = 3000 * time.Millisecond
+		T_CLEANUP = 6000 * time.Millisecond
+	} else {
+		s.Protocol = GOSSIP_PROTOCOL
+		T_FAIL = 4000 * time.Millisecond
+		T_CLEANUP = 8000 * time.Millisecond
+	}
+}
 
 type Host struct {
 	Hostname  string
@@ -228,17 +235,17 @@ func (s *Server) RestartTimer(ID string, state int) {
 	if state == NODE_ALIVE {
 		if s.Protocol == GOSSIP_PROTOCOL {
 			s.TimerManager.RestartTimer(ID, T_FAIL)
-			log.Warnf("Failure timer for Gossip restarted at %d milliseconds\n", time.Now().UnixMilli())
+			// log.Warnf("Failure timer for Gossip restarted at %d milliseconds\n", time.Now().UnixMilli())
 		} else {
-			log.Warnf("Suspected timer restarted at %d milliseconds\n", time.Now().UnixMilli())
+			// log.Warnf("Suspected timer restarted at %d milliseconds\n", time.Now().UnixMilli())
 			s.TimerManager.RestartTimer(ID, T_SUSPECT)
 		}
 	} else if state == NODE_SUSPECTED {
 		s.TimerManager.RestartTimer(ID, T_FAIL)
-		log.Warnf("Failure timer restarted at %d milliseconds\n", time.Now().UnixMilli())
+		// log.Warnf("Failure timer restarted at %d milliseconds\n", time.Now().UnixMilli())
 	} else if state == NODE_FAILED {
 		s.TimerManager.RestartTimer(ID, T_CLEANUP)
-		log.Warnf("Cleanup timer restarted at %d milliseconds\n", time.Now().UnixMilli())
+		// log.Warnf("Cleanup timer restarted at %d milliseconds\n", time.Now().UnixMilli())
 	}
 }
 

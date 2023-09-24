@@ -17,6 +17,7 @@ import (
 const JOIN_RETRY_TIMEOUT = time.Second * 10
 const JOIN_OK = "JOIN_OK"
 const JOIN_ERROR = "JOIN_ERROR"
+const BAD_REQUEST = "BAD_REQUEST"
 const JOIN_TIMER_ID = "JOIN_TIMER"
 const DEFAULT_PORT = 6000
 const NODES_PER_ROUND = 4 // Number of random peers to send gossip every round

@@ -12,20 +12,16 @@ import (
 )
 
 func HandleCommand(s *server.Server, command string) {
-	commands := []string{"list_mem: print membership table", "list_self: print id of node",
-		"kill: crash server", "join: start gossiping", "leave: stop gossiping", "sus_on: enable gossip suspicion",
-		"sus_off: disable gossip suspicion", "help: list all commands"}
+	commands := []string{"ls: print membership table", "id: print id of node",
+		"kill: crash server", "join: start gossiping", "leave: stop gossiping", "sus (on|off): enable/disable gossip suspicion protocol",
+		"help: list all commands"}
 
 	switch strings.ToLower(command) {
 
 	case "ls":
-		fallthrough
-	case "list_mem":
 		s.PrintMembershipTable()
 
 	case "id":
-		fallthrough
-	case "list_self":
 		fmt.Println(s.Self.ID)
 
 	case "kill":
@@ -33,22 +29,16 @@ func HandleCommand(s *server.Server, command string) {
 
 	case "start_gossip":
 		fallthrough
+
 	case "join":
 		startGossip(s)
 		fmt.Println("OK")
 
 	case "stop_gossip":
 		fallthrough
+
 	case "leave":
 		stopGossip(s)
-		fmt.Println("OK")
-
-	case "sus_on":
-		s.Protocol = server.GOSPSIP_SUSPICION_PROTOCOL
-		fmt.Println("OK")
-
-	case "sus_off":
-		s.Protocol = server.GOSSIP_PROTOCOL
 		fmt.Println("OK")
 
 	case "help":
@@ -61,6 +51,10 @@ func HandleCommand(s *server.Server, command string) {
 // Handles the request received by the server
 // JOIN, PING, ID, LIST, KILL, START_GOSSIP, STOP_GOSSIP, CONFIG, SUS ON, SUS OFF, LIST_SUS
 func HandleRequest(s *server.Server, e server.ReceiverEvent) {
+	commands := []string{"ls: print membership table", "id: print id of node",
+		"kill: crash server", "start_gossip: start gossiping", "stop_gossip: stop gossiping", "sus <on|off>: toggle gossip suspicion protocol",
+		"config <option> [<value>]: get/set config parameter", "help: list all commands"}
+
 	lines := strings.Split(e.Message, "\n")
 	if len(lines) < 1 {
 		return
@@ -95,12 +89,12 @@ func HandleRequest(s *server.Server, e server.ReceiverEvent) {
 
 	case "start_gossip":
 		startGossip(s)
-		log.Warnf("START GOSSIP: Start command received at %d milliseconds", time.Now().UnixMilli())
+		log.Warnf("START command received at %d milliseconds", time.Now().UnixMilli())
 		s.Connection.WriteToUDP([]byte("OK\n"), e.Sender)
 
 	case "stop_gossip":
 		stopGossip(s)
-		log.Warnf("STOP GOSSIP: Stop command received at %d milliseconds", time.Now().UnixMilli())
+		log.Warnf("STOP uommand received at %d milliseconds", time.Now().UnixMilli())
 		s.Connection.WriteToUDP([]byte("OK\n"), e.Sender)
 
 	case "config":
@@ -109,8 +103,8 @@ func HandleRequest(s *server.Server, e server.ReceiverEvent) {
 	case "sus":
 		HandleSusRequest(s, e)
 
-	case "list_sus":
-		HandleListSus(s, e)
+	case "help":
+		s.Connection.WriteToUDP([]byte(strings.Join(commands, "\n")), e.Sender)
 
 	default:
 		log.Warn("Unknown request verb: ", verb)
@@ -135,19 +129,74 @@ func HandleJoinResponse(s *server.Server, e server.ReceiverEvent) {
 // Handle config command: CONFIG <field to change> <value>
 func HandleConfigRequest(s *server.Server, e server.ReceiverEvent) {
 	words := strings.Split(e.Message, " ")
-	if len(words) < 3 {
-		return
-	}
+
 	if words[1] == "DROPRATE" {
-		dropRate, err := strconv.Atoi(words[2])
-		if err != nil {
-			return
+		if len(words) == 2 {
+			s.Connection.WriteToUDP([]byte(fmt.Sprintf("DROPRATE %d\n", s.DropRate)), e.Sender)
+		} else if len(words) == 3 {
+			dropRate, err := strconv.Atoi(words[2])
+			if err != nil {
+				return
+			}
+			s.DropRate = dropRate
+			s.Connection.WriteToUDP([]byte(fmt.Sprintf("OK\n")), e.Sender)
 		}
-		s.DropRate = dropRate
-		s.Connection.WriteToUDP([]byte(fmt.Sprintf("OK\n")), e.Sender)
+	}
+
+	if words[1] == "T_GOSSIP" {
+		if len(words) == 2 {
+			s.Connection.WriteToUDP([]byte(fmt.Sprintf("T_GOSSIP %d ms\n", server.T_GOSSIP.Milliseconds())), e.Sender)
+		} else if len(words) == 3 {
+			value, err := strconv.Atoi(words[2])
+			if err != nil {
+				return
+			}
+			server.T_GOSSIP = time.Duration(value) * time.Millisecond
+			s.Connection.WriteToUDP([]byte(fmt.Sprintf("OK\n")), e.Sender)
+		}
+	}
+
+	if words[1] == "T_FAIL" {
+		if len(words) == 2 {
+			s.Connection.WriteToUDP([]byte(fmt.Sprintf("T_FAIL %d ms\n", server.T_FAIL.Milliseconds())), e.Sender)
+		} else if len(words) == 3 {
+			value, err := strconv.Atoi(words[2])
+			if err != nil {
+				return
+			}
+			server.T_FAIL = time.Duration(value) * time.Millisecond
+			s.Connection.WriteToUDP([]byte(fmt.Sprintf("OK\n")), e.Sender)
+		}
+	}
+
+	if words[1] == "T_SUSPECT" {
+		if len(words) == 2 {
+			s.Connection.WriteToUDP([]byte(fmt.Sprintf("T_SUSPECT %d ms\n", server.T_SUSPECT.Milliseconds())), e.Sender)
+		} else if len(words) == 3 {
+			value, err := strconv.Atoi(words[2])
+			if err != nil {
+				return
+			}
+			server.T_SUSPECT = time.Duration(value) * time.Millisecond
+			s.Connection.WriteToUDP([]byte(fmt.Sprintf("OK\n")), e.Sender)
+		}
+	}
+
+	if words[1] == "T_CLEANUP" {
+		if len(words) == 2 {
+			s.Connection.WriteToUDP([]byte(fmt.Sprintf("T_CLEANUP %d ms\n", server.T_CLEANUP.Milliseconds())), e.Sender)
+		} else if len(words) == 3 {
+			value, err := strconv.Atoi(words[2])
+			if err != nil {
+				return
+			}
+			server.T_CLEANUP = time.Duration(value) * time.Millisecond
+			s.Connection.WriteToUDP([]byte(fmt.Sprintf("OK\n")), e.Sender)
+		}
 	}
 }
 
+// Received member list from peer
 func HandlePingRequest(s *server.Server, e server.ReceiverEvent) {
 	if !s.Active {
 		log.Debugf("PING from %s dropped as server is inactive\n", e)
@@ -178,33 +227,22 @@ func HandlePingRequest(s *server.Server, e server.ReceiverEvent) {
 	s.ProcessMembersList(lines[1])
 }
 
-func HandleListSus(s *server.Server, e server.ReceiverEvent) {
-	s.MemberLock.Lock()
-	defer s.MemberLock.Unlock()
-
-	arr := []string{}
-
-	for _, host := range s.Members {
-		if host.State == server.NODE_SUSPECTED {
-			arr = append(arr, host.Signature)
-		}
-	}
-
-	reply := fmt.Sprintf("OK\n%s\n", strings.Join(arr, "\n"))
-	s.Connection.WriteToUDP([]byte(reply), e.Sender)
-}
-
+// Change gossip protocol
 func HandleSusRequest(s *server.Server, e server.ReceiverEvent) {
 	lines := strings.Split(e.Message, "\n")
 	tokens := strings.Split(lines[0], " ")
 	if len(tokens) < 2 {
+		s.Connection.WriteToUDP([]byte("ERROR\n"), e.Sender)
 		return
 	}
+
 	if strings.ToUpper(tokens[1]) == "ON" {
-		s.Protocol = server.GOSPSIP_SUSPICION_PROTOCOL
+		s.ChangeProtocol(server.GOSPSIP_SUSPICION_PROTOCOL)
 	} else if strings.ToUpper(tokens[1]) == "OFF" {
-		s.Protocol = server.GOSSIP_PROTOCOL
+		s.ChangeProtocol(server.GOSSIP_PROTOCOL)
 	}
+
+	s.Connection.WriteToUDP([]byte("OK\n"), e.Sender)
 }
 
 // Function to handle the Join request by new node at any node
