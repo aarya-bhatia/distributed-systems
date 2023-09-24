@@ -140,6 +140,7 @@ func HandleConfigRequest(s *server.Server, e server.ReceiverEvent) {
 			return
 		}
 		s.DropRate = dropRate
+		s.Connection.WriteToUDP([]byte(fmt.Sprintf("OK\n")), e.Sender)
 	}
 }
 
