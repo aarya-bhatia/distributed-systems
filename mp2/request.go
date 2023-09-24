@@ -91,13 +91,17 @@ func HandleRequest(s *server.Server, e server.ReceiverEvent) {
 		s.Connection.WriteToUDP([]byte(fmt.Sprintf("OK\n%s\n", strings.ReplaceAll(s.EncodeMembersList(), ";", "\n"))), e.Sender)
 
 	case "kill":
-		log.Fatalf("Kill request received\n")
+		log.Fatalf("KILL command received at %d milliseconds", time.Now().UnixMilli())
 
 	case "start_gossip":
 		startGossip(s)
+		log.Warnf("START GOSSIP: Start command received at %d milliseconds", time.Now().UnixMilli())
+		s.Connection.WriteToUDP([]byte("OK\n"), e.Sender)
 
 	case "stop_gossip":
 		stopGossip(s)
+		log.Warnf("STOP GOSSIP: Stop command received at %d milliseconds", time.Now().UnixMilli())
+		s.Connection.WriteToUDP([]byte("OK\n"), e.Sender)
 
 	case "config":
 		HandleConfigRequest(s, e)
