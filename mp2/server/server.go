@@ -26,10 +26,10 @@ const (
 )
 
 const (
-	T_GOSSIP  = 2000 * time.Millisecond
-	T_SUSPECT = 4000 * time.Millisecond
-	T_FAIL    = 4000 * time.Millisecond
-	T_CLEANUP = 8000 * time.Millisecond
+	T_GOSSIP  = 300 * time.Millisecond
+	T_FAIL    = 1500 * time.Millisecond
+	T_CLEANUP = 3000 * time.Millisecond
+	T_SUSPECT = 1500 * time.Millisecond
 )
 
 type Host struct {

@@ -39,6 +39,6 @@ echo "MP1 Server is running at $(hostname):$MP1_PORT$"
 cd $CS425_REPO/mp2
 make clean; make
 pkill -f ./main
-nohup ./main $(hostname) $MP2_PORT >$MP2_LOGS 2>&1 &
+nohup ./main -p $MP2_PORT >$MP2_LOGS 2>&1 &
 echo "MP2 Server is running at $(hostname):$MP2_PORT$"
 

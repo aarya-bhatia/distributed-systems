@@ -19,7 +19,7 @@ const JOIN_OK = "JOIN_OK"
 const JOIN_ERROR = "JOIN_ERROR"
 const JOIN_TIMER_ID = "JOIN_TIMER"
 const DEFAULT_PORT = 6000
-const NODES_PER_ROUND = 5 // Number of random peers to send gossip every round
+const NODES_PER_ROUND = 4 // Number of random peers to send gossip every round
 const ERROR_ILLEGAL_REQUEST = JOIN_ERROR + "\n" + "Illegal Request" + "\n"
 
 type Node struct {
