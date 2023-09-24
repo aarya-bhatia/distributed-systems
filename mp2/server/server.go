@@ -253,7 +253,7 @@ func (s *Server) processRow(tokens []string) {
 	if ID == s.Self.ID {
 		if state == NODE_FAILED {
 			// TODO: Restart Gossip with new ID.
-			log.Fatal("Node has failed!")
+			log.Fatalf("FALSE DETECTION: Node %s has failed", s.Self.Signature)
 		}
 		return
 	}
