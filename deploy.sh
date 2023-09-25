@@ -21,7 +21,7 @@ cluster=(
 	"fa23-cs425-0710.cs.illinois.edu"
 )
 
-timeout=3
+timeout=15
 
 for vm in "${cluster[@]}"; do
 	echo "VM: $vm"

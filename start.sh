@@ -39,7 +39,8 @@ echo "MP1 Server is running at $(hostname):$MP1_PORT$"
 cd $CS425_REPO/mp2
 make
 pkill -f ./main
-sleep 5
+sleep 10
+echo -n "" > $MP2_LOGS
 nohup ./main -p $MP2_PORT -l "info" >$MP2_LOGS 2>&1 &
 echo "MP2 Server is running at $(hostname):$MP2_PORT$"
 
