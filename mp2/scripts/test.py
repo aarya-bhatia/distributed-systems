@@ -1,21 +1,30 @@
-from sys import stdin
+from sys import stdin, argv
 import socket
 
 hosts = {}
 
+
 def print_usage():
     print(f"set <target>")
 
-def load_server():
-    with open("hosts", "r") as f:
+
+def load_server(filename):
+    print("using host file:", filename)
+    with open(filename, "r") as f:
         lines = f.readlines()
         for line in lines:
             words = line.split(" ")
             hosts[words[0]] = {"host_name": words[1], "port": words[2]}
     print(hosts)
 
+
 def main():
-    load_server()
+    print(argv)
+    if len(argv) == 2:
+        load_server(argv[1])
+    else:
+        load_server("hosts")
+
     for line in stdin:
         line = line.strip()
         words = line.split(";")
@@ -35,6 +44,9 @@ def main():
                 else:
                     print(f"WARNING: Node {vm} does not exist")
         print(f"sending {cmd} to {target}")
+
+        failed = 0
+
         for host in target:
             host = str(host)
             sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -43,12 +55,15 @@ def main():
             host_name = hosts[host]["host_name"]
             host_port = int(hosts[host]["port"])
             sock.sendto(bytes(cmd, "utf-8"), (host_name, host_port))
-            print("-------")
+            print("----------------------------")
             try:
                 data, server = sock.recvfrom(1024)
                 print(f'{host_name}:{host_port} {data.decode()}')
             except socket.timeout:
                 print(f'{host_name}:{host_port} No response in 0.2 seconds')
+                failed += 1
+
+        print(f"Got response from {len(hosts)-failed}/{len(hosts)} hosts")
 
 
 if __name__ == '__main__':
