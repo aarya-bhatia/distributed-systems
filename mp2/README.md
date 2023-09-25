@@ -8,9 +8,11 @@
 
 **Example:** To start server on port with log level INFO and Gossip+S mode: `./main -h <hostname> -p <port> -l 'info' -s`
 
+NOTE: All VMs run on port 6000 and the first VM is the introducer.
+
 **Example:** To start local server in Gossip mode: `./main -h "localhost" -p <port>`
 
-NOTE: The local introducer server must be run on port 6001
+NOTE: The local introducer server must be run on port 6001.
 
 ## Commands
 
@@ -23,5 +25,5 @@ The server can accept the following UDP messages:
 5. Toggle suspicion protocol: `sus ON`, `sus OFF`
 6. To list all commands: `help`
 
-**Example:** To use netcat: `ls| nc -u <hostname> <port>`
+**Example:** To use netcat: `echo ls | nc -w1 -u fa23-cs425-0701.cs.illinois.edu 6000`
 
