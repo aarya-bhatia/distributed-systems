@@ -3,7 +3,7 @@ from sys import stdin, argv
 import socket
 
 hosts = {}
-
+SOCK_TIMEOUT=1
 
 def print_usage():
     print(f"set <target>")
@@ -51,7 +51,7 @@ def main():
         for host in target:
             host = str(host)
             sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            sock.settimeout(0.2)
+            sock.settimeout(SOCK_TIMEOUT)
 
             host_name = hosts[host]["host_name"]
             host_port = int(hosts[host]["port"])
