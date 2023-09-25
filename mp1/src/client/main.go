@@ -22,7 +22,7 @@ func main() {
 	flag.StringVar(&args.logsDirectory, "logs", "data", "The path containing the log files in format vm{i}.log")
 	flag.StringVar(&args.outputDirectory, "outputs", "outputs", "The path to store the output data from the server")
 	flag.BoolVar(&args.silence, "silence", false, "To suppress the output of the commands on stdout")
-	flag.StringVar(&args.command, "command", "", "The command to execute remotely. Either or 'grep' must be specified.")
+	flag.StringVar(&args.command, "c", "", "The command to execute remotely. Either or 'grep' must be specified.")
 	flag.StringVar(&args.grep, "grep", "", "The grep query to execute remotely. Either 'command' or 'grep' must be specified.")
 
 	flag.Parse()
