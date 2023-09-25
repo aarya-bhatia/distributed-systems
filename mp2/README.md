@@ -1,24 +1,10 @@
 # mp2
 
-Protocol
+## Build Instructions
 
-- `self` := host:port:id
-- `mlist` := "" | "host:port:id:counter;" + `mlist`
+1. [Install Go](https://go.dev/doc/install)
+2. Run `make` from the mp2 directory
+3. Usage: `./main --help`
 
-1. Node is joining
-    - Req: JOIN `self`\n
-    - Res 1: JOIN_OK\n`mlist`\n
-    - Res 2: JOIN_ERROR\n`description`\n
+*Example*: To start server on port with log level INFO and Gossip+S mode: `./main -h <hostname> -p <port> -l 'info' -s`
 
-2. Node is leaving
-    - Req: BYE `self`\n
-    - Res: None
-
-3. Gossip membership list
-    - Req: PING `self` `target_id`\n`mlist`\n`target_id`\n
-    - Res: None
-
-
-TODO
-
-- start/stop gossip logic for introducer
