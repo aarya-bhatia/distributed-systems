@@ -1,24 +1,29 @@
 # mp2
 
-Protocol
+## Build Instructions
 
-- `self` := host:port:id
-- `mlist` := "" | "host:port:id:counter;" + `mlist`
+1. [Install Go](https://go.dev/doc/install)
+2. Run `make` from the mp2 directory
+3. Usage: `./main --help`
 
-1. Node is joining
-    - Req: JOIN `self`\n
-    - Res 1: JOIN_OK\n`mlist`\n
-    - Res 2: JOIN_ERROR\n`description`\n
+**Example:** To start server on port with log level INFO and Gossip+S mode: `./main -h <hostname> -p <port> -l 'info' -s`
 
-2. Node is leaving
-    - Req: BYE `self`\n
-    - Res: None
+NOTE: All VMs run on port 6000 and the first VM is the introducer.
 
-3. Gossip membership list
-    - Req: PING `self` `target_id`\n`mlist`\n`target_id`\n
-    - Res: None
+**Example:** To start local server in Gossip mode: `./main -h "localhost" -p <port>`
 
+NOTE: The local introducer server must be run on port 6001.
 
-TODO
+## Commands
 
-- start/stop gossip logic for introducer
+The server can accept the following UDP messages:
+
+1. To list the members: `ls`
+2. To kill the server: `kill`
+3. To stop gossip: `stop_gossip`
+4. To start server: `start_gossip`
+5. Toggle suspicion protocol: `sus ON`, `sus OFF`
+6. To list all commands: `help`
+
+**Example:** To use netcat: `echo ls | nc -w1 -u fa23-cs425-0701.cs.illinois.edu 6000`
+
