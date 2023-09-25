@@ -94,7 +94,7 @@ func HandleRequest(s *server.Server, e server.ReceiverEvent) {
 
 	case "stop_gossip":
 		stopGossip(s)
-		log.Warnf("STOP uommand received at %d milliseconds", time.Now().UnixMilli())
+		log.Warnf("STOP command received at %d milliseconds", time.Now().UnixMilli())
 		s.Connection.WriteToUDP([]byte("OK\n"), e.Sender)
 
 	case "config":
