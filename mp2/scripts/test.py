@@ -61,7 +61,7 @@ def main():
                 data, server = sock.recvfrom(1024)
                 print(f'{host_name}:{host_port} {data.decode()}')
             except socket.timeout:
-                print(f'{host_name}:{host_port} No response in 0.2 seconds')
+                print(f'{host_name}:{host_port} No response in {SOCK_TIMEOUT} seconds')
                 failed += 1
 
         print(f"Got response from {len(hosts)-failed}/{len(hosts)} hosts")
