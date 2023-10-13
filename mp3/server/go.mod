@@ -1,4 +1,4 @@
-module cs425
+module server
 
 go 1.21.2
 
