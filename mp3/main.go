@@ -56,6 +56,7 @@ const (
 	STATE_FAILED   = 1
 	DEFAULT_PORT   = 5000
 	REPLICA_FACTOR = 2
+	MAX_BLOCK_SIZE = 4096 * 1024 // 4 MB
 )
 
 var nodes []*NodeInfo = []*NodeInfo{
@@ -68,6 +69,16 @@ var nodes []*NodeInfo = []*NodeInfo{
 var serverFiles map[string]*File
 var serverQueue []*Request
 var serverBlocks map[string]*BlockData
+
+// To handle replicas after a node fails or rejoins
+func rebalance() {
+	m := map[int]bool{}
+	for _, node := range nodes {
+		m[node.ID] = node.State == STATE_ALIVE
+	}
+	// Get affected replicas
+	// Add tasks to replicate the affected blocks to queue
+}
 
 // To handle tcp connection
 func handleConnection(conn net.Conn) {

@@ -21,3 +21,6 @@ reports/
 .vscode/
 mp2/main
 mp2/known_hosts
+mp3/blocks/
+mp3/data
+mp3/main
