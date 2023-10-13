@@ -69,41 +69,6 @@ var serverFiles map[string]*File
 var serverQueue []*Request
 var serverBlocks map[string]*BlockData
 
-// Returns slice of alive nodes
-func GetAliveNodes(nodes []*NodeInfo) []*NodeInfo {
-	res := []*NodeInfo{}
-	for i, node := range nodes {
-		if node.State == STATE_ALIVE {
-			res = append(res, nodes[i])
-		}
-	}
-	return res
-}
-
-// The first R nodes with the lowest ID are selected as metadata replicas.
-func GetMetadataReplicaNodes(count int) []*NodeInfo {
-	aliveNodes := GetAliveNodes(nodes)
-	return aliveNodes[:min(count, len(aliveNodes))]
-}
-
-// The hash of the filename is selected as primary replica. The next R-1 successors are selected as backup replicas.
-func GetReplicaNodes(filename string, count int) []*NodeInfo {
-	aliveNodes := GetAliveNodes(nodes)
-	if len(aliveNodes) < count {
-		return aliveNodes
-	}
-
-	hash := GetHash(filename, len(aliveNodes))
-	replicas := []*NodeInfo{}
-
-	for i := 0; i < count; i++ {
-		j := (hash + i) % len(aliveNodes)
-		replicas = append(replicas, aliveNodes[j])
-	}
-
-	return replicas
-}
-
 // To handle tcp connection
 func handleConnection(conn net.Conn) {
 	defer conn.Close()
@@ -165,20 +130,11 @@ func startTCPServer(port string) {
 }
 
 func main() {
-	// fmt.Println("Hello world")
-	//
-	// for i := 0; i < 5; i++ {
-	// 	fmt.Printf("Hash for 'file%d.txt': %d\n", i, GetHash(fmt.Sprintf("file%d.txt", i), len(nodes)))
-	// }
-
-	// Check for command-line arguments
 	if len(os.Args) != 2 {
 		fmt.Println("Usage: ./main <port>")
 		return
 	}
 
-	// Get the port number from the command-line arguments
 	port := os.Args[1]
-
 	startTCPServer(port)
 }
