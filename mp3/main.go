@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strings"
 )
 
 type BlockMetadata struct {
@@ -118,12 +119,21 @@ func handleConnection(conn net.Conn) {
 			return
 		}
 
-		requestData := string(buffer[:n])
-		fmt.Printf("Received request from %s: %s\n", conn.RemoteAddr(), requestData)
+		request := string(buffer[:n])
+		fmt.Printf("Received request from %s: %s\n", conn.RemoteAddr(), request)
+
+		lines := strings.Split(request, "\n")
+		tokens := strings.Split(lines[0], " ")
+		verb := strings.ToUpper(tokens[0])
+
+		if strings.Index(verb, "EXIT") == 0 {
+			return
+		}
+
+		response := []byte("OK\n")
 
 		// Echo the data back to the client
-		data := buffer[:n]
-		_, err = conn.Write(data)
+		_, err = conn.Write(response)
 		if err != nil {
 			fmt.Printf("Error writing to client: %s\n", err)
 			return
@@ -155,15 +165,15 @@ func startTCPServer(port string) {
 }
 
 func main() {
-	fmt.Println("Hello world")
-
-	for i := 0; i < 5; i++ {
-		fmt.Printf("Hash for 'file%d.txt': %d\n", i, GetHash(fmt.Sprintf("file%d.txt", i), len(nodes)))
-	}
+	// fmt.Println("Hello world")
+	//
+	// for i := 0; i < 5; i++ {
+	// 	fmt.Printf("Hash for 'file%d.txt': %d\n", i, GetHash(fmt.Sprintf("file%d.txt", i), len(nodes)))
+	// }
 
 	// Check for command-line arguments
 	if len(os.Args) != 2 {
-		fmt.Println("Usage: go run server.go <port>")
+		fmt.Println("Usage: ./main <port>")
 		return
 	}
 
