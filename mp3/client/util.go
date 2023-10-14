@@ -2,13 +2,58 @@ package main
 
 import (
 	"fmt"
+	"net"
 	"os"
+
+	log "github.com/sirupsen/logrus"
+	"strings"
 )
+
+func connectToServer(hostname string, port int) net.Conn {
+	conn, err := net.Dial("tcp", fmt.Sprintf("%s:%d", hostname, port))
+	if err != nil {
+		log.Fatal(err)
+	}
+	return conn
+}
+
+func getOK(server net.Conn) bool {
+	buffer := make([]byte, MIN_BUFFER_SIZE)
+	n, err := server.Read(buffer)
+	if err != nil {
+		return false
+	}
+
+	message := string(buffer[:n])
+	if strings.Index(message, "OK") != 0 {
+		return false
+	} else {
+		log.Warn(message)
+	}
+
+	return true
+}
+
+func sendAll(server net.Conn, message string) bool {
+	sent := 0
+	for sent < len(message) {
+		n, err := server.Write([]byte(message[sent:]))
+		if err != nil {
+			return false
+		}
+		if n < len(message) {
+			return false
+		}
+		sent += n
+	}
+
+	return true
+}
 
 // Returns the number blocks for a file of given size
 func GetNumFileBlocks(fileSize int64) int {
-	n := int(fileSize / MAX_BLOCK_SIZE)
-	if fileSize%MAX_BLOCK_SIZE > 0 {
+	n := int(fileSize / BLOCK_SIZE)
+	if fileSize%BLOCK_SIZE > 0 {
 		n += 1
 	}
 	return n
@@ -29,7 +74,7 @@ func SplitFileIntoBlocks(filename string, outputDirectory string) bool {
 
 	fileSize := info.Size()
 	numBlocks := GetNumFileBlocks(fileSize)
-	buffer := make([]byte, MAX_BLOCK_SIZE)
+	buffer := make([]byte, BLOCK_SIZE)
 
 	for i := 0; i < numBlocks; i++ {
 		n, err := f.Read(buffer)
@@ -50,7 +95,7 @@ func SplitFileIntoBlocks(filename string, outputDirectory string) bool {
 
 		outputFile.Close()
 
-		if n < MAX_BLOCK_SIZE {
+		if n < BLOCK_SIZE {
 			break
 		}
 	}

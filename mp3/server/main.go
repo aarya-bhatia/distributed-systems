@@ -2,9 +2,9 @@ package main
 
 import (
 	"fmt"
-	"net"
+	"log"
 	"os"
-	"strings"
+	"strconv"
 )
 
 type BlockMetadata struct {
@@ -80,72 +80,29 @@ func rebalance() {
 	// Add tasks to replicate the affected blocks to queue
 }
 
-// To handle tcp connection
-func handleConnection(conn net.Conn) {
-	defer conn.Close()
-
-	// Create a buffer to hold incoming data
-	buffer := make([]byte, 1024)
-
-	for {
-		// Read data from the client
-		n, err := conn.Read(buffer)
-		if err != nil {
-			fmt.Printf("Client %s disconnected\n", conn.RemoteAddr())
-			return
-		}
-
-		request := string(buffer[:n])
-		fmt.Printf("Received request from %s: %s\n", conn.RemoteAddr(), request)
-
-		lines := strings.Split(request, "\n")
-		tokens := strings.Split(lines[0], " ")
-		verb := strings.ToUpper(tokens[0])
-
-		if strings.Index(verb, "EXIT") == 0 {
-			return
-		}
-
-		response := []byte("OK\n")
-
-		// Echo the data back to the client
-		_, err = conn.Write(response)
-		if err != nil {
-			fmt.Printf("Error writing to client: %s\n", err)
-			return
-		}
-	}
-}
-
-// Start a TCP server on given port
-func startTCPServer(port string) {
-	listener, err := net.Listen("tcp", ":"+port)
-	if err != nil {
-		fmt.Printf("Error starting server: %s\n", err)
-		return
-	}
-	defer listener.Close()
-
-	fmt.Printf("Server is listening on port %s...\n", port)
-
-	for {
-		conn, err := listener.Accept()
-		if err != nil {
-			fmt.Printf("Error accepting connection: %s\n", err)
-			continue
-		}
-
-		fmt.Printf("Accepted connection from %s\n", conn.RemoteAddr())
-		go handleConnection(conn)
-	}
-}
-
 func main() {
-	if len(os.Args) != 2 {
-		fmt.Println("Usage: ./main <port>")
+	if len(os.Args) != 3 {
+		fmt.Println("Usage: ./main <tcp_port> <udp_port>")
 		return
 	}
 
-	port := os.Args[1]
-	startTCPServer(port)
+	tcpPort := os.Args[1]
+	udpPort := os.Args[2]
+
+	tcpPortInt, err := strconv.Atoi(tcpPort)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	udpPortInt, err := strconv.Atoi(udpPort)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	c := make(chan bool)
+
+	go StartTCPServer(tcpPortInt)
+	go StartUDPServer(udpPortInt)
+
+	<-c
 }
