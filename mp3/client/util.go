@@ -34,14 +34,13 @@ func getOK(server net.Conn) bool {
 	return true
 }
 
-func sendAll(server net.Conn, message string) bool {
+// Returns true if all bytes are uploaded to network
+func SendAll(conn net.Conn, buffer []byte, count int) bool {
 	sent := 0
-	for sent < len(message) {
-		n, err := server.Write([]byte(message[sent:]))
+
+	for sent < count {
+		n, err := conn.Write(buffer[sent:count])
 		if err != nil {
-			return false
-		}
-		if n < len(message) {
 			return false
 		}
 		sent += n

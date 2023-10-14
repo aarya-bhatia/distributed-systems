@@ -58,7 +58,7 @@ func downloadFile(localFilename string, remoteFilename string) bool {
 
 	message := fmt.Sprintf("DOWNLOAD_FILE %s\n", remoteFilename)
 
-	if !sendAll(server, message) {
+	if !SendAll(server, []byte(message), len(message)) {
 		return false
 	}
 
@@ -72,6 +72,7 @@ func downloadFile(localFilename string, remoteFilename string) bool {
 	for {
 		n, err := server.Read(buffer)
 		if err == io.EOF {
+			log.Debug("EOF")
 			break
 		} else if err != nil {
 			return false
@@ -109,7 +110,7 @@ func uploadFile(localFilename string, remoteFilename string) bool {
 
 	message := fmt.Sprintf("UPLOAD_FILE %s %d\n", remoteFilename, fileSize())
 
-	if !sendAll(server, message) {
+	if !SendAll(server, []byte(message), len(message)) {
 		return false
 	}
 
@@ -120,14 +121,14 @@ func uploadFile(localFilename string, remoteFilename string) bool {
 	buffer := make([]byte, BLOCK_SIZE)
 
 	for {
-		_, err = file.Read(buffer)
+		n, err := file.Read(buffer)
 		if err == io.EOF {
 			break
 		} else if err != nil {
 			return false
 		}
 
-		if !sendAll(server, message) {
+		if !SendAll(server, buffer, n) {
 			return false
 		}
 	}

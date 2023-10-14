@@ -1,9 +1,12 @@
 package main
 
 import (
+	log "github.com/sirupsen/logrus"
 	"hash"
 	"hash/fnv"
 	"math"
+	"net"
+	"strings"
 )
 
 // Hash string s to an integer between 1 and N
@@ -77,10 +80,41 @@ func GetReplicaNodes(filename string, count int) []*NodeInfo {
 
 // Returns the number blocks for a file of given size
 func GetNumFileBlocks(fileSize int64) int {
-	n := int(fileSize / MAX_BLOCK_SIZE)
-	if fileSize%MAX_BLOCK_SIZE > 0 {
+	n := int(fileSize / BLOCK_SIZE)
+	if fileSize%BLOCK_SIZE > 0 {
 		n += 1
 	}
 	return n
 }
 
+// Returns true if all bytes are uploaded to network
+func SendAll(conn net.Conn, buffer []byte, count int) bool {
+	sent := 0
+
+	for sent < count {
+		n, err := conn.Write(buffer[sent:count])
+		if err != nil {
+			return false
+		}
+		sent += n
+	}
+
+	return true
+}
+
+func getOK(server net.Conn) bool {
+	buffer := make([]byte, MIN_BUFFER_SIZE)
+	n, err := server.Read(buffer)
+	if err != nil {
+		return false
+	}
+
+	message := string(buffer[:n])
+	if strings.Index(message, "OK") != 0 {
+		return false
+	} else {
+		log.Warn(message)
+	}
+
+	return true
+}
