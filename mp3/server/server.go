@@ -2,10 +2,12 @@ package main
 
 import (
 	"fmt"
-	log "github.com/sirupsen/logrus"
+	"mp3/common"
 	"net"
 	"strconv"
 	"strings"
+
+	log "github.com/sirupsen/logrus"
 )
 
 type Block struct {
@@ -86,7 +88,7 @@ func handleDownloadFileRequest(server *Server, conn net.Conn, filename string) {
 
 	response := fmt.Sprintf("OK %s:%d:%d\n", filename, file.Version, file.FileSize)
 
-	if !SendAll(conn, []byte(response), len(response)) {
+	if common.SendAll(conn, []byte(response), len(response)) < 0 {
 		return
 	}
 
@@ -97,7 +99,7 @@ func handleDownloadFileRequest(server *Server, conn net.Conn, filename string) {
 		replica := server.info // TODO: select replicas
 		if replica.ID == server.info.ID {
 			block := server.storage[blockName]
-			if !SendAll(conn, block.Data, block.Size) {
+			if common.SendAll(conn, block.Data, block.Size) < 0 {
 				return
 			}
 
@@ -159,10 +161,10 @@ func handleUploadFileRequest(server *Server, client net.Conn, filename string, f
 
 	client.Write([]byte("OK\n")) // Notify client to start uploading data
 
-	numBlocks := GetNumFileBlocks(filesize)
+	numBlocks := common.GetNumFileBlocks(int64(filesize))
 	log.Debugf("To upload %d blocks\n", numBlocks)
 
-	buffer := make([]byte, BLOCK_SIZE)
+	buffer := make([]byte, common.BLOCK_SIZE)
 	bufferSize := 0
 	bytesRead := 0
 	blockCount := 0
@@ -180,7 +182,7 @@ func handleUploadFileRequest(server *Server, client net.Conn, filename string, f
 
 		bufferSize += numRead
 
-		if bufferSize == BLOCK_SIZE {
+		if bufferSize == common.BLOCK_SIZE {
 			log.Debugf("Received block %d (%d bytes) from client %s", blockCount, bufferSize, client.RemoteAddr())
 			blockName := GetBlockName(filename, version, blockCount)
 			processUploadBlock(server, blockName, buffer, bufferSize)
@@ -239,7 +241,7 @@ func StartServer(server *Server) {
 func handleTCPConnection(server *Server, conn net.Conn) {
 	defer conn.Close()
 
-	buffer := make([]byte, MIN_BUFFER_SIZE)
+	buffer := make([]byte, common.MIN_BUFFER_SIZE)
 	n, err := conn.Read(buffer)
 	if err != nil {
 		log.Warnf("Client %s disconnected\n", conn.RemoteAddr())

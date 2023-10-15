@@ -9,32 +9,17 @@ import (
 
 	table "github.com/jedib0t/go-pretty/v6/table"
 	log "github.com/sirupsen/logrus"
-)
 
-const (
-	ENV            = "DEV"
-	REQUEST_READ   = 0
-	REQUEST_WRITE  = 1
-	STATE_ALIVE    = 0
-	STATE_FAILED   = 1
-	DEFAULT_PORT   = 5000
-	REPLICA_FACTOR = 1
-	// BLOCK_SIZE = 4096 * 1024 // 4 MB
-	BLOCK_SIZE      = 1024 * 1024
-	MIN_BUFFER_SIZE = 1024
+	"mp3/common"
 )
 
 var nodes []*NodeInfo = []*NodeInfo{
-	{ID: 1, Hostname: "localhost", Port: 5000, State: STATE_ALIVE},
-	{ID: 2, Hostname: "localhost", Port: 5001, State: STATE_ALIVE},
-	{ID: 3, Hostname: "localhost", Port: 5002, State: STATE_ALIVE},
-	{ID: 4, Hostname: "localhost", Port: 5003, State: STATE_ALIVE},
+	{ID: 1, Hostname: "localhost", Port: 5000, State: common.STATE_ALIVE},
+	{ID: 2, Hostname: "localhost", Port: 5001, State: common.STATE_ALIVE},
+	{ID: 3, Hostname: "localhost", Port: 5002, State: common.STATE_ALIVE},
+	{ID: 4, Hostname: "localhost", Port: 5003, State: common.STATE_ALIVE},
 }
 
-// const UPDATE_BLOCK = 0
-// const REMOVE_BLOCK = 1
-// func AddTask(taskType int, node *NodeInfo, args interface{}) {
-// }
 // // To handle replicas after a node fails or rejoins
 // func rebalance() {
 // 	m := map[int]bool{}

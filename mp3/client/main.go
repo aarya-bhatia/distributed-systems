@@ -8,45 +8,12 @@ import (
 	"strings"
 
 	log "github.com/sirupsen/logrus"
+
+	"mp3/common"
 )
 
-const (
-	ENV                     = "DEV"
-	DEFAULT_PORT            = 5000
-	BLOCK_SIZE              = 1024 * 1024
-	MIN_BUFFER_SIZE         = 1024
-	DEFAULT_SERVER_HOSTNAME = "localhost"
-)
-
-type Node struct {
-	ID       int
-	Hostname string
-	Port     int
-}
-
-var cluster = []Node{
-	{1, "fa23-cs425-0701.cs.illinois.edu", DEFAULT_PORT},
-	{2, "fa23-cs425-0702.cs.illinois.edu", DEFAULT_PORT},
-	{3, "fa23-cs425-0703.cs.illinois.edu", DEFAULT_PORT},
-	{4, "fa23-cs425-0704.cs.illinois.edu", DEFAULT_PORT},
-	{5, "fa23-cs425-0705.cs.illinois.edu", DEFAULT_PORT},
-	{6, "fa23-cs425-0706.cs.illinois.edu", DEFAULT_PORT},
-	{7, "fa23-cs425-0707.cs.illinois.edu", DEFAULT_PORT},
-	{8, "fa23-cs425-0708.cs.illinois.edu", DEFAULT_PORT},
-	{9, "fa23-cs425-0709.cs.illinois.edu", DEFAULT_PORT},
-	{10, "fa23-cs425-0710.cs.illinois.edu", DEFAULT_PORT},
-}
-
-var nodes = []Node{
-	{1, "localhost", 5000},
-	{2, "localhost", 5001},
-	{3, "localhost", 5002},
-	{4, "localhost", 5003},
-	{5, "localhost", 5004},
-}
-
-func downloadFile(localFilename string, remoteFilename string) bool {
-	server := connectToServer(DEFAULT_SERVER_HOSTNAME, DEFAULT_PORT)
+func DownloadFile(localFilename string, remoteFilename string) bool {
+	server := common.Connect(common.DEFAULT_SERVER_HOSTNAME, common.DEFAULT_PORT)
 	defer server.Close()
 
 	file, err := os.Create(localFilename)
@@ -58,15 +25,15 @@ func downloadFile(localFilename string, remoteFilename string) bool {
 	defer file.Close()
 	message := fmt.Sprintf("DOWNLOAD_FILE %s\n", remoteFilename)
 
-	if SendAll(server, []byte(message), len(message)) < 0 {
+	if common.SendAll(server, []byte(message), len(message)) < 0 {
 		return false
 	}
 
-	if !getOK(server) {
+	if !common.GetOKMessage(server) {
 		return false
 	}
 
-	buffer := make([]byte, BLOCK_SIZE)
+	buffer := make([]byte, common.BLOCK_SIZE)
 	bytesRead := 0
 
 	for {
@@ -92,8 +59,8 @@ func downloadFile(localFilename string, remoteFilename string) bool {
 	return true
 }
 
-func uploadFile(localFilename string, remoteFilename string) bool {
-	server := connectToServer(DEFAULT_SERVER_HOSTNAME, DEFAULT_PORT)
+func UploadFile(localFilename string, remoteFilename string) bool {
+	server := common.Connect(common.DEFAULT_SERVER_HOSTNAME, common.DEFAULT_PORT)
 	defer server.Close()
 
 	info, err := os.Stat(localFilename)
@@ -109,21 +76,21 @@ func uploadFile(localFilename string, remoteFilename string) bool {
 		return false
 	}
 
-	log.Debugf("Uploading file %s with %d bytes (%d blocks)", localFilename, fileSize, GetNumFileBlocks(int64(fileSize)))
+	log.Debugf("Uploading file %s with %d bytes (%d blocks)", localFilename, fileSize, common.GetNumFileBlocks(int64(fileSize)))
 
 	defer file.Close()
 
 	message := fmt.Sprintf("UPLOAD_FILE %s %d\n", remoteFilename, fileSize)
 
-	if SendAll(server, []byte(message), len(message)) < 0 {
+	if common.SendAll(server, []byte(message), len(message)) < 0 {
 		return false
 	}
 
-	if !getOK(server) {
+	if !common.GetOKMessage(server) {
 		return false
 	}
 
-	buffer := make([]byte, BLOCK_SIZE)
+	buffer := make([]byte, common.BLOCK_SIZE)
 
 	for {
 		n, err := file.Read(buffer)
@@ -134,14 +101,14 @@ func uploadFile(localFilename string, remoteFilename string) bool {
 			return false
 		}
 
-		if SendAll(server, buffer, n) < 0 {
+		if common.SendAll(server, buffer, n) < 0 {
 			return false
 		}
 
 		log.Debugf("Sent block with %d bytes", n)
 	}
 
-	if !getOK(server) {
+	if !common.GetOKMessage(server) {
 		return false
 	}
 
@@ -176,7 +143,7 @@ func main() {
 		} else if verb == "put" {
 			if len(tokens) != 3 {
 				printUsage()
-			} else if !uploadFile(tokens[1], tokens[2]) {
+			} else if !UploadFile(tokens[1], tokens[2]) {
 				log.Warn("Failed to upload file")
 			} else {
 				log.Println("Success!")
@@ -184,7 +151,7 @@ func main() {
 		} else if verb == "get" {
 			if len(tokens) != 3 {
 				printUsage()
-			} else if !downloadFile(tokens[2], tokens[1]) {
+			} else if !DownloadFile(tokens[2], tokens[1]) {
 				log.Warn("Failed to download file ", tokens[2])
 			} else {
 				log.Println("Success!")
