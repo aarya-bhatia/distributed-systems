@@ -2,12 +2,29 @@ package common
 
 import (
 	"fmt"
-	log "github.com/sirupsen/logrus"
 	"hash"
 	"hash/fnv"
 	"net"
+	"os"
 	"strings"
+
+	log "github.com/sirupsen/logrus"
 )
+
+func NewLogger(level log.Level, withColors bool, withTimestamp bool) *log.Logger {
+	logger := log.New()
+
+	logger.SetFormatter(&log.TextFormatter{
+		DisableColors: withColors,
+		FullTimestamp: withTimestamp,
+	})
+
+	logger.SetReportCaller(true)
+	logger.SetOutput(os.Stderr)
+	logger.SetLevel(level)
+
+	return logger
+}
 
 // Hash string s to an integer in [0,N)
 func GetHash(s string, N int) int {

@@ -13,6 +13,7 @@ import (
 	"cs425/common"
 )
 
+var Logger *log.Logger
 var hostname string
 var port int
 
@@ -22,7 +23,7 @@ func DownloadFile(localFilename string, remoteFilename string) bool {
 
 	file, err := os.Create(localFilename)
 	if err != nil {
-		log.Println(err)
+		Logger.Println(err)
 		return false
 	}
 
@@ -43,23 +44,23 @@ func DownloadFile(localFilename string, remoteFilename string) bool {
 	for {
 		n, err := server.Read(buffer)
 		if err == io.EOF {
-			log.Debug("EOF")
+			Logger.Debug("EOF")
 			break
 		} else if err != nil {
-			log.Println(err)
+			Logger.Println(err)
 			return false
 		}
 
 		_, err = file.Write(buffer[:n])
 		if err != nil {
-			log.Println(err)
+			Logger.Println(err)
 			return false
 		}
 
 		bytesRead += n
 	}
 
-	log.Infof("Downloaded file %s with %d bytes\n", localFilename, bytesRead)
+	Logger.Infof("Downloaded file %s with %d bytes\n", localFilename, bytesRead)
 	return true
 }
 
@@ -69,18 +70,18 @@ func UploadFile(localFilename string, remoteFilename string) bool {
 
 	info, err := os.Stat(localFilename)
 	if err != nil {
-		log.Println(err)
+		Logger.Println(err)
 		return false
 	}
 
 	fileSize := info.Size()
 	file, err := os.Open(localFilename)
 	if err != nil {
-		log.Println(err)
+		Logger.Println(err)
 		return false
 	}
 
-	log.Debugf("Uploading file %s with %d bytes (%d blocks)", localFilename, fileSize, common.GetNumFileBlocks(int64(fileSize)))
+	Logger.Debugf("Uploading file %s with %d bytes (%d blocks)", localFilename, fileSize, common.GetNumFileBlocks(int64(fileSize)))
 
 	defer file.Close()
 
@@ -101,7 +102,7 @@ func UploadFile(localFilename string, remoteFilename string) bool {
 		if err == io.EOF {
 			break
 		} else if err != nil {
-			log.Println(err)
+			Logger.Println(err)
 			return false
 		}
 
@@ -109,7 +110,7 @@ func UploadFile(localFilename string, remoteFilename string) bool {
 			return false
 		}
 
-		log.Debugf("Sent block with %d bytes", n)
+		Logger.Debugf("Sent block with %d bytes", n)
 	}
 
 	if !common.GetOKMessage(server) {
@@ -128,19 +129,12 @@ func printUsage() {
 
 func main() {
 	if len(os.Args) != 3 {
-		log.Fatal("Usage: go run ./client hostname port")
+		Logger.Fatal("Usage: go run ./client hostname port")
 	}
 
 	scanner := bufio.NewScanner(os.Stdin)
 
-	log.SetFormatter(&log.TextFormatter{
-		DisableColors: false,
-		FullTimestamp: true,
-	})
-
-	log.SetReportCaller(true)
-	log.SetOutput(os.Stderr)
-	log.SetLevel(log.DebugLevel)
+	Logger = common.NewLogger(log.DebugLevel, true, true)
 
 	hostname = os.Args[1]
 	port, _ = strconv.Atoi(os.Args[2])
@@ -155,20 +149,20 @@ func main() {
 			if len(tokens) != 3 {
 				printUsage()
 			} else if !UploadFile(tokens[1], tokens[2]) {
-				log.Warn("Failed to upload file")
+				Logger.Warn("Failed to upload file")
 			} else {
-				log.Println("Success!")
+				Logger.Println("Success!")
 			}
 		} else if verb == "get" {
 			if len(tokens) != 3 {
 				printUsage()
 			} else if !DownloadFile(tokens[2], tokens[1]) {
-				log.Warn("Failed to download file ", tokens[2])
+				Logger.Warn("Failed to download file ", tokens[2])
 			} else {
-				log.Println("Success!")
+				Logger.Println("Success!")
 			}
 		} else {
-			log.Warn("Unknown command ", verb)
+			Logger.Warn("Unknown command ", verb)
 			printUsage()
 		}
 	}

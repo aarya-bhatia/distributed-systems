@@ -60,13 +60,19 @@ type Server struct {
 	ReceiverChannel chan ReceiverEvent
 	InputChannel    chan string
 	Protocol        int
-	Notifier		common.Notifier
+	Notifier        common.Notifier
 }
 
+var Logger *log.Logger = nil
+
 func (s *Server) Start() {
+	defer s.Close()
+
+	Logger.Infof("Node %s: failure detector running on port %d\n", s.Self.ID, s.Self.Port)
+
 	if IsIntroducer(s) {
 		s.Active = true
-		log.Info("Introducer is online...")
+		Logger.Info("Introducer is online...")
 	}
 
 	go receiverRoutine(s) // to receive requests from network
@@ -124,14 +130,15 @@ func (server *Server) SetUniqueID() string {
 	return ID
 }
 
-func NewServer(Hostname string, Port int, Protocol int, Notifier common.Notifier) (*Server, error) {
+func NewServer(Hostname string, Port int, Protocol int, Notifier common.Notifier) *Server {
 	addr, err := net.ResolveUDPAddr("udp", fmt.Sprintf(":%d", Port))
 	if err != nil {
-		return nil, err
+		Logger.Fatal(err)
 	}
+
 	conn, err := net.ListenUDP("udp", addr)
 	if err != nil {
-		return nil, err
+		Logger.Fatal(err)
 	}
 
 	server := &Server{}
@@ -151,7 +158,7 @@ func NewServer(Hostname string, Port int, Protocol int, Notifier common.Notifier
 
 	server.SetUniqueID()
 
-	return server, nil
+	return server
 }
 
 func (server *Server) AddHost(Hostname string, Port int, ID string) (*Host, error) {
@@ -164,12 +171,12 @@ func (server *Server) AddHost(Hostname string, Port int, ID string) (*Host, erro
 	}
 
 	if found, ok := server.Members[ID]; ok {
-		log.Info("Duplicate host: ", found)
+		Logger.Info("Duplicate host: ", found)
 		return nil, errors.New("A peer with this ID already exists")
 	}
 
 	server.Members[ID] = NewHost(Hostname, Port, ID, addr)
-	log.Warnf("Added new host: %s\n", server.Members[ID].Signature)
+	Logger.Warnf("Added new host: %s\n", server.Members[ID].Signature)
 
 	server.MemberLock.Unlock()
 	server.PrintMembershipTable()
@@ -185,7 +192,7 @@ func (server *Server) GetPacket() (message string, addr *net.UDPAddr, err error)
 		return "", nil, err
 	}
 	message = strings.TrimSpace(string(buffer[:n]))
-	log.Debugf("Received %d bytes from %s\n", len(message), addr.String())
+	Logger.Debugf("Received %d bytes from %s\n", len(message), addr.String())
 	return message, addr, nil
 }
 
@@ -259,17 +266,17 @@ func (s *Server) RestartTimer(ID string, state int) {
 	if state == common.NODE_ALIVE {
 		if s.Protocol == common.GOSSIP_PROTOCOL {
 			s.TimerManager.RestartTimer(ID, T_FAIL)
-			// log.Warnf("Failure timer for Gossip restarted at %d milliseconds\n", time.Now().UnixMilli())
+			// Logger.Warnf("Failure timer for Gossip restarted at %d milliseconds\n", time.Now().UnixMilli())
 		} else {
-			// log.Warnf("Suspected timer restarted at %d milliseconds\n", time.Now().UnixMilli())
+			// Logger.Warnf("Suspected timer restarted at %d milliseconds\n", time.Now().UnixMilli())
 			s.TimerManager.RestartTimer(ID, T_SUSPECT)
 		}
 	} else if state == common.NODE_SUSPECTED {
 		s.TimerManager.RestartTimer(ID, T_FAIL)
-		// log.Warnf("Failure timer restarted at %d milliseconds\n", time.Now().UnixMilli())
+		// Logger.Warnf("Failure timer restarted at %d milliseconds\n", time.Now().UnixMilli())
 	} else if state == common.NODE_FAILED {
 		s.TimerManager.RestartTimer(ID, T_CLEANUP)
-		// log.Warnf("Cleanup timer restarted at %d milliseconds\n", time.Now().UnixMilli())
+		// Logger.Warnf("Cleanup timer restarted at %d milliseconds\n", time.Now().UnixMilli())
 	}
 }
 
@@ -293,7 +300,7 @@ func (s *Server) processRow(tokens []string) {
 	if ID == s.Self.ID {
 		if state == common.NODE_FAILED {
 			// TODO: Restart Gossip with new ID.
-			log.Fatalf("FALSE DETECTION: Node %s has failed", s.Self.Signature)
+			Logger.Fatalf("FALSE DETECTION: Node %s has failed", s.Self.Signature)
 		}
 		return
 	}
@@ -365,7 +372,7 @@ func sendPings(s *Server) {
 		return
 	}
 
-	log.Debugf("Sending gossip to %d hosts", len(targets))
+	Logger.Debugf("Sending gossip to %d hosts", len(targets))
 
 	s.MemberLock.Lock()
 	s.Self.Counter++
@@ -376,11 +383,11 @@ func sendPings(s *Server) {
 		message := s.GetPingMessage(target.ID)
 		n, err := s.Connection.WriteToUDP([]byte(message), target.Address)
 		if err != nil {
-			log.Println(err)
+			Logger.Println(err)
 			continue
 		}
 		s.TotalByte += n
-		log.Debugf("Sent %d bytes to %s\n", n, target.Signature)
+		Logger.Debugf("Sent %d bytes to %s\n", n, target.Signature)
 	}
 }
 
@@ -422,11 +429,11 @@ func (s *Server) HandleTimeout(e timer.TimerEvent) {
 	if e.ID == JOIN_TIMER_ID {
 		if IsIntroducer(s) {
 			if len(s.Members) <= 1 {
-				log.Info("Timeout: Retrying JOIN.")
+				Logger.Info("Timeout: Retrying JOIN.")
 				sendJoinRequest(s)
 			}
 		} else if !s.Active {
-			log.Info("Timeout: Retrying JOIN.")
+			Logger.Info("Timeout: Retrying JOIN.")
 			sendJoinRequest(s)
 		}
 
@@ -447,19 +454,19 @@ func (s *Server) HandleTimeout(e timer.TimerEvent) {
 
 	if host.State == common.NODE_ALIVE {
 		if s.Protocol == common.GOSSIP_PROTOCOL {
-			log.Warnf("FAILURE DETECTED: (%d) Node %s is considered failed\n", timestamp, host.Signature)
+			Logger.Warnf("FAILURE DETECTED: (%d) Node %s is considered failed\n", timestamp, host.Signature)
 			host.State = common.NODE_FAILED
 		} else {
-			log.Warnf("FAILURE SUSPECTED: (%d) Node %s is suspected of failure\n", timestamp, host.Signature)
+			Logger.Warnf("FAILURE SUSPECTED: (%d) Node %s is suspected of failure\n", timestamp, host.Signature)
 			host.State = common.NODE_SUSPECTED
 		}
 		s.RestartTimer(e.ID, host.State)
 	} else if host.State == common.NODE_SUSPECTED {
-		log.Warnf("FAILURE DETECTED: (%d) Node %s is considered failed\n", timestamp, host.Signature)
+		Logger.Warnf("FAILURE DETECTED: (%d) Node %s is considered failed\n", timestamp, host.Signature)
 		host.State = common.NODE_FAILED
 		s.RestartTimer(e.ID, host.State)
 	} else if host.State == common.NODE_FAILED {
-		log.Warn("Deleting node from membership list...", host.Signature)
+		Logger.Warn("Deleting node from membership list...", host.Signature)
 		delete(s.Members, e.ID)
 	}
 
@@ -477,9 +484,9 @@ func senderRoutine(s *Server) {
 		select {
 		case active = <-s.GossipChannel:
 			if active {
-				log.Info("Starting gossip...")
+				Logger.Info("Starting gossip...")
 			} else {
-				log.Info("Stopping gossip...")
+				Logger.Info("Stopping gossip...")
 			}
 		case <-time.After(T_GOSSIP):
 			break
@@ -497,7 +504,7 @@ func receiverRoutine(s *Server) {
 	for {
 		message, sender, err := s.GetPacket()
 		if err != nil {
-			log.Error(err)
+			Logger.Error(err)
 			continue
 		}
 
@@ -508,29 +515,29 @@ func receiverRoutine(s *Server) {
 
 func startGossip(s *Server) {
 	if IsIntroducer(s) {
-		log.Warn("Introducer is always active")
+		Logger.Warn("Introducer is always active")
 		return
 	}
 
 	if s.Active {
-		log.Warn("server is already active")
+		Logger.Warn("server is already active")
 		return
 	}
 
 	ID := s.SetUniqueID()
-	log.Debugf("Updated Node ID to %s", ID)
+	Logger.Debugf("Updated Node ID to %s", ID)
 	s.GossipChannel <- true
 	sendJoinRequest(s)
 }
 
 func stopGossip(s *Server) {
 	if IsIntroducer(s) {
-		log.Warn("Introducer is always active")
+		Logger.Warn("Introducer is always active")
 		return
 	}
 
 	if !s.Active {
-		log.Warn("server is already inactive")
+		Logger.Warn("server is already inactive")
 		return
 	}
 
@@ -556,16 +563,16 @@ func sendJoinRequest(s *Server) {
 
 			addr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", vm.Hostname, vm.UDPPort))
 			if err != nil {
-				log.Fatal(err)
+				Logger.Fatal(err)
 			}
 
 			_, err = s.Connection.WriteToUDP([]byte(msg), addr)
 			if err != nil {
-				log.Println(err)
+				Logger.Println(err)
 				continue
 			}
 
-			log.Printf("Sent join request to %s:%d\n", vm.Hostname, vm.UDPPort)
+			Logger.Printf("Sent join request to %s:%d\n", vm.Hostname, vm.UDPPort)
 		}
 
 	} else {
@@ -574,11 +581,11 @@ func sendJoinRequest(s *Server) {
 
 		addr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", introducer.Hostname, introducer.UDPPort))
 		if err != nil {
-			log.Fatal(err)
+			Logger.Fatal(err)
 		}
 
 		s.Connection.WriteToUDP([]byte(msg), addr)
-		log.Printf("Sent join request to %s:%d\n", introducer.Hostname, introducer.UDPPort)
+		Logger.Printf("Sent join request to %s:%d\n", introducer.Hostname, introducer.UDPPort)
 	}
 
 	s.TimerManager.RestartTimer(JOIN_TIMER_ID, common.JOIN_RETRY_TIMEOUT)
@@ -598,7 +605,7 @@ func (s *Server) HandleCommand(command string) {
 		fmt.Println(s.Self.ID)
 
 	case "kill":
-		log.Fatalf("Kill command received at %d milliseconds", time.Now().UnixMilli())
+		Logger.Fatalf("Kill command received at %d milliseconds", time.Now().UnixMilli())
 
 	case "start_gossip":
 		fallthrough
@@ -636,7 +643,7 @@ func (s *Server) HandleRequest(e ReceiverEvent) {
 	header := lines[0]
 	tokens := strings.Split(header, " ")
 
-	log.Debugf("Request %s received from: %v\n", tokens[0], e.Sender)
+	Logger.Debugf("Request %s received from: %v\n", tokens[0], e.Sender)
 
 	switch verb := strings.ToLower(tokens[0]); verb {
 	case "join":
@@ -646,7 +653,7 @@ func (s *Server) HandleRequest(e ReceiverEvent) {
 		HandleJoinResponse(s, e)
 
 	case "join_error":
-		log.Warnf("Failed to join: %s", e.Message)
+		Logger.Warnf("Failed to join: %s", e.Message)
 
 	case "ping":
 		HandlePingRequest(s, e)
@@ -658,16 +665,16 @@ func (s *Server) HandleRequest(e ReceiverEvent) {
 		s.Connection.WriteToUDP([]byte(fmt.Sprintf("OK\n%s\n", strings.ReplaceAll(s.EncodeMembersList(), ";", "\n"))), e.Sender)
 
 	case "kill":
-		log.Fatalf("KILL command received at %d milliseconds", time.Now().UnixMilli())
+		Logger.Fatalf("KILL command received at %d milliseconds", time.Now().UnixMilli())
 
 	case "start_gossip":
 		startGossip(s)
-		log.Warnf("START command received at %d milliseconds", time.Now().UnixMilli())
+		Logger.Warnf("START command received at %d milliseconds", time.Now().UnixMilli())
 		s.Connection.WriteToUDP([]byte("OK\n"), e.Sender)
 
 	case "stop_gossip":
 		stopGossip(s)
-		log.Warnf("STOP command received at %d milliseconds", time.Now().UnixMilli())
+		Logger.Warnf("STOP command received at %d milliseconds", time.Now().UnixMilli())
 		s.Connection.WriteToUDP([]byte("OK\n"), e.Sender)
 
 	case "config":
@@ -680,7 +687,7 @@ func (s *Server) HandleRequest(e ReceiverEvent) {
 		s.Connection.WriteToUDP([]byte(strings.Join(commands, "\n")), e.Sender)
 
 	default:
-		log.Warn("Unknown request verb: ", verb)
+		Logger.Warn("Unknown request verb: ", verb)
 	}
 }
 
@@ -690,13 +697,13 @@ func HandleJoinResponse(s *Server, e ReceiverEvent) {
 		return
 	}
 
-	log.Info("Join accepted by ", e.Sender)
+	Logger.Info("Join accepted by ", e.Sender)
 
 	s.TimerManager.StopTimer(JOIN_TIMER_ID)
 	s.ProcessMembersList(lines[1])
 	// s.StartAllTimers()
 	s.Active = true
-	log.Info("Node join completed.")
+	Logger.Info("Node join completed.")
 }
 
 // Handle config command: CONFIG <field to change> <value>
@@ -772,7 +779,7 @@ func HandleConfigRequest(s *Server, e ReceiverEvent) {
 // Received member list from peer
 func HandlePingRequest(s *Server, e ReceiverEvent) {
 	if !s.Active {
-		log.Debugf("PING from %s dropped as server is inactive\n", e)
+		Logger.Debugf("PING from %s dropped as server is inactive\n", e)
 		return
 	}
 
@@ -783,17 +790,17 @@ func HandlePingRequest(s *Server, e ReceiverEvent) {
 
 	tokens := strings.Split(lines[0], " ")
 	if len(tokens) < 3 {
-		log.Debugf("Illegal header for PING request: %s\n", lines[0])
+		Logger.Debugf("Illegal header for PING request: %s\n", lines[0])
 		return
 	}
 
 	if rand.Intn(100) < s.DropRate {
-		log.Debugf("PING from %s dropped with drop rate %d %%\n", e, s.DropRate)
+		Logger.Debugf("PING from %s dropped with drop rate %d %%\n", e, s.DropRate)
 		return
 	}
 
 	if tokens[2] != s.Self.ID {
-		log.Debugf("Dropped PING due to ID mismatch: %s\n", tokens[2])
+		Logger.Debugf("Dropped PING due to ID mismatch: %s\n", tokens[2])
 		return
 	}
 
@@ -848,7 +855,7 @@ func HandleJoinRequest(s *Server, e ReceiverEvent) {
 
 	host, err := s.AddHost(senderAddress, senderPortInt, senderId)
 	if err != nil {
-		log.Errorf("Failed to add host: %s\n", err.Error())
+		Logger.Errorf("Failed to add host: %s\n", err.Error())
 		reply := fmt.Sprintf("%s\n%s\n", JOIN_ERROR, err.Error())
 		s.Connection.WriteToUDP([]byte(reply), e.Sender)
 		return
@@ -857,6 +864,6 @@ func HandleJoinRequest(s *Server, e ReceiverEvent) {
 	reply := fmt.Sprintf("%s\n%s\n", JOIN_OK, s.EncodeMembersList())
 	_, err = s.Connection.WriteToUDP([]byte(reply), host.Address)
 	if err != nil {
-		log.Error(err)
+		Logger.Error(err)
 	}
 }

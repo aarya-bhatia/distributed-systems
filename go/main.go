@@ -45,24 +45,19 @@ func main() {
 		common.Cluster = common.ProdCluster
 	}
 
-	log.SetFormatter(&log.TextFormatter{
-		DisableColors: false,
-		FullTimestamp: true,
-	})
+	failuredetector.Logger = common.NewLogger(log.InfoLevel, false, true)
+	filesystem.Logger = common.NewLogger(log.DebugLevel, false, false)
 
-	log.SetReportCaller(true)
-	log.SetOutput(os.Stderr)
+	// switch strings.ToLower(level) {
+	// case "debug":
+	// 	log.SetLevel(log.DebugLevel)
+	// case "info":
+	// 	log.SetLevel(log.InfoLevel)
+	// case "warn":
+	// 	log.SetLevel(log.WarnLevel)
+	// }
 
-	switch strings.ToLower(level) {
-	case "debug":
-		log.SetLevel(log.DebugLevel)
-	case "info":
-		log.SetLevel(log.InfoLevel)
-	case "warn":
-		log.SetLevel(log.WarnLevel)
-	}
-
-	log.Debug("Cluster: ", common.Cluster)
+	log.Debug(common.Cluster)
 
 	var found *common.Node = nil
 
@@ -78,27 +73,15 @@ func main() {
 	}
 
 	fileServer := filesystem.NewServer(*found)
+
+	failureDetectorServer := failuredetector.NewServer(found.Hostname, found.UDPPort, common.GOSPSIP_SUSPICION_PROTOCOL, fileServer)
+
 	go fileServer.Start()
-
-	// defer fileServer.Close()
-
-	protocol := common.GOSSIP_PROTOCOL
-
-	if withSuspicion {
-		protocol = common.GOSPSIP_SUSPICION_PROTOCOL
-	}
-
-	failureDetectorServer, err := failuredetector.NewServer(found.Hostname, found.UDPPort, protocol, fileServer)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	// defer failureDetectorServer.Close()
-	// go failureDetectorServer.Start()
-	// log.Infof("Node %s: failure detector running on port %d\n", failureDetectorServer.Self.ID, failureDetectorServer.Self.Port)
+	go failureDetectorServer.Start()
 
 	mode := 1
 	scanner := bufio.NewScanner(os.Stdin)
+
 	for scanner.Scan() {
 		command := strings.TrimSpace(scanner.Text())
 		tokens := strings.Split(command, " ")
