@@ -9,12 +9,5 @@ const (
 	DEFAULT_PORT            = 5000
 	DEFAULT_SERVER_HOSTNAME = "localhost"
 
-	REQUEST_READ  = 0
-	REQUEST_WRITE = 1
-
-	STATE_ALIVE  = 0
-	STATE_FAILED = 1
-
 	REPLICA_FACTOR = 1
 )
-

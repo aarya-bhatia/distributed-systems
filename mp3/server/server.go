@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	"mp3/common"
+	"common"
 	"net"
 	"strconv"
 	"strings"

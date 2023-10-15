@@ -1,4 +1,4 @@
-module mp3/common
+module common
 
 go 1.21.2
 

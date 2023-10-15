@@ -9,7 +9,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 
-	"mp3/common"
+	"common"
 )
 
 func DownloadFile(localFilename string, remoteFilename string) bool {
