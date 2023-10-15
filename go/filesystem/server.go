@@ -3,17 +3,14 @@ package filesystem
 import (
 	"cs425/common"
 	"fmt"
+	"github.com/jedib0t/go-pretty/v6/table"
+	"golang.org/x/exp/slices"
 	"math"
 	"math/rand"
 	"net"
 	"os"
 	"strconv"
 	"strings"
-
-	table "github.com/jedib0t/go-pretty/v6/table"
-	"golang.org/x/exp/slices"
-
-	log "github.com/sirupsen/logrus"
 )
 
 const (
@@ -56,14 +53,14 @@ type Server struct {
 	InputChannel chan string
 }
 
-var Logger *log.Logger = nil
+var Log *common.Logger = common.Log
 
 func (s *Server) HandleNodeJoin(node *common.Node) {
-	Logger.Println("node joined: ", *node)
+	Log.Debug("node joined: ", *node)
 }
 
 func (s *Server) HandleNodeLeave(node *common.Node) {
-	Logger.Println("node left: ", *node)
+	Log.Debug("node left: ", *node)
 }
 
 func NewServer(info common.Node) *Server {
@@ -131,20 +128,20 @@ func (server *Server) Start() {
 	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", server.Info.TCPPort))
 
 	if err != nil {
-		Logger.Fatal("Error starting server", err)
+		Log.Fatal("Error starting server", err)
 	}
 	defer listener.Close()
 
-	Logger.Infof("TCP Server is listening on port %d...\n", server.Info.TCPPort)
+	Log.Infof("TCP Server is listening on port %d...\n", server.Info.TCPPort)
 
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
-			Logger.Warnf("Error accepting connection: %s\n", err)
+			Log.Warnf("Error accepting connection: %s\n", err)
 			continue
 		}
 
-		Logger.Debugf("Accepted connection from %s\n", conn.RemoteAddr())
+		Log.Debugf("Accepted connection from %s\n", conn.RemoteAddr())
 		go clientProtocol(server, conn)
 	}
 }
@@ -223,14 +220,14 @@ func DownloadFile(server *Server, conn net.Conn, filename string) {
 
 	bytesSent := 0
 
-	Logger.Debugf("To send %d blocks\n", file.NumBlocks)
+	Log.Debugf("To send %d blocks\n", file.NumBlocks)
 
 	for i := 0; i < file.NumBlocks; i++ {
 		blockName := common.GetBlockName(filename, file.Version, i)
 		replicas := server.BlockToNodes[blockName]
 
 		if len(replicas) == 0 {
-			Logger.Warnf("No replicas found for block %d\n", i)
+			Log.Warnf("No replicas found for block %d\n", i)
 			return
 		}
 
@@ -240,17 +237,17 @@ func DownloadFile(server *Server, conn net.Conn, filename string) {
 		if replica.ID == server.Info.ID {
 			block := server.Storage[blockName]
 			if common.SendAll(conn, block.Data, block.Size) < 0 {
-				Logger.Warn("Failed to send block")
+				Log.Warn("Failed to send block")
 				return
 			}
 
 			bytesSent += block.Size
 		} else {
-			Logger.Debugf("Replica %d is unavailable\n", replica.ID)
+			Log.Debugf("Replica %d is unavailable\n", replica.ID)
 		}
 	}
 
-	Logger.Infof("Sent file %s (%d bytes) to client %s\n", filename, bytesSent, conn.RemoteAddr())
+	Log.Infof("Sent file %s (%d bytes) to client %s\n", filename, bytesSent, conn.RemoteAddr())
 }
 
 func processUploadBlock(server *Server, blockName string, buffer []byte, blockSize int) {
@@ -262,31 +259,31 @@ func processUploadBlock(server *Server, blockName string, buffer []byte, blockSi
 	if replica == server.Info.ID {
 		block := &Block{Size: blockSize, Data: blockData}
 		server.Storage[blockName] = block
-		Logger.Debugf("Added block %s to storage\n", blockName)
+		Log.Debugf("Added block %s to storage\n", blockName)
 	}
 
 	// } else {
 	// 	replicaAddr := fmt.Sprintf("%s:%d", replica.Hostname, replica.Port)
 	// 	replicaConn, err := net.Dial("tcp", replicaAddr)
 	// 	if err != nil {
-	// 		Logger.Println("Failed to establish connection", err)
+	// 		Log.Debug("Failed to establish connection", err)
 	// 		return false
 	// 	}
 	//
 	// 	request := fmt.Sprintf("UPLOAD:%s:%d:%d:%d\n", filename, version, i, n)
 	// 	_, err = replicaConn.Write([]byte(request))
 	// 	if err != nil {
-	// 		Logger.Println("File upload failed", err)
+	// 		Log.Debug("File upload failed", err)
 	// 		return false
 	// 	}
 	//
 	// 	_, err = replicaConn.Write([]byte(buffer[:n]))
 	// 	if err != nil {
-	// 		Logger.Println("File upload failed", err)
+	// 		Log.Debug("File upload failed", err)
 	// 		return false
 	// 	}
 	//
-	// 	Logger.Debugf("Sent block %d to node %s", i, replicaAddr)
+	// 	Log.Debugf("Sent block %d to node %s", i, replicaAddr)
 	// 	replicaConn.Close()
 	// }
 
@@ -303,7 +300,7 @@ func UploadFile(server *Server, client net.Conn, filename string, filesize int, 
 	client.Write([]byte("OK\n")) // Notify client to start uploading data
 
 	numBlocks := common.GetNumFileBlocks(int64(filesize))
-	Logger.Debugf("To upload %d blocks\n", numBlocks)
+	Log.Debugf("To upload %d blocks\n", numBlocks)
 
 	buffer := make([]byte, common.BLOCK_SIZE)
 	bufferSize := 0
@@ -313,7 +310,7 @@ func UploadFile(server *Server, client net.Conn, filename string, filesize int, 
 	for bytesRead < filesize {
 		numRead, err := client.Read(buffer[bufferSize:])
 		if err != nil {
-			Logger.Println(err)
+			Log.Debug(err)
 			return false
 		}
 
@@ -324,7 +321,7 @@ func UploadFile(server *Server, client net.Conn, filename string, filesize int, 
 		bufferSize += numRead
 
 		if bufferSize == common.BLOCK_SIZE {
-			Logger.Debugf("Received block %d (%d bytes) from client %s", blockCount, bufferSize, client.RemoteAddr())
+			Log.Debugf("Received block %d (%d bytes) from client %s", blockCount, bufferSize, client.RemoteAddr())
 			blockName := common.GetBlockName(filename, version, blockCount)
 			processUploadBlock(server, blockName, buffer, bufferSize)
 			bufferSize = 0
@@ -335,13 +332,13 @@ func UploadFile(server *Server, client net.Conn, filename string, filesize int, 
 	}
 
 	if bufferSize > 0 {
-		Logger.Debugf("Received block %d (%d bytes) from client %s", blockCount, bufferSize, client.RemoteAddr())
+		Log.Debugf("Received block %d (%d bytes) from client %s", blockCount, bufferSize, client.RemoteAddr())
 		blockName := common.GetBlockName(filename, version, blockCount)
 		processUploadBlock(server, blockName, buffer, bufferSize)
 	}
 
 	if bytesRead < filesize {
-		Logger.Warnf("Insufficient bytes read (%d of %d)\n", bytesRead, filesize)
+		Log.Warnf("Insufficient bytes read (%d of %d)\n", bytesRead, filesize)
 		return false
 	}
 
@@ -363,12 +360,12 @@ func clientProtocol(server *Server, conn net.Conn) {
 	buffer := make([]byte, common.MIN_BUFFER_SIZE)
 	n, err := conn.Read(buffer)
 	if err != nil {
-		Logger.Warnf("Client %s disconnected\n", conn.RemoteAddr())
+		Log.Warnf("Client %s disconnected\n", conn.RemoteAddr())
 		return
 	}
 
 	request := string(buffer[:n])
-	Logger.Debugf("Received request from %s: %s\n", conn.RemoteAddr(), request)
+	Log.Debugf("Received request from %s: %s\n", conn.RemoteAddr(), request)
 
 	lines := strings.Split(request, "\n")
 	tokens := strings.Split(lines[0], " ")
@@ -378,21 +375,21 @@ func clientProtocol(server *Server, conn net.Conn) {
 		filename := tokens[1]
 		filesize, err := strconv.Atoi(tokens[2])
 		if err != nil {
-			Logger.Warn(err)
+			Log.Warn(err)
 			return
 		}
 		if UploadFile(server, conn, filename, filesize, 1) {
-			Logger.Debug("Upload OK")
+			Log.Debug("Upload OK")
 			conn.Write([]byte("OK\n"))
 		} else {
-			Logger.Debug("Upload ERROR")
+			Log.Debug("Upload ERROR")
 			conn.Write([]byte("ERROR\n"))
 		}
 	} else if verb == "DOWNLOAD_FILE" {
 		filename := tokens[1]
 		DownloadFile(server, conn, filename)
 	} else {
-		Logger.Warn("Unknown verb: ", verb)
+		Log.Warn("Unknown verb: ", verb)
 	}
 }
 

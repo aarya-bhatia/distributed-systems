@@ -9,4 +9,4 @@
 - Upload file blocks for ACKs from replicas
 - Remove nodes
 - API operations for demo
-
+- clean up cli

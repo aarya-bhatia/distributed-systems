@@ -7,57 +7,37 @@ import (
 	"cs425/filesystem"
 	"flag"
 	"fmt"
+	"log"
 	"os"
 	"strings"
-
-	log "github.com/sirupsen/logrus"
 )
+
+var Log = common.Log
 
 func main() {
 	var err error
+	var hostname string
 	var udpPort, tcpPort int
-	var hostname, level, env string
-	var withSuspicion bool
 
 	systemHostname, err := os.Hostname()
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	flag.IntVar(&udpPort, "udp", common.DEFAULT_UDP_PORT, "port number for failure detector")
-	flag.IntVar(&tcpPort, "tcp", common.DEFAULT_TCP_PORT, "port number for file server")
-	flag.StringVar(&hostname, "h", systemHostname, "server hostname")
-	flag.StringVar(&level, "l", "DEBUG", "log level")
-	flag.StringVar(&env, "e", "production", "environment: development, production")
-	flag.BoolVar(&withSuspicion, "s", false, "gossip with suspicion")
+	flag.IntVar(&udpPort, "udp", common.DEFAULT_UDP_PORT, "failure detector port")
+	flag.IntVar(&tcpPort, "tcp", common.DEFAULT_TCP_PORT, "file server port")
+	flag.StringVar(&hostname, "h", systemHostname, "hostname")
 	flag.Parse()
 
 	if hostname == "localhost" || hostname == "127.0.0.1" {
-		env = "development"
-	}
-
-	if env == "development" {
-		hostname = "localhost"
-		log.Info("Using local cluster")
+		Log.Info("Using local cluster")
 		common.Cluster = common.LocalCluster
 	} else {
-		log.Info("Using prod cluster")
+		Log.Info("Using prod cluster")
 		common.Cluster = common.ProdCluster
 	}
 
-	failuredetector.Logger = common.NewLogger(log.InfoLevel, false, true)
-	filesystem.Logger = common.NewLogger(log.DebugLevel, false, false)
-
-	// switch strings.ToLower(level) {
-	// case "debug":
-	// 	log.SetLevel(log.DebugLevel)
-	// case "info":
-	// 	log.SetLevel(log.InfoLevel)
-	// case "warn":
-	// 	log.SetLevel(log.WarnLevel)
-	// }
-
-	log.Debug(common.Cluster)
+	Log.Debug(common.Cluster)
 
 	var found *common.Node = nil
 
