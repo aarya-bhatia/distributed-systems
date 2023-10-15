@@ -31,8 +31,8 @@ type Node struct {
 }
 
 type Notifier interface {
-	HandleNodeJoin(node Node)
-	HandleNodeLeave(node Node)
+	HandleNodeJoin(node *Node)
+	HandleNodeLeave(node *Node)
 }
 
 var ProdCluster = []Node{
@@ -60,4 +60,13 @@ var Cluster []Node
 
 func GetNode(id int) Node {
 	return Cluster[id-1]
+}
+
+func GetNodeByAddress(hostname string, udpPort int) *Node {
+	for _, node := range Cluster {
+		if node.Hostname == hostname && node.UDPPort == udpPort {
+			return &node
+		}
+	}
+	return nil
 }

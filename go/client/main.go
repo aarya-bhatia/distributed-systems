@@ -134,7 +134,7 @@ func main() {
 
 	scanner := bufio.NewScanner(os.Stdin)
 
-	Logger = common.NewLogger(log.DebugLevel, true, true)
+	Logger = common.NewLogger(log.DebugLevel, false, false)
 
 	hostname = os.Args[1]
 	port, _ = strconv.Atoi(os.Args[2])

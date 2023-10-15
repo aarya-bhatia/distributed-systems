@@ -58,10 +58,12 @@ type Server struct {
 
 var Logger *log.Logger = nil
 
-func (s *Server) HandleNodeJoin(node common.Node) {
+func (s *Server) HandleNodeJoin(node *common.Node) {
+	Logger.Println("node joined: ", *node)
 }
 
-func (s *Server) HandleNodeLeave(node common.Node) {
+func (s *Server) HandleNodeLeave(node *common.Node) {
+	Logger.Println("node left: ", *node)
 }
 
 func NewServer(info common.Node) *Server {
