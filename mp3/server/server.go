@@ -1,8 +1,8 @@
 package main
 
 import (
-	"fmt"
 	"common"
+	"fmt"
 	"net"
 	"strconv"
 	"strings"
@@ -74,11 +74,11 @@ func GetBlockName(filename string, version int, blockNum int) string {
 	return fmt.Sprintf("%s:%d:%d", filename, version, blockNum)
 }
 
-func handleUploadBlockRequest(client net.Conn, filename string, filesize int64, minAcks int) bool {
+func UploadBlock(client net.Conn, filename string, filesize int64, minAcks int) bool {
 	return false
 }
 
-func handleDownloadFileRequest(server *Server, conn net.Conn, filename string) {
+func DownloadFile(server *Server, conn net.Conn, filename string) {
 	file, ok := server.files[filename]
 
 	if !ok {
@@ -153,7 +153,7 @@ func processUploadBlock(server *Server, blockName string, buffer []byte, blockSi
 	server.blockToNodes[blockName] = append(server.blockToNodes[blockName], replica.ID)
 }
 
-func handleUploadFileRequest(server *Server, client net.Conn, filename string, filesize int, minAcks int) bool {
+func UploadFile(server *Server, client net.Conn, filename string, filesize int, minAcks int) bool {
 	version := 1
 	if oldFile, ok := server.files[filename]; ok {
 		version = oldFile.Version + 1
@@ -212,7 +212,7 @@ func handleUploadFileRequest(server *Server, client net.Conn, filename string, f
 	// 	}
 	// }
 
-	server.files[filename] = &File{Filename: filename, Version: 1, FileSize: filesize, NumBlocks: numBlocks}
+	server.files[filename] = &File{Filename: filename, Version: version, FileSize: filesize, NumBlocks: numBlocks}
 	return true
 }
 
@@ -234,11 +234,11 @@ func StartServer(server *Server) {
 		}
 
 		log.Debugf("Accepted connection from %s\n", conn.RemoteAddr())
-		go handleTCPConnection(server, conn)
+		go clientProtocol(server, conn)
 	}
 }
 
-func handleTCPConnection(server *Server, conn net.Conn) {
+func clientProtocol(server *Server, conn net.Conn) {
 	defer conn.Close()
 
 	buffer := make([]byte, common.MIN_BUFFER_SIZE)
@@ -262,7 +262,7 @@ func handleTCPConnection(server *Server, conn net.Conn) {
 			log.Warn(err)
 			return
 		}
-		if handleUploadFileRequest(server, conn, filename, filesize, 1) {
+		if UploadFile(server, conn, filename, filesize, 1) {
 			log.Debug("Upload OK")
 			conn.Write([]byte("OK\n"))
 		} else {
@@ -271,7 +271,7 @@ func handleTCPConnection(server *Server, conn net.Conn) {
 		}
 	} else if verb == "DOWNLOAD_FILE" {
 		filename := tokens[1]
-		handleDownloadFileRequest(server, conn, filename)
+		DownloadFile(server, conn, filename)
 	} else {
 		log.Warn("Unknown verb: ", verb)
 	}
