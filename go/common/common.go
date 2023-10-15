@@ -167,14 +167,6 @@ func GetNumFileBlocks(fileSize int64) int {
 	return n
 }
 
-func Connect(hostname string, port int) net.Conn {
-	conn, err := net.Dial("tcp", fmt.Sprintf("%s:%d", hostname, port))
-	if err != nil {
-		Log.Fatal(err)
-	}
-	return conn
-}
-
 func GetOKMessage(server net.Conn) bool {
 	buffer := make([]byte, MIN_BUFFER_SIZE)
 	n, err := server.Read(buffer)

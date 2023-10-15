@@ -5,17 +5,27 @@ import (
 	"cs425/common"
 	"fmt"
 	"io"
+	"net"
 	"os"
-	"strconv"
 	"strings"
 )
 
 var Log = common.Log
-var hostname string
-var port int
+
+func Connect() net.Conn {
+	for _, node := range common.Cluster {
+		conn, err := net.Dial("tcp", fmt.Sprintf("%s:%d", node.Hostname, node.TCPPort))
+		if err == nil {
+			return conn
+		}
+	}
+
+	Log.Fatal("All nodes are offline")
+	return nil
+}
 
 func DownloadFile(localFilename string, remoteFilename string) bool {
-	server := common.Connect(hostname, port)
+	server := Connect()
 	defer server.Close()
 
 	file, err := os.Create(localFilename)
@@ -62,7 +72,7 @@ func DownloadFile(localFilename string, remoteFilename string) bool {
 }
 
 func UploadFile(localFilename string, remoteFilename string) bool {
-	server := common.Connect(hostname, port)
+	server := Connect()
 	defer server.Close()
 
 	info, err := os.Stat(localFilename)
@@ -125,14 +135,13 @@ func printUsage() {
 }
 
 func main() {
-	if len(os.Args) != 3 {
-		Log.Fatal("Usage: go run ./client hostname port")
-	}
-
 	scanner := bufio.NewScanner(os.Stdin)
 
-	hostname = os.Args[1]
-	port, _ = strconv.Atoi(os.Args[2])
+	if os.Getenv("development") == "true" {
+		common.Cluster = common.LocalCluster
+	} else {
+		common.Cluster = common.ProdCluster
+	}
 
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
