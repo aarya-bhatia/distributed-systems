@@ -14,16 +14,16 @@ import (
 const (
 	REQUEST_READ  = 0
 	REQUEST_WRITE = 1
-
 	STATE_ALIVE  = 0
 	STATE_FAILED = 1
 )
 
 var nodes []*NodeInfo = []*NodeInfo{
-	{ID: 1, Hostname: "localhost", Port: 5000, State: STATE_ALIVE},
-	{ID: 2, Hostname: "localhost", Port: 5001, State: STATE_ALIVE},
-	{ID: 3, Hostname: "localhost", Port: 5002, State: STATE_ALIVE},
-	{ID: 4, Hostname: "localhost", Port: 5003, State: STATE_ALIVE},
+	{ID: 0, Hostname: "localhost", Port: 5000, State: STATE_ALIVE},
+	{ID: 1, Hostname: "localhost", Port: 5001, State: STATE_ALIVE},
+	{ID: 2, Hostname: "localhost", Port: 5002, State: STATE_ALIVE},
+	{ID: 3, Hostname: "localhost", Port: 5003, State: STATE_ALIVE},
+	{ID: 4, Hostname: "localhost", Port: 5004, State: STATE_ALIVE},
 }
 
 func main() {

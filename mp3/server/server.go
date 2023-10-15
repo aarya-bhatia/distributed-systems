@@ -3,6 +3,7 @@ package main
 import (
 	"common"
 	"fmt"
+	"math/rand"
 	"net"
 	"strconv"
 	"strings"
@@ -78,6 +79,7 @@ func UploadBlock(client net.Conn, filename string, filesize int64, minAcks int) 
 	return false
 }
 
+// Send file to client
 func DownloadFile(server *Server, conn net.Conn, filename string) {
 	file, ok := server.files[filename]
 
@@ -96,7 +98,15 @@ func DownloadFile(server *Server, conn net.Conn, filename string) {
 
 	for i := 0; i < file.NumBlocks; i++ {
 		blockName := GetBlockName(filename, file.Version, i)
-		replica := server.info // TODO: select replicas
+		replicas := server.blockToNodes[blockName]
+
+		if len(replicas) == 0 {
+			return
+		}
+
+		replicaID := replicas[rand.Intn(len(replicas))]
+		replica := nodes[replicaID]
+
 		if replica.ID == server.info.ID {
 			block := server.storage[blockName]
 			if common.SendAll(conn, block.Data, block.Size) < 0 {
