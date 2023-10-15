@@ -11,43 +11,6 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-type Block struct {
-	Size int
-	Data []byte
-}
-
-type File struct {
-	Filename  string
-	Version   int
-	FileSize  int
-	NumBlocks int
-}
-
-type Request struct {
-	RequestType int
-	Action      int
-	Filename    string
-	ClientID    int
-}
-
-type NodeInfo struct {
-	ID       int
-	Hostname string
-	Port     int
-	State    int
-}
-
-type Server struct {
-	files         map[string]*File  // Files stored by system
-	storage       map[string]*Block // In memory data storage
-	nodesToBlocks map[int][]string  // Maps node to the blocks they are storing
-	blockToNodes  map[string][]int  // Maps block to list of nodes that store the block
-	info          *NodeInfo         // Info about current server
-	// var ackChannel chan string
-	// var failureDetectorChannel chan string
-	// var queue []*Request                 // A queue of requests
-}
-
 const (
 	ENV            = "DEV"
 	REQUEST_READ   = 0
@@ -57,7 +20,7 @@ const (
 	DEFAULT_PORT   = 5000
 	REPLICA_FACTOR = 1
 	// BLOCK_SIZE = 4096 * 1024 // 4 MB
-	BLOCK_SIZE      = 16
+	BLOCK_SIZE      = 1024 * 1024
 	MIN_BUFFER_SIZE = 1024
 )
 
@@ -66,10 +29,6 @@ var nodes []*NodeInfo = []*NodeInfo{
 	{ID: 2, Hostname: "localhost", Port: 5001, State: STATE_ALIVE},
 	{ID: 3, Hostname: "localhost", Port: 5002, State: STATE_ALIVE},
 	{ID: 4, Hostname: "localhost", Port: 5003, State: STATE_ALIVE},
-}
-
-func GetBlockName(filename string, version int, blockNum int) string {
-	return fmt.Sprintf("%s:%d:%d", filename, version, blockNum)
 }
 
 // const UPDATE_BLOCK = 0
@@ -146,24 +105,6 @@ func main() {
 		return
 	}
 
-	ID, err := strconv.Atoi(os.Args[1])
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	server := new(Server)
-
-	for _, node := range nodes {
-		if node.ID == ID {
-			server.info = node
-			break
-		}
-	}
-
-	if server.info == nil {
-		log.Fatal("Unknown Server ID")
-	}
-
 	log.SetFormatter(&log.TextFormatter{
 		DisableColors: false,
 		FullTimestamp: true,
@@ -173,10 +114,12 @@ func main() {
 	log.SetOutput(os.Stderr)
 	log.SetLevel(log.DebugLevel)
 
-	server.files = make(map[string]*File)
-	server.storage = make(map[string]*Block)
-	server.nodesToBlocks = make(map[int][]string)
-	server.blockToNodes = make(map[string][]int)
+	ID, err := strconv.Atoi(os.Args[1])
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	server := NewServer(ID)
 
 	go StdinListener(server)
 

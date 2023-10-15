@@ -21,32 +21,35 @@ func getOK(server net.Conn) bool {
 	buffer := make([]byte, MIN_BUFFER_SIZE)
 	n, err := server.Read(buffer)
 	if err != nil {
+		log.Println(err)
 		return false
 	}
 
 	message := string(buffer[:n])
+
 	if strings.Index(message, "OK") != 0 {
-		return false
-	} else {
 		log.Warn(message)
+		return false
 	}
 
 	return true
 }
 
 // Returns true if all bytes are uploaded to network
-func SendAll(conn net.Conn, buffer []byte, count int) bool {
+func SendAll(conn net.Conn, buffer []byte, count int) int {
 	sent := 0
+	n := -1
 
-	for sent < count {
+	for sent < count && n != 0 {
 		n, err := conn.Write(buffer[sent:count])
 		if err != nil {
-			return false
+			log.Println(err)
+			return -1
 		}
 		sent += n
 	}
 
-	return true
+	return sent
 }
 
 // Returns the number blocks for a file of given size
@@ -61,6 +64,7 @@ func GetNumFileBlocks(fileSize int64) int {
 func SplitFileIntoBlocks(filename string, outputDirectory string) bool {
 	f, err := os.OpenFile(filename, os.O_RDONLY, 0)
 	if err != nil {
+		log.Println(err)
 		return false
 	}
 
@@ -68,6 +72,7 @@ func SplitFileIntoBlocks(filename string, outputDirectory string) bool {
 
 	info, err := f.Stat()
 	if err != nil {
+		log.Println(err)
 		return false
 	}
 
@@ -78,12 +83,14 @@ func SplitFileIntoBlocks(filename string, outputDirectory string) bool {
 	for i := 0; i < numBlocks; i++ {
 		n, err := f.Read(buffer)
 		if err != nil {
+			log.Println(err)
 			return false
 		}
 
 		outputFilename := fmt.Sprintf("%s/%s_block%d", outputDirectory, filename, i)
 		outputFile, err := os.OpenFile(outputFilename, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0640)
 		if err != nil {
+			log.Println(err)
 			return false
 		}
 

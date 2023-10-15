@@ -8,6 +8,70 @@ import (
 	"strings"
 )
 
+type Block struct {
+	Size int
+	Data []byte
+}
+
+type File struct {
+	Filename  string
+	Version   int
+	FileSize  int
+	NumBlocks int
+}
+
+type Request struct {
+	RequestType int
+	Action      int
+	Filename    string
+	ClientID    int
+}
+
+type NodeInfo struct {
+	ID       int
+	Hostname string
+	Port     int
+	State    int
+}
+
+type Server struct {
+	files         map[string]*File  // Files stored by system
+	storage       map[string]*Block // In memory data storage
+	nodesToBlocks map[int][]string  // Maps node to the blocks they are storing
+	blockToNodes  map[string][]int  // Maps block to list of nodes that store the block
+	info          *NodeInfo         // Info about current server
+	// var ackChannel chan string
+	// var failureDetectorChannel chan string
+	// var queue []*Request                 // A queue of requests
+}
+
+func NewServer(ID int) *Server {
+	server := new(Server)
+	server.info = nil
+
+	for _, node := range nodes {
+		if node.ID == ID {
+			server.info = node
+			break
+		}
+	}
+
+	if server.info == nil {
+		log.Fatal("Unknown Server ID")
+	}
+
+	server.files = make(map[string]*File)
+	server.storage = make(map[string]*Block)
+	server.nodesToBlocks = make(map[int][]string)
+	server.blockToNodes = make(map[string][]int)
+
+	return server
+}
+
+func GetBlockName(filename string, version int, blockNum int) string {
+	return fmt.Sprintf("%s:%d:%d", filename, version, blockNum)
+}
+
 func handleUploadBlockRequest(client net.Conn, filename string, filesize int64, minAcks int) bool {
 	return false
 }
@@ -44,6 +108,49 @@ func handleDownloadFileRequest(server *Server, conn net.Conn, filename string) {
 	log.Infof("Sent file %s (%d bytes) to client %s\n", filename, bytesSent, conn.RemoteAddr())
 }
 
+// TODO
+func processUploadBlock(server *Server, blockName string, buffer []byte, blockSize int) {
+	blockData := make([]byte, blockSize)
+	copy(blockData, buffer[:blockSize])
+
+	// replica := GetReplicaNodes(blockName, 1)[0]
+	replica := server.info
+
+	if replica.ID == server.info.ID {
+		block := &Block{Size: blockSize, Data: blockData}
+		server.storage[blockName] = block
+		log.Debugf("Added block %s to storage\n", blockName)
+	}
+
+	// } else {
+	// 	replicaAddr := fmt.Sprintf("%s:%d", replica.Hostname, replica.Port)
+	// 	replicaConn, err := net.Dial("tcp", replicaAddr)
+	// 	if err != nil {
+	// 		log.Println("Failed to establish connection", err)
+	// 		return false
+	// 	}
+	//
+	// 	request := fmt.Sprintf("UPLOAD:%s:%d:%d:%d\n", filename, version, i, n)
+	// 	_, err = replicaConn.Write([]byte(request))
+	// 	if err != nil {
+	// 		log.Println("File upload failed", err)
+	// 		return false
+	// 	}
+	//
+	// 	_, err = replicaConn.Write([]byte(buffer[:n]))
+	// 	if err != nil {
+	// 		log.Println("File upload failed", err)
+	// 		return false
+	// 	}
+	//
+	// 	log.Debugf("Sent block %d to node %s", i, replicaAddr)
+	// 	replicaConn.Close()
+	// }
+
+	server.nodesToBlocks[replica.ID] = append(server.nodesToBlocks[replica.ID], blockName)
+	server.blockToNodes[blockName] = append(server.blockToNodes[blockName], replica.ID)
+}
+
 func handleUploadFileRequest(server *Server, client net.Conn, filename string, filesize int, minAcks int) bool {
 	version := 1
 	if oldFile, ok := server.files[filename]; ok {
@@ -52,64 +159,47 @@ func handleUploadFileRequest(server *Server, client net.Conn, filename string, f
 
 	client.Write([]byte("OK\n")) // Notify client to start uploading data
 
+	numBlocks := GetNumFileBlocks(filesize)
+	log.Debugf("To upload %d blocks\n", numBlocks)
+
 	buffer := make([]byte, BLOCK_SIZE)
+	bufferSize := 0
 	bytesRead := 0
 	blockCount := 0
 
 	for bytesRead < filesize {
-		blockName := GetBlockName(filename, version, blockCount)
-
-		n, err := client.Read(buffer)
+		numRead, err := client.Read(buffer[bufferSize:])
 		if err != nil {
 			log.Println(err)
 			return false
 		}
 
-		log.Debugf("Received block %d (%d bytes) from client %s", blockCount, n, client.RemoteAddr())
-
-		if n < BLOCK_SIZE && bytesRead+n < filesize {
-			log.Println("Insufficient bytes received")
-			return false
+		if numRead == 0 {
+			break
 		}
 
-		// replica := GetReplicaNodes(blockName, 1)[0]
-		replica := server.info // TODO
+		bufferSize += numRead
 
-		if replica.ID == server.info.ID {
-			data := make([]byte, n)
-			copy(data, buffer[:n])
-			server.storage[blockName] = &Block{Size: n, Data: data}
-			log.Debugf("Added block %s to storage\n", blockName)
-		} else {
-			replicaAddr := fmt.Sprintf("%s:%d", replica.Hostname, replica.Port)
-			replicaConn, err := net.Dial("tcp", replicaAddr)
-			if err != nil {
-				log.Println("Failed to establish connection", err)
-				return false
-			}
-
-			request := fmt.Sprintf("UPLOAD:%s:%d:%d:%d\n", filename, version, blockCount, n)
-			_, err = replicaConn.Write([]byte(request))
-			if err != nil {
-				log.Println("File upload failed", err)
-				return false
-			}
-
-			_, err = replicaConn.Write([]byte(buffer[:n]))
-			if err != nil {
-				log.Println("File upload failed", err)
-				return false
-			}
-
-			log.Debugf("Sent block %d to node %s", blockCount, replicaAddr)
-			replicaConn.Close()
+		if bufferSize == BLOCK_SIZE {
+			log.Debugf("Received block %d (%d bytes) from client %s", blockCount, bufferSize, client.RemoteAddr())
+			blockName := GetBlockName(filename, version, blockCount)
+			processUploadBlock(server, blockName, buffer, bufferSize)
+			bufferSize = 0
+			blockCount += 1
 		}
 
-		server.nodesToBlocks[replica.ID] = append(server.nodesToBlocks[replica.ID], blockName)
-		server.blockToNodes[blockName] = append(server.blockToNodes[blockName], replica.ID)
+		bytesRead += numRead
+	}
 
-		bytesRead += n
-		blockCount += 1
+	if bufferSize > 0 {
+		log.Debugf("Received block %d (%d bytes) from client %s", blockCount, bufferSize, client.RemoteAddr())
+		blockName := GetBlockName(filename, version, blockCount)
+		processUploadBlock(server, blockName, buffer, bufferSize)
+	}
+
+	if bytesRead < filesize {
+		log.Warnf("Insufficient bytes read (%d of %d)\n", bytesRead, filesize)
+		return false
 	}
 
 	// TODO: Receive acks
@@ -120,7 +210,7 @@ func handleUploadFileRequest(server *Server, client net.Conn, filename string, f
 	// 	}
 	// }
 
-	server.files[filename] = &File{Filename: filename, Version: 1, FileSize: filesize, NumBlocks: blockCount}
+	server.files[filename] = &File{Filename: filename, Version: 1, FileSize: filesize, NumBlocks: numBlocks}
 	return true
 }
 
@@ -171,8 +261,10 @@ func handleTCPConnection(server *Server, conn net.Conn) {
 			return
 		}
 		if handleUploadFileRequest(server, conn, filename, filesize, 1) {
+			log.Debug("Upload OK")
 			conn.Write([]byte("OK\n"))
 		} else {
+			log.Debug("Upload ERROR")
 			conn.Write([]byte("ERROR\n"))
 		}
 	} else if verb == "DOWNLOAD_FILE" {

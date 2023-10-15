@@ -79,7 +79,7 @@ func GetReplicaNodes(filename string, count int) []*NodeInfo {
 }
 
 // Returns the number blocks for a file of given size
-func GetNumFileBlocks(fileSize int64) int {
+func GetNumFileBlocks(fileSize int) int {
 	n := int(fileSize / BLOCK_SIZE)
 	if fileSize%BLOCK_SIZE > 0 {
 		n += 1
@@ -94,6 +94,7 @@ func SendAll(conn net.Conn, buffer []byte, count int) bool {
 	for sent < count {
 		n, err := conn.Write(buffer[sent:count])
 		if err != nil {
+			log.Println(err)
 			return false
 		}
 		sent += n
@@ -111,9 +112,8 @@ func getOK(server net.Conn) bool {
 
 	message := string(buffer[:n])
 	if strings.Index(message, "OK") != 0 {
-		return false
-	} else {
 		log.Warn(message)
+		return false
 	}
 
 	return true

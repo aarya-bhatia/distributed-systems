@@ -13,7 +13,7 @@ import (
 const (
 	ENV                     = "DEV"
 	DEFAULT_PORT            = 5000
-	BLOCK_SIZE              = 16
+	BLOCK_SIZE              = 1024 * 1024
 	MIN_BUFFER_SIZE         = 1024
 	DEFAULT_SERVER_HOSTNAME = "localhost"
 )
@@ -49,16 +49,16 @@ func downloadFile(localFilename string, remoteFilename string) bool {
 	server := connectToServer(DEFAULT_SERVER_HOSTNAME, DEFAULT_PORT)
 	defer server.Close()
 
-	file, err := os.OpenFile(localFilename, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0640)
+	file, err := os.Create(localFilename)
 	if err != nil {
+		log.Println(err)
 		return false
 	}
 
 	defer file.Close()
-
 	message := fmt.Sprintf("DOWNLOAD_FILE %s\n", remoteFilename)
 
-	if !SendAll(server, []byte(message), len(message)) {
+	if SendAll(server, []byte(message), len(message)) < 0 {
 		return false
 	}
 
@@ -75,19 +75,20 @@ func downloadFile(localFilename string, remoteFilename string) bool {
 			log.Debug("EOF")
 			break
 		} else if err != nil {
+			log.Println(err)
 			return false
 		}
 
 		_, err = file.Write(buffer[:n])
 		if err != nil {
+			log.Println(err)
 			return false
 		}
 
 		bytesRead += n
 	}
 
-	log.Infof("Downloaded file %s: %d bytes\n", localFilename, bytesRead)
-
+	log.Infof("Downloaded file %s with %d bytes\n", localFilename, bytesRead)
 	return true
 }
 
@@ -97,20 +98,24 @@ func uploadFile(localFilename string, remoteFilename string) bool {
 
 	info, err := os.Stat(localFilename)
 	if err != nil {
+		log.Println(err)
 		return false
 	}
 
-	fileSize := info.Size
+	fileSize := info.Size()
 	file, err := os.Open(localFilename)
 	if err != nil {
+		log.Println(err)
 		return false
 	}
+
+	log.Debugf("Uploading file %s with %d bytes (%d blocks)", localFilename, fileSize, GetNumFileBlocks(int64(fileSize)))
 
 	defer file.Close()
 
-	message := fmt.Sprintf("UPLOAD_FILE %s %d\n", remoteFilename, fileSize())
+	message := fmt.Sprintf("UPLOAD_FILE %s %d\n", remoteFilename, fileSize)
 
-	if !SendAll(server, []byte(message), len(message)) {
+	if SendAll(server, []byte(message), len(message)) < 0 {
 		return false
 	}
 
@@ -125,12 +130,15 @@ func uploadFile(localFilename string, remoteFilename string) bool {
 		if err == io.EOF {
 			break
 		} else if err != nil {
+			log.Println(err)
 			return false
 		}
 
-		if !SendAll(server, buffer, n) {
+		if SendAll(server, buffer, n) < 0 {
 			return false
 		}
+
+		log.Debugf("Sent block with %d bytes", n)
 	}
 
 	if !getOK(server) {
@@ -141,14 +149,23 @@ func uploadFile(localFilename string, remoteFilename string) bool {
 }
 
 func printUsage() {
-	log.Info("Usage:")
-	log.Info("Upload file: put local_filename remote_filename")
-	log.Info("Download file: get remote_filename local_filename")
-	log.Info("Query file: query remote_filename")
+	fmt.Println("Usage:")
+	fmt.Println("Upload file: put local_filename remote_filename")
+	fmt.Println("Download file: get remote_filename local_filename")
+	fmt.Println("Query file: query remote_filename")
 }
 
 func main() {
 	scanner := bufio.NewScanner(os.Stdin)
+
+	log.SetFormatter(&log.TextFormatter{
+		DisableColors: false,
+		FullTimestamp: true,
+	})
+
+	log.SetReportCaller(true)
+	log.SetOutput(os.Stderr)
+	log.SetLevel(log.DebugLevel)
 
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
