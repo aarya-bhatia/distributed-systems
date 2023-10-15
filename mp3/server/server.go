@@ -59,6 +59,14 @@ func NewServer(info *NodeInfo) *Server {
 	return server
 }
 
+func GetNode(ID int) *NodeInfo {
+	if ID >= 1 && ID <= len(nodes) {
+		return nodes[ID-1]
+	}
+
+	return nil
+}
+
 // Returns slice of alive nodes
 func GetAliveNodes(nodes []*NodeInfo) []*NodeInfo {
 	res := []*NodeInfo{}
@@ -135,10 +143,10 @@ func DownloadFile(server *Server, conn net.Conn, filename string) {
 			return
 		}
 
-		log.Debugf("Replicas for block %d: %v\n", i, replicas)
+		// log.Debugf("Replicas for block %d: %v\n", i, replicas)
 
 		replicaID := replicas[rand.Intn(len(replicas))]
-		replica := nodes[replicaID-1]
+		replica := GetNode(replicaID)
 
 		if replica.ID == server.info.ID {
 			block := server.storage[blockName]
