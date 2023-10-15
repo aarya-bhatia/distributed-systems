@@ -70,5 +70,5 @@ func TestUtil(t *testing.T) {
 	fmt.Printf("size: %d, num blocks: %d\n", size, GetNumFileBlocks(size))
 	size = 6400
 	fmt.Printf("size: %d, num blocks: %d\n", size, GetNumFileBlocks(size))
-	SplitFileIntoBlocks("data", "blocks")
+	// SplitFileIntoBlocks("data", "blocks")
 }

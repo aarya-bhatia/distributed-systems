@@ -1,7 +1,7 @@
 package main
 
 import (
-	"common"
+	"cs425/mp3/common"
 	"fmt"
 	"math/rand"
 	"net"
@@ -48,31 +48,59 @@ type Server struct {
 	// var queue []*Request                 // A queue of requests
 }
 
-func NewServer(ID int) *Server {
+func NewServer(info *NodeInfo) *Server {
 	server := new(Server)
-	server.info = nil
-
-	for _, node := range nodes {
-		if node.ID == ID {
-			server.info = node
-			break
-		}
-	}
-
-	if server.info == nil {
-		log.Fatal("Unknown Server ID")
-	}
-
+	server.info = info
 	server.files = make(map[string]*File)
 	server.storage = make(map[string]*Block)
 	server.nodesToBlocks = make(map[int][]string)
 	server.blockToNodes = make(map[string][]int)
-
+	log.Info("Server", *server, "Info", *info)
 	return server
 }
 
-func GetBlockName(filename string, version int, blockNum int) string {
-	return fmt.Sprintf("%s:%d:%d", filename, version, blockNum)
+// Returns slice of alive nodes
+func GetAliveNodes(nodes []*NodeInfo) []*NodeInfo {
+	res := []*NodeInfo{}
+	for i, node := range nodes {
+		if node.State == STATE_ALIVE {
+			res = append(res, nodes[i])
+		}
+	}
+	return res
+}
+
+// The first R nodes with the lowest ID are selected as metadata replicas.
+func GetMetadataReplicaNodes(count int) []*NodeInfo {
+	aliveNodes := GetAliveNodes(nodes)
+	if count < len(aliveNodes) {
+		return aliveNodes[:count]
+	}
+	return aliveNodes
+}
+
+// The nearest node to the hash of the filename is selected as primary replica.
+// The next R-1 successors are selected as backup replicas.
+func GetReplicaNodes(filename string, count int) []*NodeInfo {
+	aliveNodes := GetAliveNodes(nodes)
+	if len(aliveNodes) < count {
+		return aliveNodes
+	}
+
+	hash := common.GetHash(filename, len(nodes))
+	res := []*NodeInfo{}
+
+	for i := 0; i < len(nodes); i++ {
+		j := (hash + i) % len(nodes)
+		if nodes[j].State == STATE_ALIVE {
+			res = append(res, nodes[j])
+			if len(res) >= count {
+				break
+			}
+		}
+	}
+
+	return res
 }
 
 func UploadBlock(client net.Conn, filename string, filesize int64, minAcks int) bool {
@@ -96,31 +124,38 @@ func DownloadFile(server *Server, conn net.Conn, filename string) {
 
 	bytesSent := 0
 
+	log.Debugf("To send %d blocks\n", file.NumBlocks)
+
 	for i := 0; i < file.NumBlocks; i++ {
-		blockName := GetBlockName(filename, file.Version, i)
+		blockName := common.GetBlockName(filename, file.Version, i)
 		replicas := server.blockToNodes[blockName]
 
 		if len(replicas) == 0 {
+			log.Warnf("No replicas found for block %d\n", i)
 			return
 		}
 
+		log.Debugf("Replicas for block %d: %v\n", i, replicas)
+
 		replicaID := replicas[rand.Intn(len(replicas))]
-		replica := nodes[replicaID]
+		replica := nodes[replicaID-1]
 
 		if replica.ID == server.info.ID {
 			block := server.storage[blockName]
 			if common.SendAll(conn, block.Data, block.Size) < 0 {
+				log.Warn("Failed to send block")
 				return
 			}
 
 			bytesSent += block.Size
+		} else {
+			log.Debugf("Replica %d is unavailable\n", replica.ID)
 		}
 	}
 
 	log.Infof("Sent file %s (%d bytes) to client %s\n", filename, bytesSent, conn.RemoteAddr())
 }
 
-// TODO
 func processUploadBlock(server *Server, blockName string, buffer []byte, blockSize int) {
 	blockData := make([]byte, blockSize)
 	copy(blockData, buffer[:blockSize])
@@ -194,7 +229,7 @@ func UploadFile(server *Server, client net.Conn, filename string, filesize int, 
 
 		if bufferSize == common.BLOCK_SIZE {
 			log.Debugf("Received block %d (%d bytes) from client %s", blockCount, bufferSize, client.RemoteAddr())
-			blockName := GetBlockName(filename, version, blockCount)
+			blockName := common.GetBlockName(filename, version, blockCount)
 			processUploadBlock(server, blockName, buffer, bufferSize)
 			bufferSize = 0
 			blockCount += 1
@@ -205,7 +240,7 @@ func UploadFile(server *Server, client net.Conn, filename string, filesize int, 
 
 	if bufferSize > 0 {
 		log.Debugf("Received block %d (%d bytes) from client %s", blockCount, bufferSize, client.RemoteAddr())
-		blockName := GetBlockName(filename, version, blockCount)
+		blockName := common.GetBlockName(filename, version, blockCount)
 		processUploadBlock(server, blockName, buffer, bufferSize)
 	}
 

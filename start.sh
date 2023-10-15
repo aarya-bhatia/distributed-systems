@@ -46,8 +46,12 @@ echo "MP1 Server is running at $(hostname):$MP1_PORT$"
 # nohup ./main -p $MP2_PORT -l "info" >$MP2_LOGS 2>&1 &
 # echo "MP2 Server is running at $(hostname):$MP2_PORT$"
 
-# cd $CS425_REPO/mp3/server
-# make
+cd $CS425_REPO/mp3/server
+make
+
+cd $CS425_REPO/mp3/client
+make
+
 # pkill -f ./main
 # sleep 10
 # echo -n "" > $MP3_LOGS

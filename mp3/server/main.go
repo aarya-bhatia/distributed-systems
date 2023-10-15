@@ -14,21 +14,21 @@ import (
 const (
 	REQUEST_READ  = 0
 	REQUEST_WRITE = 1
-	STATE_ALIVE  = 0
-	STATE_FAILED = 1
+	STATE_ALIVE   = 0
+	STATE_FAILED  = 1
 )
 
 var nodes []*NodeInfo = []*NodeInfo{
-	{ID: 0, Hostname: "localhost", Port: 5000, State: STATE_ALIVE},
 	{ID: 1, Hostname: "localhost", Port: 5001, State: STATE_ALIVE},
 	{ID: 2, Hostname: "localhost", Port: 5002, State: STATE_ALIVE},
 	{ID: 3, Hostname: "localhost", Port: 5003, State: STATE_ALIVE},
 	{ID: 4, Hostname: "localhost", Port: 5004, State: STATE_ALIVE},
+	{ID: 5, Hostname: "localhost", Port: 5005, State: STATE_ALIVE},
 }
 
 func main() {
-	if len(os.Args) != 2 {
-		fmt.Println("Usage: ./main <ID>")
+	if len(os.Args) != 3 {
+		fmt.Println("Usage: ./main <hostname> <port>")
 		return
 	}
 
@@ -41,12 +41,25 @@ func main() {
 	log.SetOutput(os.Stderr)
 	log.SetLevel(log.DebugLevel)
 
-	ID, err := strconv.Atoi(os.Args[1])
+	hostname := os.Args[1]
+	port, err := strconv.Atoi(os.Args[2])
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	server := NewServer(ID)
+	var info *NodeInfo = nil
+
+	for _, node := range nodes {
+		if node.Hostname == hostname && node.Port == port {
+			info = node
+		}
+	}
+
+	if info == nil {
+		log.Fatal("Unknown Server")
+	}
+
+	server := NewServer(info)
 
 	go StdinListener(server)
 
@@ -86,8 +99,29 @@ func StdinListener(server *Server) {
 	scanner := bufio.NewScanner(os.Stdin)
 	for scanner.Scan() {
 		command := strings.TrimSpace(scanner.Text())
-		if command == "ls" {
+		if command == "help" {
+			fmt.Println("ls: Display metadata table")
+			fmt.Println("info: Display server info")
+			fmt.Println("files: Display list of files")
+			fmt.Println("blocks: Display list of blocks")
+		} else if command == "ls" {
 			PrintFileMetadata(server)
+		} else if command == "files" {
+			for name, block := range server.storage {
+				tokens := strings.Split(name, ":")
+				fmt.Printf("File %s, version %s, block %s, size %d\n", tokens[0], tokens[1], tokens[2], block.Size)
+			}
+		} else if command == "blocks" {
+			for name, arr := range server.blockToNodes {
+				fmt.Printf("Block %s: ", name)
+				for _, node := range arr {
+					fmt.Printf("%d ", node)
+				}
+				fmt.Print("\n")
+			}
+		} else if command == "info" {
+			fmt.Printf("ID: %d, Hostname: %s, Port: %d\n", server.info.ID, server.info.Hostname, server.info.Port)
+			fmt.Printf("Num files: %d, Num blocks: %d, Num nodes: %d\n", len(server.files), len(server.blockToNodes), len(server.nodesToBlocks))
 		}
 	}
 }

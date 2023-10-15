@@ -9,11 +9,14 @@ import (
 
 	log "github.com/sirupsen/logrus"
 
-	"common"
+	"cs425/mp3/common"
 )
 
+var hostname = "fa23-cs425-0701.cs.illinois.edu"
+var port = 5000
+
 func DownloadFile(localFilename string, remoteFilename string) bool {
-	server := common.Connect(common.DEFAULT_SERVER_HOSTNAME, common.DEFAULT_PORT)
+	server := common.Connect(hostname, port)
 	defer server.Close()
 
 	file, err := os.Create(localFilename)
@@ -60,7 +63,7 @@ func DownloadFile(localFilename string, remoteFilename string) bool {
 }
 
 func UploadFile(localFilename string, remoteFilename string) bool {
-	server := common.Connect(common.DEFAULT_SERVER_HOSTNAME, common.DEFAULT_PORT)
+	server := common.Connect(hostname, port)
 	defer server.Close()
 
 	info, err := os.Stat(localFilename)
@@ -133,6 +136,11 @@ func main() {
 	log.SetReportCaller(true)
 	log.SetOutput(os.Stderr)
 	log.SetLevel(log.DebugLevel)
+
+	if common.ENV == "DEV" {
+		hostname = "localhost"
+		port = 5001
+	}
 
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
