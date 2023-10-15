@@ -4,9 +4,11 @@ GIT_BRANCH=main
 
 MP1_LOGS=$HOME/mp1.log
 MP2_LOGS=$HOME/mp2.log
+MP3_LOGS=$HOME/mp3.log
 
 MP1_PORT=3000
 MP2_PORT=6000
+MP3_PORT=5000
 
 CS425_REPO=$HOME/cs425
 
@@ -36,11 +38,18 @@ pkill -f bin/server
 nohup bin/server $MP1_PORT >$MP1_LOGS 2>&1 &
 echo "MP1 Server is running at $(hostname):$MP1_PORT$"
 
-cd $CS425_REPO/mp2
-make
-pkill -f ./main
-sleep 10
-echo -n "" > $MP2_LOGS
-nohup ./main -p $MP2_PORT -l "info" >$MP2_LOGS 2>&1 &
-echo "MP2 Server is running at $(hostname):$MP2_PORT$"
+# cd $CS425_REPO/mp2
+# make
+# pkill -f ./main
+# sleep 10
+# echo -n "" > $MP2_LOGS
+# nohup ./main -p $MP2_PORT -l "info" >$MP2_LOGS 2>&1 &
+# echo "MP2 Server is running at $(hostname):$MP2_PORT$"
 
+# cd $CS425_REPO/mp3/server
+# make
+# pkill -f ./main
+# sleep 10
+# echo -n "" > $MP3_LOGS
+# nohup ./main -p $MP3_PORT -l "info" >$MP2_LOGS 2>&1 &
+# echo "MP2 Server is running at $(hostname):$MP2_PORT$"

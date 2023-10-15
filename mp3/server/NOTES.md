@@ -7,4 +7,6 @@
 - Protocol to upload and download blocks from replica nodes
 - Rebalancing algorithm
 - Upload file blocks for ACKs from replicas
+- Remove nodes
+- API operations for demo
 

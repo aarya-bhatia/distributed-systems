@@ -1,6 +1,6 @@
 module server
 
-go 1.21.2
+go 1.19
 
 require (
 	github.com/jedib0t/go-pretty/v6 v6.4.8

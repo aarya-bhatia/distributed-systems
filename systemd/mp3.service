@@ -1,0 +1,14 @@
+[Unit]
+Description=MP3 Server
+
+[Service]
+Type=Simple
+RestartSec=1
+ExecStart=/home/aarya/repos/aarya-bhatia/uiuc/cs425git/mp3/server/main 0
+WorkingDirectory=/home/aarya/repos/aarya-bhatia/uiuc/cs425git/mp3/server
+Restart=no
+User=aarya
+
+[Install]
+WantedBy=multi-user.target
+
