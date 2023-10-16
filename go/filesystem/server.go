@@ -4,6 +4,7 @@ import (
 	"container/heap"
 	"cs425/common"
 	"cs425/priqueue"
+	"cs425/queue"
 	"fmt"
 	"github.com/jedib0t/go-pretty/v6/table"
 	"net"
@@ -13,17 +14,14 @@ import (
 )
 
 const (
-	REQUEST_READ  = 0
-	REQUEST_WRITE = 1
+	ACTION_DOWNLOAD_FILE = 0x1
+	ACTION_UPLOAD_FILE   = 0x2
+	ACTION_ADD_BLOCK     = 0x4
+	ACTION_REMOVE_BLOCK  = 0x8
 
 	STATE_ALIVE  = 0
 	STATE_FAILED = 1
 )
-
-type Block struct {
-	Size int
-	Data []byte
-}
 
 type File struct {
 	Filename  string
@@ -32,11 +30,17 @@ type File struct {
 	NumBlocks int
 }
 
+// A block of file
+type Block struct {
+	Size int
+	Data []byte
+}
+
 type Request struct {
-	RequestType int
-	Action      int
-	Filename    string
-	ClientID    int
+	Action   int
+	Client   net.Conn
+	Filename string // The file name for upload/download file request
+	Block    string // The block name for add/remove block request
 }
 
 type Server struct {
@@ -46,10 +50,11 @@ type Server struct {
 	NodesToBlocks map[int][]string    // Maps node to the blocks they are storing
 	BlockToNodes  map[string][]int    // Maps block to list of nodes that store the block
 	Nodes         map[int]common.Node // Set of alive nodes
-	// var ackChannel chan string
-	// var failureDetectorChannel chan string
-	// var queue []*Request                 // A queue of requests
-	InputChannel chan string
+	InputChannel  chan string
+	// ackChannel chan string
+	ReadQueue  *queue.Queue // download requests
+	WriteQueue *queue.Queue // upload requests
+	TaskQueue  *queue.Queue // rebalance tasks
 }
 
 var Log *common.Logger = common.Log
@@ -87,6 +92,10 @@ func NewServer(info common.Node) *Server {
 	server.InputChannel = make(chan string)
 	server.Nodes = make(map[int]common.Node)
 	server.Nodes[info.ID] = info
+
+	server.ReadQueue = queue.NewQueue()
+	server.WriteQueue = queue.NewQueue()
+	server.TaskQueue = queue.NewQueue()
 
 	return server
 }
