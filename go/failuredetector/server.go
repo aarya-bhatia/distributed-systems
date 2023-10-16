@@ -783,7 +783,7 @@ func HandleConfigRequest(s *Server, e ReceiverEvent) {
 // Received member list from peer
 func HandlePingRequest(s *Server, e ReceiverEvent) {
 	if !s.Active {
-		Log.Warnf("PING from %s dropped as server is inactive\n", e)
+		Log.Debugf("PING from %s dropped as server is inactive\n", e)
 		return
 	}
 
@@ -794,17 +794,17 @@ func HandlePingRequest(s *Server, e ReceiverEvent) {
 
 	tokens := strings.Split(lines[0], " ")
 	if len(tokens) < 3 {
-		Log.Warnf("Illegal header for PING request: %s\n", lines[0])
+		Log.Debugf("Illegal header for PING request: %s\n", lines[0])
 		return
 	}
 
 	if rand.Intn(100) < s.DropRate {
-		Log.Warnf("PING from %s dropped with drop rate %d %%\n", e, s.DropRate)
+		Log.Debugf("PING from %s dropped with drop rate %d %%\n", e, s.DropRate)
 		return
 	}
 
 	if tokens[2] != s.Self.ID {
-		Log.Warnf("Dropped PING due to ID mismatch: %s\n", tokens[2])
+		Log.Debugf("Dropped PING due to ID mismatch: %s\n", tokens[2])
 		return
 	}
 
