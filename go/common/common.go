@@ -175,6 +175,7 @@ func GetOKMessage(server net.Conn) bool {
 		return false
 	}
 
+	Log.Debugf("Received %d bytes\n", n)
 	message := string(buffer[:n])
 
 	if strings.Index(message, "OK") != 0 {
@@ -202,4 +203,14 @@ func SendAll(conn net.Conn, buffer []byte, count int) int {
 	Log.Debugf("Sent %d bytes to %s\n", sent, conn.RemoteAddr())
 
 	return sent
+}
+
+func RemoveIndex(arr []int, i int) []int {
+	if i < 0 || i >= len(arr) {
+		return arr
+	}
+
+	n := len(arr)
+	arr[i], arr[n-1] = arr[n-1], arr[i]
+	return arr[:n-1]
 }
