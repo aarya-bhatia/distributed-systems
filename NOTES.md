@@ -10,3 +10,4 @@
 - Remove nodes
 - API operations for demo
 - clean up cli
+- client should query leader node first from any node

@@ -116,7 +116,7 @@ var LocalCluster = []Node{
 	{5, "localhost", 6005, 5005},
 }
 
-var Cluster []Node
+var Cluster []Node = LocalCluster
 
 func GetNode(id int) Node {
 	return Cluster[id-1]

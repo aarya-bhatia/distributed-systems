@@ -1,11 +1,11 @@
 package filesystem
 
 import (
+	"container/heap"
 	"cs425/common"
+	"cs425/priqueue"
 	"fmt"
 	"github.com/jedib0t/go-pretty/v6/table"
-	"golang.org/x/exp/slices"
-	"math"
 	"math/rand"
 	"net"
 	"os"
@@ -42,11 +42,11 @@ type Request struct {
 
 type Server struct {
 	Info          common.Node
-	Files         map[string]*File  // Files stored by system
-	Storage       map[string]*Block // In memory data storage
-	NodesToBlocks map[int][]string  // Maps node to the blocks they are storing
-	BlockToNodes  map[string][]int  // Maps block to list of nodes that store the block
-	Nodes         map[int]bool      // Set of alive nodes
+	Files         map[string]*File    // Files stored by system
+	Storage       map[string]*Block   // In memory data storage
+	NodesToBlocks map[int][]string    // Maps node to the blocks they are storing
+	BlockToNodes  map[string][]int    // Maps block to list of nodes that store the block
+	Nodes         map[int]common.Node // Set of alive nodes
 	// var ackChannel chan string
 	// var failureDetectorChannel chan string
 	// var queue []*Request                 // A queue of requests
@@ -55,10 +55,12 @@ type Server struct {
 
 var Log *common.Logger = common.Log
 
+// TODO
 func (s *Server) HandleNodeJoin(node *common.Node) {
 	Log.Debug("node joined: ", *node)
 }
 
+// TODO
 func (s *Server) HandleNodeLeave(node *common.Node) {
 	Log.Debug("node left: ", *node)
 }
@@ -71,56 +73,64 @@ func NewServer(info common.Node) *Server {
 	server.NodesToBlocks = make(map[int][]string)
 	server.BlockToNodes = make(map[string][]int)
 	server.InputChannel = make(chan string)
-	server.Nodes = make(map[int]bool)
-	server.Nodes[info.ID] = true
+	server.Nodes = make(map[int]common.Node)
+	server.Nodes[info.ID] = info
 
 	return server
 }
 
-func (s *Server) GetAliveNodes() []int {
-	res := make([]int, len(s.Nodes))
-	i := 0
-	for k := range s.Nodes {
-		res[i] = k
-		i++
+// Node with smallest ID
+func (s *Server) GetLeaderNode(count int) int {
+	pq := make(priqueue.PriorityQueue, 0)
+	heap.Init(&pq)
+
+	for ID := range s.Nodes {
+		heap.Push(&pq, &priqueue.Item{Key: ID})
+	}
+
+	item := heap.Pop(&pq).(*priqueue.Item)
+	return item.Key
+}
+
+// The first R nodes with the lowest ID are selected as metadata replicas.
+func (s *Server) GetMetadataReplicaNodes(count int) []int {
+	pq := make(priqueue.PriorityQueue, 0)
+	heap.Init(&pq)
+
+	for ID := range s.Nodes {
+		heap.Push(&pq, &priqueue.Item{Key: ID})
+	}
+
+	res := []int{}
+	for r := 0; r < count && pq.Len() > 0; r++ {
+		item := heap.Pop(&pq).(*priqueue.Item)
+		res = append(res, item.Key)
 	}
 
 	return res
 }
 
-// The first R nodes with the lowest ID are selected as metadata replicas.
-func (s *Server) GetMetadataReplicaNodes(count int) []int {
-	keys := s.GetAliveNodes()
-
-	if count >= len(keys) {
-		return keys
-	}
-
-	slices.Sort(keys)
-	return keys[:count]
-}
-
-// The nearest node to the hash of the filename is selected as primary replica.
-// The next R-1 successors are selected as backup replicas.
+// Get the `count` nearest nodes to the file hash
 func (s *Server) GetReplicaNodes(filename string, count int) []int {
-	nodes := s.GetAliveNodes()
-	slices.Sort(nodes)
-	if len(nodes) < count {
-		return nodes
-	}
-
 	fileHash := common.GetHash(filename, len(common.Cluster))
-	min, idx := -1, -1
-	for i, node := range nodes {
-		if min == -1 || int(math.Abs(float64(fileHash)-float64(node))) < min {
-			idx = i
+	pq := make(priqueue.PriorityQueue, 0)
+	heap.Init(&pq)
+
+	for ID := range s.Nodes {
+		distance := ID - fileHash
+		if distance < 0 {
+			distance = -distance
 		}
+
+		heap.Push(&pq, &priqueue.Item{Key: distance, Value: ID})
 	}
 
 	res := []int{}
-	for i := 0; i < count; i++ {
-		res = append(res, nodes[(idx+i)%len(nodes)])
+	for r := 0; r < count && pq.Len() > 0; r++ {
+		item := heap.Pop(&pq).(*priqueue.Item)
+		res = append(res, item.Value)
 	}
+
 	return res
 }
 
@@ -174,30 +184,32 @@ func PrintFileMetadata(server *Server) {
 	t.Render()
 }
 
-// // To handle replicas after a node fails or rejoins
-// func rebalance() {
-// 	m := map[int]bool{}
-// 	for _, node := range nodes {
-// 		m[node.ID] = node.State == STATE_ALIVE
-// 	}
-// 	// Get affected replicas
-// 	// Add tasks to replicate the affected blocks to queue
-//
-// 	for _, file := range files {
-// 		expectedReplicas := GetReplicaNodes(file.Filename, REPLICA_FACTOR)
-// 		for i := 0; i < file.NumBlocks; i++ {
-// 			blockInfo := BlockInfo{Filename: file.Filename, Version: file.Version, ID: i}
-// 			_, ok := blockToNodes[blockInfo]
-// 			if !ok {
-// 				for _, replica := range expectedReplicas {
-// 					AddTask(UPDATE_BLOCK, replica, blockInfo)
-// 				}
-// 			} else {
-// 				// TODO: AddTask for Intersection nodes
-// 			}
-// 		}
-// 	}
-// }
+// To handle replicas after a node fails or rejoins
+func Rebalance() {
+	// m := map[int]bool{}
+	//
+	//	for _, node := range nodes {
+	//		m[node.ID] = node.State == STATE_ALIVE
+	//	}
+	//
+	// // Get affected replicas
+	// // Add tasks to replicate the affected blocks to queue
+	//
+	//	for _, file := range files {
+	//		expectedReplicas := GetReplicaNodes(file.Filename, REPLICA_FACTOR)
+	//		for i := 0; i < file.NumBlocks; i++ {
+	//			blockInfo := BlockInfo{Filename: file.Filename, Version: file.Version, ID: i}
+	//			_, ok := blockToNodes[blockInfo]
+	//			if !ok {
+	//				for _, replica := range expectedReplicas {
+	//					AddTask(UPDATE_BLOCK, replica, blockInfo)
+	//				}
+	//			} else {
+	//				// TODO: AddTask for Intersection nodes
+	//			}
+	//		}
+	//	}
+}
 
 func UploadBlock(client net.Conn, filename string, filesize int64, minAcks int) bool {
 	return false
