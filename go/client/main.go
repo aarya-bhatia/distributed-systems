@@ -137,10 +137,10 @@ func printUsage() {
 func main() {
 	scanner := bufio.NewScanner(os.Stdin)
 
-	if os.Getenv("development") == "true" {
-		common.Cluster = common.LocalCluster
-	} else {
+	if os.Getenv("prod") == "true" {
 		common.Cluster = common.ProdCluster
+	} else {
+		common.Cluster = common.LocalCluster
 	}
 
 	for scanner.Scan() {
