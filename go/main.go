@@ -80,7 +80,7 @@ func main() {
 		}
 
 		if mode == 1 {
-			fileServer.HandleCommand(command)
+			fileServer.InputChannel <- command
 		} else {
 			failureDetectorServer.InputChannel <- command
 		}
