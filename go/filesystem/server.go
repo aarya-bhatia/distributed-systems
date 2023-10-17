@@ -4,7 +4,6 @@ import (
 	"container/heap"
 	"cs425/common"
 	"cs425/priqueue"
-	"cs425/queue"
 	"fmt"
 	"github.com/jedib0t/go-pretty/v6/table"
 	"net"
@@ -14,10 +13,14 @@ import (
 )
 
 const (
-	ACTION_DOWNLOAD_FILE = 0x1
-	ACTION_UPLOAD_FILE   = 0x2
-	ACTION_ADD_BLOCK     = 0x4
-	ACTION_REMOVE_BLOCK  = 0x8
+	ACTION_DOWNLOAD_FILE = 0x10
+	ACTION_UPLOAD_FILE   = 0x20
+
+	ACTION_DOWNLOAD_BLOCK = 0x11
+	ACTION_UPLOAD_BLOCK   = 0x21
+
+	ACTION_ADD_BLOCK    = 0x30
+	ACTION_REMOVE_BLOCK = 0x40
 
 	STATE_ALIVE  = 0
 	STATE_FAILED = 1
@@ -37,10 +40,10 @@ type Block struct {
 }
 
 type Request struct {
-	Action   int
-	Client   net.Conn
-	Filename string // The file name for upload/download file request
-	Block    string // The block name for add/remove block request
+	Action int
+	Client net.Conn
+	Name   string
+	Size   int
 }
 
 type Server struct {
@@ -51,10 +54,8 @@ type Server struct {
 	BlockToNodes  map[string][]int    // Maps block to list of nodes that store the block
 	Nodes         map[int]common.Node // Set of alive nodes
 	InputChannel  chan string
+	Requests chan Request
 	// ackChannel chan string
-	ReadQueue  *queue.Queue // download requests
-	WriteQueue *queue.Queue // upload requests
-	TaskQueue  *queue.Queue // rebalance tasks
 }
 
 var Log *common.Logger = common.Log
@@ -92,10 +93,7 @@ func NewServer(info common.Node) *Server {
 	server.InputChannel = make(chan string)
 	server.Nodes = make(map[int]common.Node)
 	server.Nodes[info.ID] = info
-
-	server.ReadQueue = queue.NewQueue()
-	server.WriteQueue = queue.NewQueue()
-	server.TaskQueue = queue.NewQueue()
+	server.Requests = make(chan Request)
 
 	return server
 }
@@ -155,15 +153,9 @@ func (s *Server) GetReplicaNodes(filename string, count int) []int {
 	return res
 }
 
-func (server *Server) Start() {
-	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", server.Info.TCPPort))
-
-	if err != nil {
-		Log.Fatal("Error starting server", err)
-	}
-	defer listener.Close()
-
-	Log.Infof("TCP Server is listening on port %d...\n", server.Info.TCPPort)
+// Receive requests from clients and send them to the Requests channel
+func (server *Server) listenerRoutine(listener net.Listener) {
+	buffer := make([]byte, common.MIN_BUFFER_SIZE)
 
 	for {
 		conn, err := listener.Accept()
@@ -173,7 +165,122 @@ func (server *Server) Start() {
 		}
 
 		Log.Debugf("Accepted connection from %s\n", conn.RemoteAddr())
-		go server.clientProtocol(conn)
+
+		n, err := conn.Read(buffer)
+
+		if err != nil {
+			Log.Warnf("Client %s disconnected\n", conn.RemoteAddr())
+			return
+		}
+
+		request := string(buffer[:n])
+
+		Log.Debugf("Received request from %s: %s\n", conn.RemoteAddr(), request)
+
+		lines := strings.Split(request, "\n")
+		tokens := strings.Split(lines[0], " ")
+		verb := tokens[0]
+
+		if verb == "UPLOAD_FILE" {
+			filename := tokens[1]
+			filesize, err := strconv.Atoi(tokens[2])
+			if err != nil {
+				Log.Warn(err)
+				return
+			}
+
+			server.Requests <- Request{
+				Action: ACTION_UPLOAD_FILE,
+				Client: conn,
+				Name:   filename,
+				Size:   filesize,
+			}
+
+		} else if verb == "DOWNLOAD_FILE" {
+			filename := tokens[1]
+			server.Requests <- Request{
+				Action: ACTION_DOWNLOAD_FILE,
+				Client: conn,
+				Name:   filename,
+			}
+
+		} else if verb == "UPLOAD" { // To upload block at replica
+			blockName := tokens[1]
+			blockSize, err := strconv.Atoi(tokens[2])
+			if err != nil {
+				Log.Warn(err)
+				return
+			}
+			server.Requests <- Request{
+				Action: ACTION_UPLOAD_BLOCK,
+				Client: conn,
+				Name:   blockName,
+				Size:   blockSize,
+			}
+
+		} else if verb == "DOWNLOAD" { // To download block at replica
+			blockName := tokens[1]
+
+			server.Requests <- Request{
+				Action: ACTION_DOWNLOAD_BLOCK,
+				Client: conn,
+				Name:   blockName,
+			}
+		} else {
+			Log.Warn("Unknown verb: ", verb)
+			conn.Write([]byte("ERROR\nUnknown verb"))
+			conn.Close()
+		}
+	}
+}
+
+func (server *Server) Start() {
+	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", server.Info.TCPPort))
+	if err != nil {
+		Log.Fatal("Error starting server", err)
+	}
+	defer listener.Close()
+
+	go server.listenerRoutine(listener)
+
+	Log.Infof("TCP Server is listening on port %d...\n", server.Info.TCPPort)
+
+	for {
+		task := <-server.Requests
+
+		switch task.Action {
+
+		case ACTION_UPLOAD_FILE:
+			if !server.UploadFile(task.Client, task.Name, task.Size, 1) {
+				task.Client.Write([]byte("ERROR\n"))
+			}
+
+		case ACTION_DOWNLOAD_FILE:
+			server.DownloadFile(task.Client, task.Name)
+
+		case ACTION_UPLOAD_BLOCK:
+			tokens := strings.Split(task.Name, ":")
+			filename := tokens[0]
+			version, err := strconv.Atoi(tokens[1])
+			if err != nil {
+				Log.Warn(err)
+				break
+			}
+			blockNum, err := strconv.Atoi(tokens[2])
+			if err != nil {
+				Log.Warn(err)
+				break
+			}
+			if !server.UploadBlock(task.Client, filename, version, blockNum, task.Size) {
+				task.Client.Write([]byte("ERROR\n"))
+				return
+			}
+
+		case ACTION_DOWNLOAD_BLOCK:
+			server.DownloadBlockResponse(task.Client, task.Name)
+		}
+
+		task.Client.Close()
 	}
 }
 
@@ -230,67 +337,6 @@ func (s *Server) Rebalance() {
 	//			}
 	//		}
 	//	}
-}
-
-func (server *Server) clientProtocol(conn net.Conn) {
-	defer conn.Close()
-
-	buffer := make([]byte, common.MIN_BUFFER_SIZE)
-	n, err := conn.Read(buffer)
-	if err != nil {
-		Log.Warnf("Client %s disconnected\n", conn.RemoteAddr())
-		return
-	}
-
-	request := string(buffer[:n])
-	Log.Debugf("Received request from %s: %s\n", conn.RemoteAddr(), request)
-
-	lines := strings.Split(request, "\n")
-	tokens := strings.Split(lines[0], " ")
-	verb := tokens[0]
-
-	if verb == "UPLOAD_FILE" {
-		filename := tokens[1]
-		filesize, err := strconv.Atoi(tokens[2])
-		if err != nil {
-			Log.Warn(err)
-			return
-		}
-		if !server.UploadFile(conn, filename, filesize, 1) {
-			conn.Write([]byte("ERROR\n"))
-		}
-	} else if verb == "DOWNLOAD_FILE" {
-		filename := tokens[1]
-		server.DownloadFile(conn, filename)
-	} else if verb == "UPLOAD" { // To upload block at replica
-		blockName := tokens[1]
-		blockSize, err := strconv.Atoi(tokens[2])
-		if err != nil {
-			Log.Warn(err)
-			return
-		}
-		tokens = strings.Split(blockName, ":")
-		filename := tokens[0]
-		version, err := strconv.Atoi(tokens[1])
-		if err != nil {
-			Log.Warn(err)
-			return
-		}
-		blockNum, err := strconv.Atoi(tokens[2])
-		if err != nil {
-			Log.Warn(err)
-			return
-		}
-		if !server.UploadBlock(conn, filename, version, blockNum, blockSize) {
-			conn.Write([]byte("ERROR\n"))
-			return
-		}
-	} else if verb == "DOWNLOAD" { // To download blockt at replica
-		blockName := tokens[1]
-		server.DownloadBlockResponse(conn, blockName)
-	} else {
-		Log.Warn("Unknown verb: ", verb)
-	}
 }
 
 func (server *Server) HandleCommand(command string) {

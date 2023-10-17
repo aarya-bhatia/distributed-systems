@@ -126,12 +126,12 @@ func (server *Server) UploadFile(client net.Conn, filename string, filesize int,
 }
 
 func (server *Server) UploadBlock(client net.Conn, filename string, version int, blockNum int, blockSize int) bool {
-	if oldFile, ok := server.Files[filename]; ok {
-		if oldFile.Version > version {
-			Log.Warn("Has newer version of block")
-			return false
-		}
-	}
+	// if oldFile, ok := server.Files[filename]; ok {
+	// 	if oldFile.Version > version {
+	// 		Log.Warn("Has newer version of block")
+	// 		return false
+	// 	}
+	// }
 
 	// Notify client to start uploading data
 	if common.SendAll(client, []byte("OK\n"), 3) < 0 {
