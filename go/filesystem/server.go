@@ -10,6 +10,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 )
 
 const (
@@ -54,13 +55,18 @@ type Server struct {
 	BlockToNodes  map[string][]int    // Maps block to list of nodes that store the block
 	Nodes         map[int]common.Node // Set of alive nodes
 	InputChannel  chan string
-	Requests chan Request
+	Requests      chan Request
+	Mutex         sync.Mutex
+
 	// ackChannel chan string
 }
 
 var Log *common.Logger = common.Log
 
 func (s *Server) HandleNodeJoin(node *common.Node) {
+	s.Mutex.Lock()
+	defer s.Mutex.Unlock()
+
 	Log.Debug("node joined: ", *node)
 	s.Nodes[node.ID] = *node
 	s.NodesToBlocks[node.ID] = []string{}
@@ -68,6 +74,9 @@ func (s *Server) HandleNodeJoin(node *common.Node) {
 }
 
 func (s *Server) HandleNodeLeave(node *common.Node) {
+	s.Mutex.Lock()
+	defer s.Mutex.Unlock()
+
 	Log.Debug("node left: ", *node)
 	delete(s.Nodes, node.ID)
 	for _, block := range s.NodesToBlocks[node.ID] {
@@ -100,6 +109,9 @@ func NewServer(info common.Node) *Server {
 
 // Node with smallest ID
 func (s *Server) GetLeaderNode(count int) int {
+	s.Mutex.Lock()
+	defer s.Mutex.Unlock()
+
 	pq := make(priqueue.PriorityQueue, 0)
 	heap.Init(&pq)
 
@@ -113,6 +125,9 @@ func (s *Server) GetLeaderNode(count int) int {
 
 // The first R nodes with the lowest ID are selected as metadata replicas.
 func (s *Server) GetMetadataReplicaNodes(count int) []int {
+	s.Mutex.Lock()
+	defer s.Mutex.Unlock()
+
 	pq := make(priqueue.PriorityQueue, 0)
 	heap.Init(&pq)
 
@@ -131,6 +146,9 @@ func (s *Server) GetMetadataReplicaNodes(count int) []int {
 
 // Get the `count` nearest nodes to the file hash
 func (s *Server) GetReplicaNodes(filename string, count int) []int {
+	s.Mutex.Lock()
+	defer s.Mutex.Unlock()
+
 	fileHash := common.GetHash(filename, len(common.Cluster))
 	pq := make(priqueue.PriorityQueue, 0)
 	heap.Init(&pq)
@@ -285,7 +303,7 @@ func (server *Server) Start() {
 }
 
 // Print file system metadata information to stdout
-func PrintFileMetadata(server *Server) {
+func (server *Server) PrintFileMetadata() {
 	t := table.NewWriter()
 	t.SetOutputMirror(os.Stdout)
 	t.AppendHeader(table.Row{"Filename", "Version", "Block", "Nodes"})
@@ -340,13 +358,16 @@ func (s *Server) Rebalance() {
 }
 
 func (server *Server) HandleCommand(command string) {
+	server.Mutex.Lock()
+	defer server.Mutex.Unlock()
+
 	if command == "help" {
 		fmt.Println("ls: Display metadata table")
 		fmt.Println("info: Display server info")
 		fmt.Println("files: Display list of files")
 		fmt.Println("blocks: Display list of blocks")
 	} else if command == "ls" {
-		PrintFileMetadata(server)
+		server.PrintFileMetadata()
 	} else if command == "files" {
 		for name, block := range server.Storage {
 			tokens := strings.Split(name, ":")
