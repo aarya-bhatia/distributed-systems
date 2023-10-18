@@ -4,7 +4,15 @@ import (
 	"container/heap"
 	"cs425/common"
 	"cs425/priqueue"
+	"fmt"
+	"io"
+	"os"
 )
+
+type FileEntry struct {
+	Name string
+	Size int64
+}
 
 // Node with smallest ID
 func (s *Server) GetLeaderNode(count int) int {
@@ -62,4 +70,62 @@ func (s *Server) GetReplicaNodes(filename string, count int) []int {
 	}
 
 	return res
+}
+
+func writeBlockToDisk(directory string, blockName string, buffer []byte, blockSize int) bool {
+	filename := fmt.Sprintf("%s/%s", directory, blockName)
+	file, err := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0666)
+	if err != nil {
+		Log.Warn(err)
+		return false
+	}
+	defer file.Close()
+
+	_, err = file.Write(buffer[:blockSize])
+	if err != nil {
+		Log.Warn(err)
+		return false
+	}
+
+	return true
+}
+
+func readBlockFromDisk(directory string, blockName string) []byte {
+	filename := fmt.Sprintf("%s/%s", directory, blockName)
+	file, err := os.Open(filename)
+	if err != nil {
+		Log.Warn(err)
+		return nil
+	}
+
+	buffer, err := io.ReadAll(file)
+	if err != nil {
+		Log.Warn(err)
+		return nil
+	}
+
+	return buffer
+}
+
+func getFilesInDirectory(directoryPath string) ([]FileEntry, error) {
+	var files []FileEntry
+
+	dir, err := os.Open(directoryPath)
+	if err != nil {
+		return nil, err
+	}
+	defer dir.Close()
+
+	dirEntries, err := dir.Readdir(0)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, entry := range dirEntries {
+		if !entry.IsDir() {
+			files = append(files, FileEntry{entry.Name(), entry.Size()})
+		}
+	}
+
+	return files, nil
 }

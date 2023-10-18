@@ -9,8 +9,9 @@ import (
 )
 
 func (server *Server) DownloadBlockResponse(conn net.Conn, blockName string) {
-	if block, ok := server.Storage[blockName]; ok {
-		common.SendAll(conn, block.Data, block.Size)
+	buffer := readBlockFromDisk(server.Directory, blockName)
+	if buffer != nil {
+		common.SendAll(conn, buffer, len(buffer))
 	}
 }
 
@@ -81,13 +82,18 @@ func (server *Server) DownloadFile(conn net.Conn, filename string) {
 		replica := server.Nodes[replicaID]
 
 		if replica.ID == server.Info.ID {
-			block := server.Storage[blockName]
-			if common.SendAll(conn, block.Data, block.Size) < 0 {
+			buffer := readBlockFromDisk(server.Directory, blockName)
+			if buffer == nil {
+				Log.Warn("Failed to read block from disk")
+				return
+			}
+			if common.SendAll(conn, buffer, len(buffer)) < 0 {
 				Log.Warn("Failed to send block")
 				return
 			}
 
-			bytesSent += block.Size
+			bytesSent += len(buffer)
+
 		} else {
 			buffer := server.DownloadBlockRequest(replicaID, blockName)
 			if buffer == nil {

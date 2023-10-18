@@ -14,10 +14,24 @@ import (
 
 var Log = common.Log
 
+func exists(path string) bool {
+	_, err := os.Stat(path)
+	if err == nil {
+		return true
+	}
+	if os.IsNotExist(err) {
+		Log.Warn(err)
+		return false
+	}
+	Log.Warn(err)
+	return false
+}
+
 func main() {
 	var err error
 	var hostname string
 	var udpPort, tcpPort int
+	var dbDirectory string
 
 	systemHostname, err := os.Hostname()
 	if err != nil {
@@ -27,6 +41,7 @@ func main() {
 	flag.IntVar(&udpPort, "udp", common.DEFAULT_UDP_PORT, "failure detector port")
 	flag.IntVar(&tcpPort, "tcp", common.DEFAULT_TCP_PORT, "file server port")
 	flag.StringVar(&hostname, "h", systemHostname, "hostname")
+	flag.StringVar(&dbDirectory, "db", ".db", "database directory")
 	flag.Parse()
 
 	if hostname == "localhost" || hostname == "127.0.0.1" {
@@ -52,7 +67,13 @@ func main() {
 		log.Fatal("Unknown Server")
 	}
 
-	fileServer := filesystem.NewServer(*found)
+	if !exists(dbDirectory) {
+		Log.Fatal("Directory does not exist")
+	}
+
+	Log.Info("Directory: ", dbDirectory)
+
+	fileServer := filesystem.NewServer(*found, dbDirectory)
 
 	failureDetectorServer := failuredetector.NewServer(found.Hostname, found.UDPPort, common.GOSPSIP_SUSPICION_PROTOCOL, fileServer)
 

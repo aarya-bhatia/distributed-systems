@@ -13,9 +13,10 @@ func (server *Server) processUploadBlock(blockName string, buffer []byte, blockS
 	replica := server.GetReplicaNodes(blockName, 1)[0]
 
 	if replica == server.Info.ID {
-		block := &Block{Size: blockSize, Data: blockData}
-		server.Storage[blockName] = block
-		Log.Debugf("Added block %s to storage\n", blockName)
+		if !writeBlockToDisk(server.Directory, blockName, buffer, blockSize) {
+			Log.Debugf("Added block %s to disk\n", blockName)
+			return false
+		}
 	} else {
 		replicaInfo := server.Nodes[replica]
 		replicaConn, err := net.Dial("tcp", fmt.Sprintf("%s:%d", replicaInfo.Hostname, replicaInfo.TCPPort))
@@ -126,13 +127,6 @@ func (server *Server) UploadFile(client net.Conn, filename string, filesize int,
 }
 
 func (server *Server) UploadBlock(client net.Conn, filename string, version int, blockNum int, blockSize int) bool {
-	// if oldFile, ok := server.Files[filename]; ok {
-	// 	if oldFile.Version > version {
-	// 		Log.Warn("Has newer version of block")
-	// 		return false
-	// 	}
-	// }
-
 	// Notify client to start uploading data
 	if common.SendAll(client, []byte("OK\n"), 3) < 0 {
 		return false
@@ -168,12 +162,14 @@ func (server *Server) UploadBlock(client net.Conn, filename string, version int,
 	Log.Debugf("Received block %d (%d bytes) from client %s", blockNum, blockSize, client.RemoteAddr())
 
 	blockName := common.GetBlockName(filename, version, blockNum)
-	block := &Block{Size: blockSize, Data: buffer[:blockSize]}
-	server.Storage[blockName] = block
+
+	if !writeBlockToDisk(server.Directory, blockName, buffer, blockSize) {
+		Log.Debugf("Added block %s to disk\n", blockName)
+		return false
+	}
+
 	server.NodesToBlocks[server.Info.ID] = append(server.NodesToBlocks[server.Info.ID], blockName)
 	server.BlockToNodes[blockName] = append(server.BlockToNodes[blockName], server.Info.ID)
-
-	Log.Debugf("Added block %s to storage\n", blockName)
 
 	return true
 }

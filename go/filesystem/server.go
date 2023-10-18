@@ -30,17 +30,20 @@ type Request struct {
 	Name      string
 	Size      int
 	Timestamp int64
+	Queue     *RWQueue
 }
 
 type Server struct {
-	Info          common.Node
-	Files         map[string]*File    // Files stored by system
-	Storage       map[string]*Block   // In memory data storage
+	Info      common.Node
+	Directory string
+	Files     map[string]*File // Files stored by system
+	// Storage       map[string]*Block   // In memory data storage
 	NodesToBlocks map[int][]string    // Maps node to the blocks they are storing
 	BlockToNodes  map[string][]int    // Maps block to list of nodes that store the block
 	Nodes         map[int]common.Node // Set of alive nodes
 	InputChannel  chan string         // Receive commands from stdin
 	FileQueues    map[string]*RWQueue // Handle read/write operations for each file
+	Requests      chan *Request
 	// Queue         *RWQueue
 	// ackChannel chan string
 }
@@ -79,24 +82,40 @@ func (s *Server) HandleNodeLeave(node *common.Node) {
 	s.rebalance()
 }
 
-func NewServer(info common.Node) *Server {
+func NewServer(info common.Node, dbDirectory string) *Server {
 	server := new(Server)
 	server.Info = info
+	server.Directory = dbDirectory
 	server.Files = make(map[string]*File)
-	server.Storage = make(map[string]*Block)
 	server.NodesToBlocks = make(map[int][]string)
 	server.BlockToNodes = make(map[string][]int)
 	server.InputChannel = make(chan string)
 	server.FileQueues = make(map[string]*RWQueue)
 	server.Nodes = make(map[int]common.Node)
+	server.Requests = make(chan *Request)
 
 	server.Nodes[info.ID] = info
 
 	return server
 }
 
+func (server *Server) getFileQueue(filename string) *RWQueue {
+	fq, ok := server.FileQueues[filename]
+	if !ok {
+		fq = NewRWQueue()
+		server.FileQueues[filename] = fq
+
+		go func() {
+			for {
+				server.Requests <- fq.Pop()
+			}
+		}()
+	}
+	return fq
+}
+
 // Receive requests from clients and send them to the Requests channel
-func (server *Server) listenerRoutine(listener net.Listener, requests chan *Request) {
+func (server *Server) listenerRoutine(listener net.Listener) {
 	buffer := make([]byte, common.MIN_BUFFER_SIZE)
 
 	for {
@@ -133,22 +152,24 @@ func (server *Server) listenerRoutine(listener net.Listener, requests chan *Requ
 				return
 			}
 
-			requests <- (&Request{
+			server.getFileQueue(filename).PushWrite(&Request{
 				Action:    UPLOAD_FILE,
 				Client:    conn,
 				Name:      filename,
 				Size:      filesize,
 				Timestamp: timestamp,
+				Queue:     server.getFileQueue(filename),
 			})
 
 		} else if verb == "DOWNLOAD_FILE" { // To write a file to a client
 			filename := tokens[1]
 
-			requests <- (&Request{
+			server.getFileQueue(filename).PushRead(&Request{
 				Action:    DOWNLOAD_FILE,
 				Client:    conn,
 				Name:      filename,
 				Timestamp: timestamp,
+				Queue:     server.getFileQueue(filename),
 			})
 
 		} else if verb == "UPLOAD" { // To upload block at replica
@@ -159,22 +180,24 @@ func (server *Server) listenerRoutine(listener net.Listener, requests chan *Requ
 				return
 			}
 
-			requests <- (&Request{
+			server.Requests <- (&Request{
 				Action:    UPLOAD_BLOCK,
 				Client:    conn,
 				Name:      blockName,
 				Size:      blockSize,
 				Timestamp: timestamp,
+				Queue:     nil,
 			})
 
 		} else if verb == "DOWNLOAD" { // To download block at replica
 			blockName := tokens[1]
 
-			requests <- (&Request{
+			server.Requests <- (&Request{
 				Action:    DOWNLOAD_BLOCK,
 				Client:    conn,
 				Name:      blockName,
 				Timestamp: timestamp,
+				Queue:     nil,
 			})
 
 		} else {
@@ -194,25 +217,20 @@ func (server *Server) Start() {
 
 	Log.Infof("TCP Server is listening on port %d...\n", server.Info.TCPPort)
 
-	requests := make(chan *Request)
-
-	go server.listenerRoutine(listener, requests)
-
-	// go func() {
-	// 	requests <- server.Queue.Pop()
-	// }()
+	go server.listenerRoutine(listener)
 
 	for {
 		select {
-		case task := <-requests:
+		case task := <-server.Requests:
 			server.handleRequest(task)
-			// go func() {
-			// 	if task.Action == DOWNLOAD_BLOCK || task.Action == DOWNLOAD_FILE {
-			// 		server.Queue.ReadDone()
-			// 	} else if task.Action == UPLOAD_BLOCK || task.Action == UPLOAD_FILE {
-			// 		server.Queue.WriteDone()
-			// 	}
-			// }()
+
+			if task.Queue != nil {
+				if task.Action == DOWNLOAD_FILE {
+					task.Queue.ReadDone()
+				} else if task.Action == UPLOAD_FILE {
+					task.Queue.WriteDone()
+				}
+			}
 
 		case task := <-server.InputChannel:
 			server.handleCommand(task)
@@ -323,9 +341,14 @@ func (server *Server) handleCommand(command string) {
 	} else if command == "ls" {
 		server.printFileMetadata()
 	} else if command == "files" {
-		for name, block := range server.Storage {
-			tokens := strings.Split(name, ":")
-			fmt.Printf("File %s, version %s, block %s, size %d\n", tokens[0], tokens[1], tokens[2], block.Size)
+		files, err := getFilesInDirectory(server.Directory)
+		if err != nil {
+			Log.Warn(err)
+			return
+		}
+		for _, f := range files {
+			tokens := strings.Split(f.Name, ":")
+			fmt.Printf("File %s, version %s, block %s, size %d\n", tokens[0], tokens[1], tokens[2], f.Size)
 		}
 	} else if command == "blocks" {
 		for name, arr := range server.BlockToNodes {

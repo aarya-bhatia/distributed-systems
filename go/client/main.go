@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"strings"
+	"time"
 )
 
 var Log = common.Log
@@ -113,11 +114,13 @@ func UploadFile(localFilename string, remoteFilename string) bool {
 			return false
 		}
 
+		Log.Debugf("Read %d bytes\n", n)
+
 		if common.SendAll(server, buffer, n) < 0 {
 			return false
 		}
 
-		Log.Debugf("Sent block with %d bytes", n)
+		Log.Debugf("Sent %d bytes\n", n)
 	}
 
 	if !common.GetOKMessage(server) {
@@ -152,18 +155,35 @@ func main() {
 		} else if verb == "put" {
 			if len(tokens) != 3 {
 				printUsage()
-			} else if !UploadFile(tokens[1], tokens[2]) {
+				continue
+			}
+
+			startTime := time.Now().UnixNano()
+
+			if !UploadFile(tokens[1], tokens[2]) {
 				Log.Warn("Failed to upload file")
 			} else {
 				Log.Debug("Success!")
+				endTime := time.Now().UnixNano()
+				elapsed := endTime - startTime
+				fmt.Println("Upload time (sec): ", float64(elapsed)*1e-9)
 			}
+
 		} else if verb == "get" {
 			if len(tokens) != 3 {
 				printUsage()
-			} else if !DownloadFile(tokens[2], tokens[1]) {
+				continue
+			}
+
+			startTime := time.Now().UnixNano()
+
+			if !DownloadFile(tokens[2], tokens[1]) {
 				Log.Warn("Failed to download file ", tokens[2])
 			} else {
 				Log.Debug("Success!")
+				endTime := time.Now().UnixNano()
+				elapsed := endTime - startTime
+				fmt.Println("Download time (sec): ", float64(elapsed)*1e-9)
 			}
 		} else {
 			Log.Warn("Unknown command ", verb)
