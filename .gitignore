@@ -23,3 +23,5 @@ main
 known_hosts
 data/
 db/
+go/cs425
+go/client/client
