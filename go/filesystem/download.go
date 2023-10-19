@@ -2,112 +2,42 @@ package filesystem
 
 import (
 	"cs425/common"
-	"fmt"
-	"io"
-	"math/rand"
+	"strings"
 	"net"
+	"fmt"
 )
 
-func (server *Server) DownloadBlockResponse(conn net.Conn, blockName string) {
-	buffer := readBlockFromDisk(server.Directory, blockName)
-	if buffer != nil {
-		common.SendAll(conn, buffer, len(buffer))
-	}
-}
-
-func (server *Server) DownloadBlockRequest(replicaID int, blockName string) []byte {
-	buffer := make([]byte, common.BLOCK_SIZE)
-	bufferSize := 0
-
-	replicaInfo := server.Nodes[replicaID]
-
-	replicaConn, err := net.Dial("tcp", fmt.Sprintf("%s:%d", replicaInfo.Hostname, replicaInfo.TCPPort))
+func (server *Server) finishDownload(client net.Conn, filename string) {
+	defer client.Close()
+	defer server.getQueue(filename).Done()
+	buffer := make([]byte, common.MIN_BUFFER_SIZE)
+	_, err := client.Read(buffer)
 	if err != nil {
-		Log.Debug("Failed to establish connection", err)
-		return nil
+		Log.Warn("Download failed: ", err)
+		return
 	}
-
-	request := fmt.Sprintf("DOWNLOAD %s\n", blockName)
-	if common.SendAll(replicaConn, []byte(request), len(request)) < 0 {
-		return nil
-	}
-	for bufferSize < common.BLOCK_SIZE {
-		n, err := replicaConn.Read(buffer[bufferSize:])
-		if err == io.EOF || n == 0 {
-			break
-		} else if err != nil {
-			Log.Warn(err)
-			return nil
-		}
-		bufferSize += n
-	}
-
-	if bufferSize == 0 {
-		return nil
-	}
-
-	Log.Debugf("Received %d bytes of block %s from replica %d\n", bufferSize, blockName, replicaID)
-	return buffer[:bufferSize]
+	Log.Infof("%s: Downloaded file %s\n", client.RemoteAddr(), filename)
 }
 
-// Send file to client
-func (server *Server) DownloadFile(conn net.Conn, filename string) {
+func (server *Server) handleDownloadBlockRequest(task *Request) {
+	defer task.Client.Close()
+	if buffer := readBlockFromDisk(server.Directory, task.Name); buffer != nil {
+		common.SendAll(task.Client, buffer, len(buffer))
+	}
+}
+
+func (server *Server) sendDownloadFileMetadata(client net.Conn, filename string) bool {
 	file, ok := server.Files[filename]
-
 	if !ok {
-		conn.Write([]byte("ERROR\nFile not found\n"))
-		return
+		client.Write([]byte("ERROR\nFile not found\n"))
+		return false
 	}
 
-	response := fmt.Sprintf("OK %s:%d:%d\n", filename, file.Version, file.FileSize)
-
-	if common.SendAll(conn, []byte(response), len(response)) < 0 {
-		return
+	response := ""
+	for i := 0; i < common.GetNumFileBlocks(int64(file.FileSize)); i++ {
+		blockName := fmt.Sprintf("%s:%d:%d", filename, file.Version, i)
+		response += fmt.Sprintf("%s %s\n", blockName, strings.Join(server.BlockToNodes[blockName], ","))
 	}
 
-	bytesSent := 0
-
-	Log.Debugf("To send %d blocks\n", file.NumBlocks)
-
-	for i := 0; i < file.NumBlocks; i++ {
-		blockName := common.GetBlockName(filename, file.Version, i)
-		replicas := server.BlockToNodes[blockName]
-
-		if len(replicas) == 0 {
-			Log.Warnf("No replicas found for block %d\n", i)
-			return
-		}
-
-		replicaID := replicas[rand.Intn(len(replicas))]
-		replica := server.Nodes[replicaID]
-
-		if replica.ID == server.Info.ID {
-			buffer := readBlockFromDisk(server.Directory, blockName)
-			if buffer == nil {
-				Log.Warn("Failed to read block from disk")
-				return
-			}
-			if common.SendAll(conn, buffer, len(buffer)) < 0 {
-				Log.Warn("Failed to send block")
-				return
-			}
-
-			bytesSent += len(buffer)
-
-		} else {
-			buffer := server.DownloadBlockRequest(replicaID, blockName)
-			if buffer == nil {
-				Log.Warn("Failed to download block")
-				return
-			}
-
-			if common.SendAll(conn, buffer, len(buffer)) < 0 {
-				Log.Warn("Failed to send block")
-				return
-			}
-			bytesSent += len(buffer)
-		}
-	}
-
-	Log.Infof("Sent file %s (%d bytes) to client %s\n", filename, bytesSent, conn.RemoteAddr())
+	return common.SendAll(client, []byte(response), len(response)) == len(response)
 }

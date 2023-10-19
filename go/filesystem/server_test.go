@@ -4,7 +4,6 @@ import (
 	"cs425/common"
 	"fmt"
 	"testing"
-	// "github.com/stretchr/testify/assert"
 )
 
 func TestReplicas(t *testing.T) {
@@ -17,28 +16,28 @@ func TestReplicas(t *testing.T) {
 		fmt.Printf("Hash for file %s: %d\n", filename, common.GetHash(filename, len(common.Cluster)))
 	}
 
-	s := NewServer(common.Cluster[0])
+	s := NewServer(common.Cluster[0], "db")
+	address := []string{}
 
-	s.Nodes[1] = common.Cluster[0]
-	s.Nodes[2] = common.Cluster[1]
-	s.Nodes[3] = common.Cluster[2]
-	s.Nodes[4] = common.Cluster[3]
-	s.Nodes[5] = common.Cluster[4]
+	for _, node := range common.Cluster {
+		addr := fmt.Sprintf("%s:%d", node.Hostname, node.TCPPort)
+		fmt.Println(node, GetNodeHash(addr))
+		s.Nodes[addr] = true
+		address = append(address, addr)
+	}
 
 	for _, file := range files {
 		fmt.Printf("Replicas for file %s: %v\n", file, s.GetReplicaNodes(file, count))
 	}
 
-	fmt.Println("Crashing 2")
-	delete(s.Nodes, 2)
-
+	fmt.Println("Crashing node: ", address[0])
+	delete(s.Nodes, address[0])
 	for _, file := range files {
 		fmt.Printf("Replicas for file %s: %v\n", file, s.GetReplicaNodes(file, count))
 	}
 
-	fmt.Println("Crashing 5")
-	delete(s.Nodes, 5)
-
+	fmt.Println("Crashing node: ", address[1])
+	delete(s.Nodes, address[1])
 	for _, file := range files {
 		fmt.Printf("Replicas for file %s: %v\n", file, s.GetReplicaNodes(file, count))
 	}

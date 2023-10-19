@@ -3,7 +3,6 @@ package main
 import (
 	"cs425/common"
 	"fmt"
-	"io"
 	"net"
 	"os"
 	"time"
@@ -21,111 +20,6 @@ func Connect() net.Conn {
 
 	Log.Fatal("All nodes are offline")
 	return nil
-}
-
-func DownloadFile(localFilename string, remoteFilename string) bool {
-	server := Connect()
-	defer server.Close()
-
-	file, err := os.Create(localFilename)
-	if err != nil {
-		Log.Warn(err)
-		return false
-	}
-
-	defer file.Close()
-	message := fmt.Sprintf("DOWNLOAD_FILE %s\n", remoteFilename)
-
-	if common.SendAll(server, []byte(message), len(message)) < 0 {
-		return false
-	}
-
-	if !common.GetOKMessage(server) {
-		return false
-	}
-
-	buffer := make([]byte, common.BLOCK_SIZE)
-	bytesRead := 0
-
-	for {
-		n, err := server.Read(buffer)
-		if err == io.EOF {
-			Log.Debug("EOF")
-			break
-		} else if err != nil {
-			Log.Warn(err)
-			return false
-		}
-
-		_, err = file.Write(buffer[:n])
-		if err != nil {
-			Log.Warn(err)
-			return false
-		}
-
-		bytesRead += n
-	}
-
-	Log.Infof("Downloaded file %s with %d bytes\n", localFilename, bytesRead)
-	return true
-}
-
-func UploadFile(localFilename string, remoteFilename string) bool {
-	server := Connect()
-	defer server.Close()
-
-	info, err := os.Stat(localFilename)
-	if err != nil {
-		Log.Warn(err)
-		return false
-	}
-
-	fileSize := info.Size()
-	file, err := os.Open(localFilename)
-	if err != nil {
-		Log.Warn(err)
-		return false
-	}
-
-	Log.Debugf("Uploading file %s with %d bytes (%d blocks)", localFilename, fileSize, common.GetNumFileBlocks(int64(fileSize)))
-
-	defer file.Close()
-
-	message := fmt.Sprintf("UPLOAD_FILE %s %d\n", remoteFilename, fileSize)
-
-	if common.SendAll(server, []byte(message), len(message)) < 0 {
-		return false
-	}
-
-	if !common.GetOKMessage(server) {
-		return false
-	}
-
-	buffer := make([]byte, common.BLOCK_SIZE)
-
-	for {
-		n, err := file.Read(buffer)
-		if err == io.EOF {
-			break
-		} else if err != nil {
-			Log.Warn(err)
-			return false
-		}
-
-		Log.Debugf("Read %d bytes\n", n)
-
-		if common.SendAll(server, buffer, n) < 0 {
-			return false
-		}
-
-		Log.Debugf("Sent %d bytes\n", n)
-	}
-
-	if !common.GetOKMessage(server) {
-		return false
-	}
-
-	return true
 }
 
 func printUsage() {

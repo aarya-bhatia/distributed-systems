@@ -3,12 +3,13 @@ package filesystem
 import (
 	"cs425/common"
 	"fmt"
-	"github.com/jedib0t/go-pretty/v6/table"
 	"net"
 	"os"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/jedib0t/go-pretty/v6/table"
 )
 
 type File struct {
@@ -18,105 +19,191 @@ type File struct {
 	NumBlocks int
 }
 
-// A block of file
-type Block struct {
-	Size int
-	Data []byte
-}
-
 type Request struct {
-	Action    int
-	Client    net.Conn
-	Name      string
-	Size      int
-	Timestamp int64
-	Queue     *RWQueue
+	Action int
+	Client net.Conn
+	Name   string
+	Size   int
 }
 
 type Server struct {
-	Info      common.Node
-	Directory string
-	Files     map[string]*File // Files stored by system
-	// Storage       map[string]*Block   // In memory data storage
-	NodesToBlocks map[int][]string    // Maps node to the blocks they are storing
-	BlockToNodes  map[string][]int    // Maps block to list of nodes that store the block
-	Nodes         map[int]common.Node // Set of alive nodes
-	InputChannel  chan string         // Receive commands from stdin
-	FileQueues    map[string]*RWQueue // Handle read/write operations for each file
-	Requests      chan *Request
-	// Queue         *RWQueue
-	// ackChannel chan string
+	Hostname  string
+	Port      int
+	ID        string          // hostname:port
+	Directory string          // Path to save blocks on disk
+	Files     map[string]File // Files stored by system
+
+	// A block is represented as "filename:version:blocknum"
+
+	NodesToBlocks map[string][]string // Maps node ID to the blocks they are storing
+	BlockToNodes  map[string][]string // Maps block to list of node IDs that store the block
+
+	FileQueues map[string]*Queue // Handle read/write operations for each file
+
+	Nodes        map[string]bool // Set of alive nodes
+	InputChannel chan string     // Receive commands from stdin
+	Requests     chan *Request   // Receive requests from listener thread
+	NodeJoins    chan string
+	NodeLeaves   chan string
 }
 
 const (
-	DOWNLOAD_FILE  = 1
-	UPLOAD_FILE    = 2
+	DOWNLOAD_FILE = 1
+	UPLOAD_FILE   = 2
+
 	UPLOAD_BLOCK   = 3
 	DOWNLOAD_BLOCK = 4
-	ADD_BLOCK      = 5
-	REMOVE_BLOCK   = 6
+
+	ADD_BLOCK    = 5
+	REMOVE_BLOCK = 6
 )
 
 var Log *common.Logger = common.Log
 
-func (s *Server) HandleNodeJoin(node *common.Node) {
-	Log.Debug("node joined: ", *node)
-	s.Nodes[node.ID] = *node
-	s.NodesToBlocks[node.ID] = []string{}
-	s.rebalance()
-}
-
-func (s *Server) HandleNodeLeave(node *common.Node) {
-	Log.Debug("node left: ", *node)
-	delete(s.Nodes, node.ID)
-	for _, block := range s.NodesToBlocks[node.ID] {
-		for i := 0; i < len(s.BlockToNodes[block]); i++ {
-			nodes := s.BlockToNodes[block]
-			if nodes[i] == node.ID {
-				s.BlockToNodes[block] = common.RemoveIndex(nodes, i)
-				break
-			}
-		}
-	}
-	delete(s.NodesToBlocks, node.ID)
-	s.rebalance()
-}
-
 func NewServer(info common.Node, dbDirectory string) *Server {
 	server := new(Server)
-	server.Info = info
+	server.Hostname = info.Hostname
+	server.Port = info.TCPPort
+	server.ID = fmt.Sprintf("%s:%d", info.Hostname, info.TCPPort)
 	server.Directory = dbDirectory
-	server.Files = make(map[string]*File)
-	server.NodesToBlocks = make(map[int][]string)
-	server.BlockToNodes = make(map[string][]int)
+	server.Files = make(map[string]File)
+	server.NodesToBlocks = make(map[string][]string)
+	server.BlockToNodes = make(map[string][]string)
 	server.InputChannel = make(chan string)
-	server.FileQueues = make(map[string]*RWQueue)
-	server.Nodes = make(map[int]common.Node)
+	server.FileQueues = make(map[string]*Queue)
+	server.Nodes = make(map[string]bool)
 	server.Requests = make(chan *Request)
-
-	server.Nodes[info.ID] = info
+	server.NodeJoins = make(chan string)
+	server.NodeLeaves = make(chan string)
+	server.Nodes[server.ID] = true
 
 	return server
 }
 
-func (server *Server) getFileQueue(filename string) *RWQueue {
-	fq, ok := server.FileQueues[filename]
-	if !ok {
-		fq = NewRWQueue()
-		server.FileQueues[filename] = fq
+func (s *Server) HandleNodeJoin(node *common.Node) {
+	Log.Debug("node joined: ", *node)
+	s.NodeJoins <- fmt.Sprintf("%s:%d", node.Hostname, node.TCPPort)
+}
 
-		go func() {
-			for {
-				server.Requests <- fq.Pop()
-			}
-		}()
+func (s *Server) HandleNodeLeave(node *common.Node) {
+	Log.Debug("node left: ", *node)
+	Log.Debug("node joined: ", *node)
+	s.NodeLeaves <- fmt.Sprintf("%s:%d", node.Hostname, node.TCPPort)
+}
+
+// Get or create a queue to handle requests for given file
+func (server *Server) getQueue(filename string) *Queue {
+	q, ok := server.FileQueues[filename]
+	if !ok {
+		q = new(Queue)
+		server.FileQueues[filename] = q
 	}
-	return fq
+	return q
+}
+
+func (server *Server) handleConnection(conn net.Conn) {
+	buffer := make([]byte, common.MIN_BUFFER_SIZE)
+	n, err := conn.Read(buffer)
+	if err != nil {
+		Log.Warnf("Client %s disconnected\n", conn.RemoteAddr())
+		return
+	}
+
+	Log.Debugf("Received request from %s: %s\n", conn.RemoteAddr(), string(buffer[:n]))
+	lines := strings.Split(string(buffer[:n]), "\n")
+	tokens := strings.Split(lines[0], " ")
+	verb := tokens[0]
+
+	if verb == "UPLOAD_FILE" { // To read a file from client
+		if len(tokens) != 3 {
+			conn.Write([]byte("ERROR\nUsage: UPLOAD_FILE <filename> <filesize>\n"))
+			conn.Close()
+			return
+		}
+
+		filename := tokens[1]
+
+		filesize, err := strconv.Atoi(tokens[2])
+		if err != nil || filesize <= 0 {
+			conn.Write([]byte("ERROR\nFile size must be a positive number\n"))
+			conn.Close()
+			return
+		}
+
+		server.getQueue(filename).PushWrite(&Request{
+			Action: UPLOAD_FILE,
+			Client: conn,
+			Name:   filename,
+			Size:   filesize,
+		})
+
+	} else if verb == "DOWNLOAD_FILE" { // To write a file to a client
+		if len(tokens) != 2 {
+			conn.Write([]byte("ERROR\nFilename not specified\n"))
+			conn.Close()
+			return
+		}
+
+		filename := tokens[1]
+
+		server.getQueue(filename).PushRead(&Request{
+			Action: DOWNLOAD_FILE,
+			Client: conn,
+			Name:   filename,
+		})
+
+	} else if verb == "UPLOAD" { // To upload block at replica
+		if len(tokens) != 3 {
+			conn.Write([]byte("ERROR\nUsage: UPLOAD_BLOCK <blockname> <blocksize>\n"))
+			conn.Close()
+			return
+		}
+
+		blockName := tokens[1]
+		blockSize, err := strconv.Atoi(tokens[2])
+		if err != nil || blockSize <= 0 {
+			conn.Write([]byte("ERROR\nBlock size must be a positive number\n"))
+			conn.Close()
+			return
+		}
+
+		if blockSize > common.BLOCK_SIZE {
+			conn.Write([]byte(fmt.Sprintf("ERROR\nMaximum block size is %d\n", common.BLOCK_SIZE)))
+			conn.Close()
+			return
+		}
+
+		server.Requests <- &Request{
+			Action: UPLOAD_BLOCK,
+			Client: conn,
+			Name:   blockName,
+			Size:   blockSize,
+		}
+
+	} else if verb == "DOWNLOAD" { // To download block at replica
+		if len(tokens) != 2 {
+			conn.Write([]byte("ERROR\nUsage: DOWNLOAD_BLOCK <blockname>\n"))
+			conn.Close()
+			return
+		}
+
+		blockName := tokens[1]
+
+		server.Requests <- &Request{
+			Action: DOWNLOAD_BLOCK,
+			Client: conn,
+			Name:   blockName,
+		}
+
+	} else {
+		Log.Warn("Unknown verb: ", verb)
+		conn.Write([]byte("ERROR\nUnknown verb\n"))
+		conn.Close()
+	}
 }
 
 // Receive requests from clients and send them to the Requests channel
 func (server *Server) listenerRoutine(listener net.Listener) {
-	buffer := make([]byte, common.MIN_BUFFER_SIZE)
 
 	for {
 		conn, err := listener.Accept()
@@ -127,113 +214,89 @@ func (server *Server) listenerRoutine(listener net.Listener) {
 
 		Log.Debugf("Accepted connection from %s\n", conn.RemoteAddr())
 
-		n, err := conn.Read(buffer)
+		go server.handleConnection(conn)
+	}
+}
 
-		if err != nil {
-			Log.Warnf("Client %s disconnected\n", conn.RemoteAddr())
-			return
-		}
-
-		request := string(buffer[:n])
-
-		Log.Debugf("Received request from %s: %s\n", conn.RemoteAddr(), request)
-
-		timestamp := time.Now().UnixNano()
-
-		lines := strings.Split(request, "\n")
-		tokens := strings.Split(lines[0], " ")
-		verb := tokens[0]
-
-		if verb == "UPLOAD_FILE" { // To read a file from client
-			filename := tokens[1]
-			filesize, err := strconv.Atoi(tokens[2])
-			if err != nil {
-				Log.Warn(err)
-				return
-			}
-
-			server.getFileQueue(filename).PushWrite(&Request{
-				Action:    UPLOAD_FILE,
-				Client:    conn,
-				Name:      filename,
-				Size:      filesize,
-				Timestamp: timestamp,
-				Queue:     server.getFileQueue(filename),
-			})
-
-		} else if verb == "DOWNLOAD_FILE" { // To write a file to a client
-			filename := tokens[1]
-
-			server.getFileQueue(filename).PushRead(&Request{
-				Action:    DOWNLOAD_FILE,
-				Client:    conn,
-				Name:      filename,
-				Timestamp: timestamp,
-				Queue:     server.getFileQueue(filename),
-			})
-
-		} else if verb == "UPLOAD" { // To upload block at replica
-			blockName := tokens[1]
-			blockSize, err := strconv.Atoi(tokens[2])
-			if err != nil {
-				Log.Warn(err)
-				return
-			}
-
-			server.Requests <- (&Request{
-				Action:    UPLOAD_BLOCK,
-				Client:    conn,
-				Name:      blockName,
-				Size:      blockSize,
-				Timestamp: timestamp,
-				Queue:     nil,
-			})
-
-		} else if verb == "DOWNLOAD" { // To download block at replica
-			blockName := tokens[1]
-
-			server.Requests <- (&Request{
-				Action:    DOWNLOAD_BLOCK,
-				Client:    conn,
-				Name:      blockName,
-				Timestamp: timestamp,
-				Queue:     nil,
-			})
-
-		} else {
-			Log.Warn("Unknown verb: ", verb)
-			conn.Write([]byte("ERROR\nUnknown verb"))
-			conn.Close()
+func (server *Server) getTasks() {
+	for _, queue := range server.FileQueues {
+		task := queue.TryPop()
+		if task != nil {
+			server.Requests <- task
 		}
 	}
 }
 
-func (server *Server) Start() {
-	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", server.Info.TCPPort))
-	if err != nil {
-		Log.Fatal("Error starting server", err)
+func (server *Server) getFileVersion(filename string) int {
+	if file, ok := server.Files[filename]; ok {
+		return file.Version
 	}
-	defer listener.Close()
 
-	Log.Infof("TCP Server is listening on port %d...\n", server.Info.TCPPort)
+	return 0
+}
 
+func (server *Server) handleRequest(task *Request) {
+	switch task.Action {
+
+	case UPLOAD_FILE:
+		if server.sendUploadFileMetadata(task.Client, task.Name, int64(task.Size)) {
+
+			newFile := File{
+				Filename:  task.Name,
+				FileSize:  task.Size,
+				Version:   server.getFileVersion(task.Name) + 1,
+				NumBlocks: common.GetNumFileBlocks(int64(task.Size)),
+			}
+
+			go server.finishUpload(task.Client, newFile)
+
+		} else {
+			server.getQueue(task.Name).Done()
+			task.Client.Close()
+		}
+
+	case DOWNLOAD_FILE:
+		if server.sendDownloadFileMetadata(task.Client, task.Name) {
+			go server.finishDownload(task.Client, task.Name)
+		} else {
+			server.getQueue(task.Name).Done()
+			task.Client.Close()
+		}
+
+	case UPLOAD_BLOCK:
+		go server.handleUploadBlockRequest(task)
+
+	case DOWNLOAD_BLOCK:
+		go server.handleDownloadBlockRequest(task)
+	}
+}
+
+func (server *Server) Start() {
+	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", server.Port))
+	if err != nil {
+		Log.Fatal("Error starting server: ", err)
+	}
+
+	Log.Infof("TCP Server is listening on port %d...\n", server.Port)
 	go server.listenerRoutine(listener)
+	defer listener.Close()
 
 	for {
 		select {
 		case task := <-server.Requests:
 			server.handleRequest(task)
 
-			if task.Queue != nil {
-				if task.Action == DOWNLOAD_FILE {
-					task.Queue.ReadDone()
-				} else if task.Action == UPLOAD_FILE {
-					task.Queue.WriteDone()
-				}
-			}
-
 		case task := <-server.InputChannel:
 			server.handleCommand(task)
+
+		case node := <-server.NodeJoins:
+			server.addNode(node)
+
+		case node := <-server.NodeLeaves:
+			server.removeNode(node)
+
+		case <-time.After(time.Second):
+			go server.getTasks()
 		}
 	}
 }
@@ -293,51 +356,11 @@ func (s *Server) rebalance() {
 	//	}
 }
 
-func (server *Server) handleRequest(task *Request) {
-	defer task.Client.Close()
-
-	switch task.Action {
-
-	case UPLOAD_FILE:
-		if !server.UploadFile(task.Client, task.Name, task.Size, 1) {
-			task.Client.Write([]byte("ERROR\n"))
-		}
-
-	case DOWNLOAD_FILE:
-		server.DownloadFile(task.Client, task.Name)
-
-	case UPLOAD_BLOCK:
-		tokens := strings.Split(task.Name, ":")
-		filename := tokens[0]
-		version, err := strconv.Atoi(tokens[1])
-		if err != nil {
-			Log.Warn(err)
-			break
-		}
-		blockNum, err := strconv.Atoi(tokens[2])
-		if err != nil {
-			Log.Warn(err)
-			break
-		}
-		if !server.UploadBlock(task.Client, filename, version, blockNum, task.Size) {
-			task.Client.Write([]byte("ERROR\n"))
-			return
-		}
-
-	case DOWNLOAD_BLOCK:
-		server.DownloadBlockResponse(task.Client, task.Name)
-
-	default:
-		Log.Warn("Unknown action")
-	}
-}
-
 func (server *Server) handleCommand(command string) {
 	if command == "help" {
 		fmt.Println("ls: Display metadata table")
 		fmt.Println("info: Display server info")
 		fmt.Println("files: Display list of files")
-		fmt.Println("blocks: Display list of blocks")
 	} else if command == "ls" {
 		server.printFileMetadata()
 	} else if command == "files" {
@@ -350,16 +373,31 @@ func (server *Server) handleCommand(command string) {
 			tokens := strings.Split(f.Name, ":")
 			fmt.Printf("File %s, version %s, block %s, size %d\n", tokens[0], tokens[1], tokens[2], f.Size)
 		}
-	} else if command == "blocks" {
-		for name, arr := range server.BlockToNodes {
-			fmt.Printf("Block %s: ", name)
-			for _, node := range arr {
-				fmt.Printf("%d ", node)
-			}
-			fmt.Print("\n")
-		}
 	} else if command == "info" {
-		fmt.Printf("ID: %d, Hostname: %s, Port: %d\n", server.Info.ID, server.Info.Hostname, server.Info.TCPPort)
+		fmt.Printf("Hostname: %s, Port: %d\n", server.Hostname, server.Port)
 		fmt.Printf("Num files: %d, Num blocks: %d, Num nodes: %d\n", len(server.Files), len(server.BlockToNodes), len(server.NodesToBlocks))
 	}
+}
+
+func (s *Server) addNode(node string) {
+	s.Nodes[node] = true
+	s.NodesToBlocks[node] = []string{}
+	s.rebalance()
+}
+
+func (s *Server) removeNode(node string) {
+	delete(s.Nodes, node)
+	for _, block := range s.NodesToBlocks[node] {
+		arr := s.BlockToNodes[block]
+		for i := 0; i < len(arr); i++ {
+			if arr[i] == node {
+				// Remove element at index i
+				arr[i], arr[len(arr)-1] = arr[len(arr)-1], arr[i]
+				s.BlockToNodes[block] = arr[:len(arr)-1]
+				break
+			}
+		}
+	}
+	delete(s.NodesToBlocks, node)
+	s.rebalance()
 }

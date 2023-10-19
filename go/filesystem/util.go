@@ -14,14 +14,25 @@ type FileEntry struct {
 	Size int64
 }
 
+var cache map[string]int = make(map[string]int)
+
+func GetNodeHash(node string) int {
+	ret, ok := cache[node]
+	if ok {
+		return ret
+	}
+	cache[node] = common.GetHash(node, len(common.Cluster))
+	return cache[node]
+}
+
 // Node with smallest ID
 func (s *Server) GetLeaderNode(count int) int {
 
 	pq := make(priqueue.PriorityQueue, 0)
 	heap.Init(&pq)
 
-	for ID := range s.Nodes {
-		heap.Push(&pq, &priqueue.Item{Key: ID})
+	for node := range s.Nodes {
+		heap.Push(&pq, &priqueue.Item{Key: GetNodeHash(node)})
 	}
 
 	item := heap.Pop(&pq).(*priqueue.Item)
@@ -34,8 +45,8 @@ func (s *Server) GetMetadataReplicaNodes(count int) []int {
 	pq := make(priqueue.PriorityQueue, 0)
 	heap.Init(&pq)
 
-	for ID := range s.Nodes {
-		heap.Push(&pq, &priqueue.Item{Key: ID})
+	for node := range s.Nodes {
+		heap.Push(&pq, &priqueue.Item{Key: GetNodeHash(node)})
 	}
 
 	res := []int{}
@@ -48,25 +59,24 @@ func (s *Server) GetMetadataReplicaNodes(count int) []int {
 }
 
 // Get the `count` nearest nodes to the file hash
-func (s *Server) GetReplicaNodes(filename string, count int) []int {
-
+func (s *Server) GetReplicaNodes(filename string, count int) []string {
 	fileHash := common.GetHash(filename, len(common.Cluster))
 	pq := make(priqueue.PriorityQueue, 0)
 	heap.Init(&pq)
 
-	for ID := range s.Nodes {
-		distance := ID - fileHash
+	for node := range s.Nodes {
+		distance := GetNodeHash(node) - fileHash
 		if distance < 0 {
-			distance = -distance
+			distance = -distance // abs value
 		}
-
-		heap.Push(&pq, &priqueue.Item{Key: distance, Value: ID})
+		heap.Push(&pq, &priqueue.Item{Key: distance, Value: node})
 	}
 
-	res := []int{}
+	res := []string{}
 	for r := 0; r < count && pq.Len() > 0; r++ {
 		item := heap.Pop(&pq).(*priqueue.Item)
-		res = append(res, item.Value)
+		value := item.Value.(string)
+		res = append(res, value)
 	}
 
 	return res

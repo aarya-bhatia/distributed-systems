@@ -2,7 +2,8 @@ package priqueue
 
 // Item represents an item in the priority queue.
 type Item struct {
-	Key, Value int
+	Key   int
+	Value interface{}
 }
 
 // PriorityQueue implements a min-heap for Item.

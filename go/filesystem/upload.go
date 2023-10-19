@@ -1,139 +1,32 @@
 package filesystem
 
 import (
+	"bufio"
 	"cs425/common"
 	"fmt"
 	"net"
+	"strings"
 )
 
-func (server *Server) processUploadBlock(blockName string, buffer []byte, blockSize int) bool {
-	blockData := make([]byte, blockSize)
-	copy(blockData, buffer[:blockSize])
+func (server *Server) handleUploadBlockRequest(task *Request) {
+	defer task.Client.Close()
 
-	replica := server.GetReplicaNodes(blockName, 1)[0]
-
-	if replica == server.Info.ID {
-		if !writeBlockToDisk(server.Directory, blockName, buffer, blockSize) {
-			Log.Debugf("Added block %s to disk\n", blockName)
-			return false
-		}
+	if server.UploadBlock(task.Client, task.Name, task.Size) {
+		task.Client.Write([]byte("OK\n"))
 	} else {
-		replicaInfo := server.Nodes[replica]
-		replicaConn, err := net.Dial("tcp", fmt.Sprintf("%s:%d", replicaInfo.Hostname, replicaInfo.TCPPort))
-		if err != nil {
-			Log.Debug("Failed to establish connection", err)
-			return false
-		}
-
-		request := fmt.Sprintf("UPLOAD %s %d\n", blockName, blockSize)
-		Log.Debug("Sending upload block request to node ", replica)
-		if common.SendAll(replicaConn, []byte(request), len(request)) < 0 {
-			return false
-		}
-
-		Log.Debug("Waiting for confirmation from node ", replica)
-		if !common.GetOKMessage(replicaConn) {
-			return false
-		}
-
-		Log.Debug("Sending block to node ", replica)
-		if common.SendAll(replicaConn, buffer[:blockSize], blockSize) < 0 {
-			return false
-		}
-
-		Log.Debugf("Sent block %s to node %v", blockName, replicaInfo)
-
-		Log.Debug("Waiting for confirmation from node ", replica)
-		if !common.GetOKMessage(replicaConn) {
-			return false
-		}
-
-		replicaConn.Close()
+		task.Client.Write([]byte("ERROR\n"))
 	}
-
-	server.NodesToBlocks[replica] = append(server.NodesToBlocks[replica], blockName)
-	server.BlockToNodes[blockName] = append(server.BlockToNodes[blockName], replica)
-	return true
 }
 
-func (server *Server) UploadFile(client net.Conn, filename string, filesize int, minAcks int) bool {
-	version := 1
-	if oldFile, ok := server.Files[filename]; ok {
-		version = oldFile.Version + 1
-	}
-
-	client.Write([]byte("OK\n")) // Notify client to start uploading data
-
-	numBlocks := common.GetNumFileBlocks(int64(filesize))
-	Log.Debugf("To upload %d blocks\n", numBlocks)
-
+// Receive a file block from client at node and write it to disk
+func (server *Server) UploadBlock(client net.Conn, blockName string, blockSize int) bool {
 	buffer := make([]byte, common.BLOCK_SIZE)
 	bufferSize := 0
-	bytesRead := 0
-	blockCount := 0
 
-	for bytesRead < filesize {
-		numRead, err := client.Read(buffer[bufferSize:])
-		if err != nil {
-			Log.Debug(err)
-			return false
-		}
-
-		if numRead == 0 {
-			break
-		}
-
-		bufferSize += numRead
-
-		if bufferSize == common.BLOCK_SIZE {
-			Log.Debugf("Received block %d (%d bytes) from client %s", blockCount, bufferSize, client.RemoteAddr())
-			blockName := common.GetBlockName(filename, version, blockCount)
-			if !server.processUploadBlock(blockName, buffer, bufferSize) {
-				Log.Warn("Failed to upload block")
-				return false
-			}
-			bufferSize = 0
-			blockCount += 1
-		}
-
-		bytesRead += numRead
-	}
-
-	if bufferSize > 0 {
-		Log.Debugf("Received block %d (%d bytes) from client %s", blockCount, bufferSize, client.RemoteAddr())
-		blockName := common.GetBlockName(filename, version, blockCount)
-		if !server.processUploadBlock(blockName, buffer, bufferSize) {
-			Log.Warn("Failed to upload block")
-			return false
-		}
-	}
-
-	if bytesRead < filesize {
-		Log.Warnf("Insufficient bytes read (%d of %d)\n", bytesRead, filesize)
+	_, err := client.Write([]byte("OK\n"))
+	if err != nil {
 		return false
 	}
-
-	// TODO: Receive acks
-	// for {
-	// 	select {
-	// 	case e := <-ackChannel:
-	// 	case e := <-failureDetectorChannel:
-	// 	}
-	// }
-
-	server.Files[filename] = &File{Filename: filename, Version: version, FileSize: filesize, NumBlocks: numBlocks}
-	client.Write([]byte("OK\n"))
-	return true
-}
-
-func (server *Server) UploadBlock(client net.Conn, filename string, version int, blockNum int, blockSize int) bool {
-	// Notify client to start uploading data
-	if common.SendAll(client, []byte("OK\n"), 3) < 0 {
-		return false
-	}
-
-	buffer := make([]byte, common.BLOCK_SIZE)
-	bufferSize := 0
 
 	for bufferSize < blockSize {
 		numRead, err := client.Read(buffer[bufferSize:])
@@ -141,11 +34,9 @@ func (server *Server) UploadBlock(client net.Conn, filename string, version int,
 			Log.Warn(err)
 			return false
 		}
-
 		if numRead == 0 {
 			break
 		}
-
 		bufferSize += numRead
 	}
 
@@ -154,22 +45,64 @@ func (server *Server) UploadBlock(client net.Conn, filename string, version int,
 		return false
 	}
 
-	// Notify client of successful upload
-	if common.SendAll(client, []byte("OK\n"), 3) < 0 {
-		return false
-	}
-
-	Log.Debugf("Received block %d (%d bytes) from client %s", blockNum, blockSize, client.RemoteAddr())
-
-	blockName := common.GetBlockName(filename, version, blockNum)
+	Log.Debugf("Received block %s (%d bytes) from client %s", blockName, blockSize, client.RemoteAddr())
 
 	if !writeBlockToDisk(server.Directory, blockName, buffer, blockSize) {
 		Log.Debugf("Added block %s to disk\n", blockName)
 		return false
 	}
 
-	server.NodesToBlocks[server.Info.ID] = append(server.NodesToBlocks[server.Info.ID], blockName)
-	server.BlockToNodes[blockName] = append(server.BlockToNodes[blockName], server.Info.ID)
+	return true
+}
+
+func (server *Server) finishUpload(client net.Conn, newFile File) {
+	defer client.Close()
+	defer server.getQueue(newFile.Filename).Done()
+
+	reader := bufio.NewReader(client)
+	for {
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			Log.Warn(err)
+			break
+		}
+
+		line = line[:len(line)-1]
+		Log.Debug("Received:", line)
+		tokens := strings.Split(line, " ")
+		if len(tokens) != 2 {
+			continue
+		}
+
+		blockName := tokens[0]
+		replicas := tokens[1]
+
+		for _, replica := range strings.Split(replicas, ",") {
+			server.BlockToNodes[blockName] = append(server.BlockToNodes[blockName], replica)
+			server.NodesToBlocks[replica] = append(server.NodesToBlocks[replica], blockName)
+		}
+	}
+
+	Log.Infof("%s: Uploaded file %s\n", client.RemoteAddr(), newFile.Filename)
+	server.Files[newFile.Filename] = newFile
+}
+
+func (server *Server) sendUploadFileMetadata(client net.Conn, filename string, filesize int64) bool {
+	file, ok := server.Files[filename]
+	newVersion := 1
+	if ok {
+		newVersion = file.Version + 1
+	}
+
+	for i := 0; i < common.GetNumFileBlocks(filesize); i++ {
+		blockName := fmt.Sprintf("%s:%d:%d", filename, newVersion, i)
+		line := fmt.Sprintf("%s %s\n", blockName, strings.Join(server.GetReplicaNodes(blockName, common.REPLICA_FACTOR), ","))
+		if common.SendAll(client, []byte(line), len(line)) < 0 {
+			return false
+		}
+	}
+
+	client.Write([]byte("END\n"))
 
 	return true
 }
