@@ -56,9 +56,6 @@ func UploadFile(localFilename string, remoteFilename string) bool {
 
 		blockName := tokens[0]
 		replicas := tokens[1]
-		replica := strings.Split(replicas, ",")[0]
-
-		Log.Debug("Uploading block ", blockName)
 
 		blockSize, err := file.Read(fileBlock)
 		if err != nil {
@@ -66,29 +63,45 @@ func UploadFile(localFilename string, remoteFilename string) bool {
 			return false
 		}
 
-		conn, err := net.Dial("tcp", replica)
-		if err != nil {
-			return false
-		}
+		for _, replica := range strings.Split(replicas, ",") {
+			Log.Debugf("Uploading block %s (%d bytes) to %s\n", blockName, blockSize, replica)
 
-		_, err = conn.Write([]byte(fmt.Sprintf("UPLOAD %s %d\n", blockName, blockSize)))
-		if err != nil {
-			return false
-		}
+			conn, err := net.Dial("tcp", replica)
+			if err != nil {
+				return false
+			}
 
-		if !common.GetOKMessage(conn) {
-			return false
-		}
+			defer conn.Close()
+			Log.Debug("Connected to ", replica)
 
-		if common.SendAll(conn, fileBlock[:blockSize], blockSize) < 0 {
-			return false
-		}
+			_, err = conn.Write([]byte(fmt.Sprintf("UPLOAD %s %d\n", blockName, blockSize)))
+			if err != nil {
+				return false
+			}
 
-		_, err = server.Write([]byte(fmt.Sprintf("%s %s\n", blockName, replica)))
-		if err != nil {
-			return false
+			Log.Debug("Sent upload block request to ", replica)
+
+			if !common.GetOKMessage(conn) {
+				return false
+			}
+
+			Log.Debug("Got OK from ", replica)
+
+			if common.SendAll(conn, fileBlock[:blockSize], blockSize) < 0 {
+				return false
+			}
+
+			Log.Debugf("Sent block (%d bytes) to %s\n", blockSize, replica)
+
+			_, err = server.Write([]byte(fmt.Sprintf("%s %s\n", blockName, replica)))
+			if err != nil {
+				return false
+			}
+
+			Log.Debug("Sent update to server")
 		}
 	}
 
+	server.Write([]byte("END\n"))
 	return true
 }

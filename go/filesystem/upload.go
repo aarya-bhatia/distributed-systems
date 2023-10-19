@@ -71,7 +71,7 @@ func (server *Server) finishUpload(client net.Conn, newFile File) {
 		Log.Debug("Received:", line)
 		tokens := strings.Split(line, " ")
 		if len(tokens) != 2 {
-			continue
+			break
 		}
 
 		blockName := tokens[0]

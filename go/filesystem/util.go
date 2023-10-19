@@ -26,33 +26,31 @@ func GetNodeHash(node string) int {
 }
 
 // Node with smallest ID
-func (s *Server) GetLeaderNode(count int) int {
-
+func (s *Server) GetLeaderNode() string {
 	pq := make(priqueue.PriorityQueue, 0)
 	heap.Init(&pq)
 
 	for node := range s.Nodes {
-		heap.Push(&pq, &priqueue.Item{Key: GetNodeHash(node)})
+		heap.Push(&pq, &priqueue.Item{Key: GetNodeHash(node), Value: node})
 	}
 
 	item := heap.Pop(&pq).(*priqueue.Item)
-	return item.Key
+	return item.Value.(string)
 }
 
 // The first R nodes with the lowest ID are selected as metadata replicas.
-func (s *Server) GetMetadataReplicaNodes(count int) []int {
-
+func (s *Server) GetMetadataReplicaNodes(count int) []string {
 	pq := make(priqueue.PriorityQueue, 0)
 	heap.Init(&pq)
 
 	for node := range s.Nodes {
-		heap.Push(&pq, &priqueue.Item{Key: GetNodeHash(node)})
+		heap.Push(&pq, &priqueue.Item{Key: GetNodeHash(node), Value: node})
 	}
 
-	res := []int{}
+	res := []string{}
 	for r := 0; r < count && pq.Len() > 0; r++ {
 		item := heap.Pop(&pq).(*priqueue.Item)
-		res = append(res, item.Key)
+		res = append(res, item.Value.(string))
 	}
 
 	return res

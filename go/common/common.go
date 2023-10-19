@@ -15,7 +15,7 @@ const (
 	MAX_NODES       = 10
 	BLOCK_SIZE      = 1024 * 1024
 	MIN_BUFFER_SIZE = 1024
-	REPLICA_FACTOR  = 1
+	REPLICA_FACTOR  = 4
 
 	JOIN_RETRY_TIMEOUT = time.Second * 10
 

@@ -146,6 +146,7 @@ func (server *Server) handleConnection(conn net.Conn) {
 
 		filename := tokens[1]
 
+		Log.Debugf("Received download request for file %s\n", filename)
 		server.getQueue(filename).PushRead(&Request{
 			Action: DOWNLOAD_FILE,
 			Client: conn,
@@ -364,14 +365,21 @@ func (server *Server) handleCommand(command string) {
 	} else if command == "ls" {
 		server.printFileMetadata()
 	} else if command == "files" {
-		files, err := getFilesInDirectory(server.Directory)
-		if err != nil {
-			Log.Warn(err)
-			return
-		}
-		for _, f := range files {
-			tokens := strings.Split(f.Name, ":")
-			fmt.Printf("File %s, version %s, block %s, size %d\n", tokens[0], tokens[1], tokens[2], f.Size)
+		if server.GetLeaderNode() == server.ID {
+			fmt.Println("== LEADER NODE ==")
+			for _, f := range server.Files {
+				fmt.Printf("File name:%s, version:%d, size:%d, numBlocks:%d\n", f.Filename, f.Version, f.FileSize, f.NumBlocks)
+			}
+		} else {
+			files, err := getFilesInDirectory(server.Directory)
+			if err != nil {
+				Log.Warn(err)
+				return
+			}
+			for _, f := range files {
+				tokens := strings.Split(f.Name, ":")
+				fmt.Printf("File %s, version %s, block %s, size %d\n", tokens[0], tokens[1], tokens[2], f.Size)
+			}
 		}
 	} else if command == "info" {
 		fmt.Printf("Hostname: %s, Port: %d\n", server.Hostname, server.Port)

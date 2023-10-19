@@ -1,16 +1,17 @@
 package main
 
 import (
+	"bufio"
 	"cs425/common"
 	"fmt"
 	"io"
+	"math/rand"
+	"net"
 	"os"
+	"strings"
 )
 
 func DownloadFile(localFilename string, remoteFilename string) bool {
-	server := Connect()
-	defer server.Close()
-
 	file, err := os.Create(localFilename)
 	if err != nil {
 		Log.Warn(err)
@@ -18,38 +19,78 @@ func DownloadFile(localFilename string, remoteFilename string) bool {
 	}
 
 	defer file.Close()
-	message := fmt.Sprintf("DOWNLOAD_FILE %s\n", remoteFilename)
 
-	if common.SendAll(server, []byte(message), len(message)) < 0 {
-		return false
-	}
+	server := Connect()
+	defer server.Close()
+
+	Log.Debug("Sending download file request")
+	server.Write([]byte(fmt.Sprintf("DOWNLOAD_FILE %s\n", remoteFilename)))
 
 	if !common.GetOKMessage(server) {
 		return false
 	}
 
-	buffer := make([]byte, common.BLOCK_SIZE)
-	bytesRead := 0
+	reader := bufio.NewReader(server)
+	fileSize := 0
 
+	Log.Debug("Reading file block list")
 	for {
-		n, err := server.Read(buffer)
-		if err == io.EOF {
-			Log.Debug("EOF")
-			break
-		} else if err != nil {
+		line, err := reader.ReadString('\n')
+		if err != nil {
 			Log.Warn(err)
-			return false
+			break
 		}
 
-		_, err = file.Write(buffer[:n])
+		line = line[:len(line)-1]
+		Log.Debug("Received:", line)
+		tokens := strings.Split(line, " ")
+		if len(tokens) != 2 {
+			break
+		}
+
+		blockName := tokens[0]
+		replicas := strings.Split(tokens[1], ",")
+		replica := replicas[rand.Intn(len(replicas))]
+
+		Log.Debugf("Downloading block %s from %s\n", blockName, replica)
+
+		conn, err := net.Dial("tcp", replica)
 		if err != nil {
 			Log.Warn(err)
 			return false
 		}
 
-		bytesRead += n
+		defer conn.Close()
+		Log.Debug("Connected to ", replica)
+
+		Log.Debug("Sending download request to replica ", replica)
+		conn.Write([]byte(fmt.Sprintf("DOWNLOAD %s\n", blockName)))
+
+		buffer := make([]byte, common.BLOCK_SIZE)
+		bufferSize := 0
+		for bufferSize < len(buffer) {
+			n, err := conn.Read(buffer[bufferSize:])
+			if err == io.EOF {
+				break
+			} else if err != nil {
+				Log.Warn(err)
+				return false
+			}
+			if n == 0 {
+				break
+			}
+			bufferSize += n
+		}
+		Log.Debugf("Received block %s (%d bytes) from %s\n", blockName, bufferSize, replica)
+		n, err := file.Write(buffer[:bufferSize])
+		if err != nil {
+			Log.Warn(err)
+			return false
+		}
+		fileSize += n
 	}
 
-	Log.Infof("Downloaded file %s with %d bytes\n", localFilename, bytesRead)
+	Log.Infof("Downloaded file %s with %d bytes\n", localFilename, fileSize)
+	server.Write([]byte("OK\n"))
 	return true
 }
