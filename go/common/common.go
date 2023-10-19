@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"hash"
 	"hash/fnv"
+	"io"
 	"log"
 	"net"
 	"os"
@@ -16,6 +17,8 @@ const (
 	BLOCK_SIZE      = 1024 * 1024
 	MIN_BUFFER_SIZE = 1024
 	REPLICA_FACTOR  = 4
+
+	POLL_INTERVAL = 1 * time.Second
 
 	JOIN_RETRY_TIMEOUT = time.Second * 10
 
@@ -37,6 +40,11 @@ type Node struct {
 	Hostname string
 	UDPPort  int
 	TCPPort  int
+}
+
+type FileEntry struct {
+	Name string
+	Size int64
 }
 
 type Notifier interface {
@@ -213,4 +221,62 @@ func RemoveIndex(arr []int, i int) []int {
 	n := len(arr)
 	arr[i], arr[n-1] = arr[n-1], arr[i]
 	return arr[:n-1]
+}
+
+func WriteFile(directory string, filename string, buffer []byte, blockSize int) bool {
+	filepath := fmt.Sprintf("%s/%s", directory, filename)
+	file, err := os.OpenFile(filepath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0666)
+	if err != nil {
+		Log.Warn(err)
+		return false
+	}
+	defer file.Close()
+
+	_, err = file.Write(buffer[:blockSize])
+	if err != nil {
+		Log.Warn(err)
+		return false
+	}
+
+	return true
+}
+
+func ReadFile(directory string, filename string) []byte {
+	filepath := fmt.Sprintf("%s/%s", directory, filename)
+	file, err := os.Open(filepath)
+	if err != nil {
+		Log.Warn(err)
+		return nil
+	}
+
+	buffer, err := io.ReadAll(file)
+	if err != nil {
+		Log.Warn(err)
+		return nil
+	}
+
+	return buffer
+}
+
+func GetFilesInDirectory(directoryPath string) ([]FileEntry, error) {
+	var files []FileEntry
+
+	dir, err := os.Open(directoryPath)
+	if err != nil {
+		return nil, err
+	}
+	defer dir.Close()
+
+	dirEntries, err := dir.Readdir(0)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, entry := range dirEntries {
+		if !entry.IsDir() {
+			files = append(files, FileEntry{entry.Name(), entry.Size()})
+		}
+	}
+
+	return files, nil
 }

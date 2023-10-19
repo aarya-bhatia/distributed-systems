@@ -4,12 +4,9 @@ import (
 	"cs425/common"
 	"fmt"
 	"net"
-	"os"
 	"strconv"
 	"strings"
-	"time"
-
-	"github.com/jedib0t/go-pretty/v6/table"
+	"sync"
 )
 
 type File struct {
@@ -32,30 +29,19 @@ type Server struct {
 	ID        string          // hostname:port
 	Directory string          // Path to save blocks on disk
 	Files     map[string]File // Files stored by system
+	Nodes     map[string]bool // Set of alive nodes
+	Mutex     sync.Mutex
 
 	// A block is represented as "filename:version:blocknum"
-
 	NodesToBlocks map[string][]string // Maps node ID to the blocks they are storing
 	BlockToNodes  map[string][]string // Maps block to list of node IDs that store the block
 
 	FileQueues map[string]*Queue // Handle read/write operations for each file
-
-	Nodes        map[string]bool // Set of alive nodes
-	InputChannel chan string     // Receive commands from stdin
-	Requests     chan *Request   // Receive requests from listener thread
-	NodeJoins    chan string
-	NodeLeaves   chan string
 }
 
 const (
 	DOWNLOAD_FILE = 1
 	UPLOAD_FILE   = 2
-
-	UPLOAD_BLOCK   = 3
-	DOWNLOAD_BLOCK = 4
-
-	ADD_BLOCK    = 5
-	REMOVE_BLOCK = 6
 )
 
 var Log *common.Logger = common.Log
@@ -69,30 +55,42 @@ func NewServer(info common.Node, dbDirectory string) *Server {
 	server.Files = make(map[string]File)
 	server.NodesToBlocks = make(map[string][]string)
 	server.BlockToNodes = make(map[string][]string)
-	server.InputChannel = make(chan string)
 	server.FileQueues = make(map[string]*Queue)
 	server.Nodes = make(map[string]bool)
-	server.Requests = make(chan *Request)
-	server.NodeJoins = make(chan string)
-	server.NodeLeaves = make(chan string)
 	server.Nodes[server.ID] = true
 
 	return server
 }
 
-func (s *Server) HandleNodeJoin(node *common.Node) {
-	Log.Debug("node joined: ", *node)
-	s.NodeJoins <- fmt.Sprintf("%s:%d", node.Hostname, node.TCPPort)
-}
+func (server *Server) Start() {
+	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", server.Port))
+	if err != nil {
+		Log.Fatal("Error starting server: ", err)
+	}
 
-func (s *Server) HandleNodeLeave(node *common.Node) {
-	Log.Debug("node left: ", *node)
-	Log.Debug("node joined: ", *node)
-	s.NodeLeaves <- fmt.Sprintf("%s:%d", node.Hostname, node.TCPPort)
+	Log.Infof("TCP Server is listening on port %d...\n", server.Port)
+
+	if GetLeaderNode(server.GetAliveNodes()) == server.ID {
+		Log.Info("Starting master routine...")
+		go server.pollTasks()
+	}
+
+	for {
+		conn, err := listener.Accept()
+		if err != nil {
+			Log.Warnf("Error accepting connection: %s\n", err)
+			continue
+		}
+
+		Log.Debugf("Accepted connection from %s\n", conn.RemoteAddr())
+		go server.handleConnection(conn)
+	}
 }
 
 // Get or create a queue to handle requests for given file
 func (server *Server) getQueue(filename string) *Queue {
+	server.Mutex.Lock()
+	defer server.Mutex.Unlock()
 	q, ok := server.FileQueues[filename]
 	if !ok {
 		q = new(Queue)
@@ -120,16 +118,13 @@ func (server *Server) handleConnection(conn net.Conn) {
 			conn.Close()
 			return
 		}
-
 		filename := tokens[1]
-
 		filesize, err := strconv.Atoi(tokens[2])
 		if err != nil || filesize <= 0 {
 			conn.Write([]byte("ERROR\nFile size must be a positive number\n"))
 			conn.Close()
 			return
 		}
-
 		server.getQueue(filename).PushWrite(&Request{
 			Action: UPLOAD_FILE,
 			Client: conn,
@@ -139,13 +134,11 @@ func (server *Server) handleConnection(conn net.Conn) {
 
 	} else if verb == "DOWNLOAD_FILE" { // To write a file to a client
 		if len(tokens) != 2 {
-			conn.Write([]byte("ERROR\nFilename not specified\n"))
+			// conn.Write([]byte("ERROR\nFilename not specified\n"))
 			conn.Close()
 			return
 		}
-
 		filename := tokens[1]
-
 		Log.Debugf("Received download request for file %s\n", filename)
 		server.getQueue(filename).PushRead(&Request{
 			Action: DOWNLOAD_FILE,
@@ -159,7 +152,6 @@ func (server *Server) handleConnection(conn net.Conn) {
 			conn.Close()
 			return
 		}
-
 		blockName := tokens[1]
 		blockSize, err := strconv.Atoi(tokens[2])
 		if err != nil || blockSize <= 0 {
@@ -167,34 +159,36 @@ func (server *Server) handleConnection(conn net.Conn) {
 			conn.Close()
 			return
 		}
-
 		if blockSize > common.BLOCK_SIZE {
 			conn.Write([]byte(fmt.Sprintf("ERROR\nMaximum block size is %d\n", common.BLOCK_SIZE)))
 			conn.Close()
 			return
 		}
 
-		server.Requests <- &Request{
-			Action: UPLOAD_BLOCK,
-			Client: conn,
-			Name:   blockName,
-			Size:   blockSize,
-		}
+		uploadBlock(server.Directory, conn, blockName, blockSize)
 
 	} else if verb == "DOWNLOAD" { // To download block at replica
 		if len(tokens) != 2 {
-			conn.Write([]byte("ERROR\nUsage: DOWNLOAD_BLOCK <blockname>\n"))
+			conn.Write([]byte("ERROR\nUsage: DOWNLOAD <blockname>\n"))
 			conn.Close()
 			return
 		}
 
-		blockName := tokens[1]
+		downloadBlock(server.Directory, conn, tokens[1])
 
-		server.Requests <- &Request{
-			Action: DOWNLOAD_BLOCK,
-			Client: conn,
-			Name:   blockName,
+	} else if verb == "ADD_BLOCK" {
+		if len(tokens) != 4 {
+			conn.Close()
+			return
 		}
+		blockName := tokens[1]
+		blockSize, err := strconv.Atoi(tokens[2])
+		if err != nil {
+			conn.Close()
+			return
+		}
+		source := tokens[3]
+		server.replicateBlock(conn, blockName, blockSize, source)
 
 	} else {
 		Log.Warn("Unknown verb: ", verb)
@@ -203,197 +197,66 @@ func (server *Server) handleConnection(conn net.Conn) {
 	}
 }
 
-// Receive requests from clients and send them to the Requests channel
-func (server *Server) listenerRoutine(listener net.Listener) {
-
-	for {
-		conn, err := listener.Accept()
-		if err != nil {
-			Log.Warnf("Error accepting connection: %s\n", err)
-			continue
-		}
-
-		Log.Debugf("Accepted connection from %s\n", conn.RemoteAddr())
-
-		go server.handleConnection(conn)
-	}
-}
-
-func (server *Server) getTasks() {
-	for _, queue := range server.FileQueues {
-		task := queue.TryPop()
-		if task != nil {
-			server.Requests <- task
-		}
-	}
-}
-
-func (server *Server) getFileVersion(filename string) int {
-	if file, ok := server.Files[filename]; ok {
-		return file.Version
-	}
-
-	return 0
-}
-
-func (server *Server) handleRequest(task *Request) {
-	switch task.Action {
-
-	case UPLOAD_FILE:
-		if server.sendUploadFileMetadata(task.Client, task.Name, int64(task.Size)) {
-
-			newFile := File{
-				Filename:  task.Name,
-				FileSize:  task.Size,
-				Version:   server.getFileVersion(task.Name) + 1,
-				NumBlocks: common.GetNumFileBlocks(int64(task.Size)),
-			}
-
-			go server.finishUpload(task.Client, newFile)
-
-		} else {
-			server.getQueue(task.Name).Done()
-			task.Client.Close()
-		}
-
-	case DOWNLOAD_FILE:
-		if server.sendDownloadFileMetadata(task.Client, task.Name) {
-			go server.finishDownload(task.Client, task.Name)
-		} else {
-			server.getQueue(task.Name).Done()
-			task.Client.Close()
-		}
-
-	case UPLOAD_BLOCK:
-		go server.handleUploadBlockRequest(task)
-
-	case DOWNLOAD_BLOCK:
-		go server.handleDownloadBlockRequest(task)
-	}
-}
-
-func (server *Server) Start() {
-	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", server.Port))
-	if err != nil {
-		Log.Fatal("Error starting server: ", err)
-	}
-
-	Log.Infof("TCP Server is listening on port %d...\n", server.Port)
-	go server.listenerRoutine(listener)
-	defer listener.Close()
-
-	for {
-		select {
-		case task := <-server.Requests:
-			server.handleRequest(task)
-
-		case task := <-server.InputChannel:
-			server.handleCommand(task)
-
-		case node := <-server.NodeJoins:
-			server.addNode(node)
-
-		case node := <-server.NodeLeaves:
-			server.removeNode(node)
-
-		case <-time.After(time.Second):
-			go server.getTasks()
-		}
-	}
-}
-
-// Print file system metadata information to stdout
-func (server *Server) printFileMetadata() {
-	t := table.NewWriter()
-	t.SetOutputMirror(os.Stdout)
-	t.AppendHeader(table.Row{"Filename", "Version", "Block", "Nodes"})
-
-	rows := []table.Row{}
-
-	for blockName, nodeIds := range server.BlockToNodes {
-		tokens := strings.Split(blockName, ":")
-		filename, version, block := tokens[0], tokens[1], tokens[2]
-
-		for _, id := range nodeIds {
-			rows = append(rows, table.Row{
-				filename,
-				version,
-				block,
-				id,
-			})
-		}
-	}
-
-	t.AppendRows(rows)
-	t.AppendSeparator()
-	t.SetStyle(table.StyleLight)
-	t.Render()
-}
-
 // To handle replicas after a node fails or rejoins
 func (s *Server) rebalance() {
-	// m := map[int]bool{}
-	//
-	//	for _, node := range nodes {
-	//		m[node.ID] = node.State == STATE_ALIVE
-	//	}
-	//
-	// // Get affected replicas
-	// // Add tasks to replicate the affected blocks to queue
-	//
-	//	for _, file := range files {
-	//		expectedReplicas := GetReplicaNodes(file.Filename, REPLICA_FACTOR)
-	//		for i := 0; i < file.NumBlocks; i++ {
-	//			blockInfo := BlockInfo{Filename: file.Filename, Version: file.Version, ID: i}
-	//			_, ok := blockToNodes[blockInfo]
-	//			if !ok {
-	//				for _, replica := range expectedReplicas {
-	//					AddTask(UPDATE_BLOCK, replica, blockInfo)
-	//				}
-	//			} else {
-	//				// TODO: AddTask for Intersection nodes
-	//			}
-	//		}
-	//	}
+	// TODO
 }
 
-func (server *Server) handleCommand(command string) {
-	if command == "help" {
-		fmt.Println("ls: Display metadata table")
-		fmt.Println("info: Display server info")
-		fmt.Println("files: Display list of files")
-	} else if command == "ls" {
-		server.printFileMetadata()
-	} else if command == "files" {
-		if server.GetLeaderNode() == server.ID {
-			fmt.Println("== LEADER NODE ==")
-			for _, f := range server.Files {
-				fmt.Printf("File name:%s, version:%d, size:%d, numBlocks:%d\n", f.Filename, f.Version, f.FileSize, f.NumBlocks)
-			}
-		} else {
-			files, err := getFilesInDirectory(server.Directory)
-			if err != nil {
-				Log.Warn(err)
-				return
-			}
-			for _, f := range files {
-				tokens := strings.Split(f.Name, ":")
-				fmt.Printf("File %s, version %s, block %s, size %d\n", tokens[0], tokens[1], tokens[2], f.Size)
-			}
-		}
-	} else if command == "info" {
-		fmt.Printf("Hostname: %s, Port: %d\n", server.Hostname, server.Port)
-		fmt.Printf("Num files: %d, Num blocks: %d, Num nodes: %d\n", len(server.Files), len(server.BlockToNodes), len(server.NodesToBlocks))
+// Download a block from source node to replicate it at current node
+func (server *Server) replicateBlock(client net.Conn, blockName string, blockSize int, source string) {
+	defer client.Close()
+	Log.Debugf("To replicate block %s from host %s\n", blockName, source)
+	request := fmt.Sprintf("DOWNLOAD %s\n", blockName)
+	conn, err := net.Dial("tcp", source)
+	if err != nil {
+		client.Write([]byte("ERROR\n"))
+		return
 	}
+
+	defer conn.Close()
+
+	_, err = conn.Write([]byte(request))
+	if err != nil {
+		client.Write([]byte("ERROR\n"))
+		return
+	}
+
+	buffer := make([]byte, common.BLOCK_SIZE)
+	size := 0
+	for size < blockSize {
+		n, err := conn.Read(buffer[size:])
+		if err != nil {
+			client.Write([]byte("ERROR\n"))
+			return
+		}
+		if n == 0 {
+			break
+		}
+		size += n
+	}
+
+	if !common.WriteFile(server.Directory, blockName, buffer, size) {
+		client.Write([]byte("ERROR\n"))
+		return
+	}
+
+	client.Write([]byte("OK\n"))
 }
 
-func (s *Server) addNode(node string) {
+func (s *Server) HandleNodeJoin(info *common.Node) {
+	s.Mutex.Lock()
+	node := fmt.Sprintf("%s:%d", info.Hostname, info.TCPPort)
+	Log.Debug("node left: ", node)
 	s.Nodes[node] = true
 	s.NodesToBlocks[node] = []string{}
+	s.Mutex.Unlock()
 	s.rebalance()
 }
 
-func (s *Server) removeNode(node string) {
+func (s *Server) HandleNodeLeave(info *common.Node) {
+	s.Mutex.Lock()
+	node := fmt.Sprintf("%s:%d", info.Hostname, info.TCPPort)
+	Log.Debug("node left: ", node)
 	delete(s.Nodes, node)
 	for _, block := range s.NodesToBlocks[node] {
 		arr := s.BlockToNodes[block]
@@ -407,5 +270,6 @@ func (s *Server) removeNode(node string) {
 		}
 	}
 	delete(s.NodesToBlocks, node)
+	s.Mutex.Unlock()
 	s.rebalance()
 }

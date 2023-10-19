@@ -101,9 +101,37 @@ func main() {
 		}
 
 		if mode == 1 {
-			fileServer.InputChannel <- command
+			handleCommand(fileServer, command)
 		} else {
 			failureDetectorServer.InputChannel <- command
 		}
+	}
+}
+
+func handleCommand(server *filesystem.Server, command string) {
+	if command == "help" {
+		fmt.Println("ls: Display metadata table")
+		fmt.Println("info: Display server info")
+		fmt.Println("files: Display list of files")
+	} else if command == "ls" {
+		server.PrintFileMetadata()
+	} else if command == "files" {
+		for _, f := range server.Files {
+			fmt.Printf("File:%s, version:%d, size:%d, numBlocks:%d\n", f.Filename, f.Version, f.FileSize, f.NumBlocks)
+		}
+
+		fmt.Println("storage:")
+		files, err := common.GetFilesInDirectory(server.Directory)
+		if err != nil {
+			Log.Warn(err)
+			return
+		}
+		for _, f := range files {
+			tokens := strings.Split(f.Name, ":")
+			fmt.Printf("File %s, version %s, block %s, size %d\n", tokens[0], tokens[1], tokens[2], f.Size)
+		}
+	} else if command == "info" {
+		fmt.Printf("Hostname: %s, Port: %d\n", server.Hostname, server.Port)
+		fmt.Printf("Num files: %d, Num blocks: %d, Num nodes: %d\n", len(server.Files), len(server.BlockToNodes), len(server.NodesToBlocks))
 	}
 }

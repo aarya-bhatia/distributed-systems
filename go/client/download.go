@@ -17,7 +17,6 @@ func DownloadFile(localFilename string, remoteFilename string) bool {
 		Log.Warn(err)
 		return false
 	}
-
 	defer file.Close()
 
 	server := Connect()
@@ -25,10 +24,6 @@ func DownloadFile(localFilename string, remoteFilename string) bool {
 
 	Log.Debug("Sending download file request")
 	server.Write([]byte(fmt.Sprintf("DOWNLOAD_FILE %s\n", remoteFilename)))
-
-	if !common.GetOKMessage(server) {
-		return false
-	}
 
 	reader := bufio.NewReader(server)
 	fileSize := 0
@@ -90,7 +85,7 @@ func DownloadFile(localFilename string, remoteFilename string) bool {
 		fileSize += n
 	}
 
-	Log.Infof("Downloaded file %s with %d bytes\n", localFilename, fileSize)
 	server.Write([]byte("OK\n"))
+	Log.Infof("Downloaded file %s with %d bytes\n", localFilename, fileSize)
 	return true
 }
