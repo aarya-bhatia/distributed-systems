@@ -65,6 +65,7 @@ func StartFastUpload(info *UploadInfo) bool {
 }
 
 func uploader(info *UploadInfo, state *UploadState, done chan bool) {
+	c := 0
 	for {
 		state.mutex.Lock()
 
@@ -73,33 +74,43 @@ func uploader(info *UploadInfo, state *UploadState, done chan bool) {
 			break
 		}
 
-		node := state.pendingNodes[0]
-		state.pendingNodes = state.pendingNodes[1:]
-		node.State = BUSY
-		state.busyNodes[node.Address] = true
-		state.mutex.Unlock()
+		if len(state.pendingNodes) > 0 {
+			node := state.pendingNodes[0]
+			state.pendingNodes = state.pendingNodes[1:]
+			node.State = BUSY
+			state.busyNodes[node.Address] = true
+			Log.Debug("uploading block to ", node.Address)
+			state.mutex.Unlock()
 
-		if !UploadBlock(node.Connection, info) {
-			Log.Fatal("Failed to upload")
-			// node.State = FAILED
-			// node.Connection.Close()
+			if !UploadBlock(node.Connection, info) {
+				Log.Fatal("Failed to upload")
+				// node.State = FAILED
+				// node.Connection.Close()
+			}
+
+			state.mutex.Lock()
+			c++
+			Log.Info("Uploaded block to ", node.Address)
+			delete(state.busyNodes, node.Address)
+			node.State = COMPLETED
+			heap.Push(&state.completedNodes, &priqueue.Item{Key: node.NumUploads, Value: node})
 		}
 
-		state.mutex.Lock()
-		Log.Info("Uploaded block to ", node.Address)
-		node.State = COMPLETED
-		heap.Push(&state.completedNodes, &priqueue.Item{Key: node.NumUploads, Value: node})
+		Log.Debug("uploader is waiting...")
 		state.mutex.Unlock()
 
 		time.Sleep(1 * time.Second)
 	}
 
+	Log.Info("Uploader is done with counter: ", c)
 	done <- true
 }
 
 func scheduler(info *UploadInfo, state *UploadState, done chan bool) {
+	c := 0
 	for {
 		state.mutex.Lock()
+
 		if len(state.pendingNodes) == 0 && len(state.busyNodes) == 0 {
 			state.mutex.Unlock()
 			break
@@ -120,15 +131,20 @@ func scheduler(info *UploadInfo, state *UploadState, done chan bool) {
 
 			state.mutex.Unlock()
 
+			Log.Debug("scheduler is starting a job...")
 			go copyBlock(info, state, pendingNode, completedNode)
+			c++
 
 			state.mutex.Lock()
 		}
 
 		state.mutex.Unlock()
+
+		Log.Debug("scheduler is waiting...")
 		time.Sleep(1 * time.Second)
 	}
 
+	Log.Info("Scheduler is done with counter: ", c)
 	done <- true
 }
 
@@ -195,9 +211,13 @@ func copyBlock(info *UploadInfo, state *UploadState, dest *Node, src *Node) {
 
 	dest.State = COMPLETED
 
+	delete(state.busyNodes, src.Address)
+	delete(state.busyNodes, dest.Address)
+
 	heap.Push(&state.completedNodes, &priqueue.Item{Key: src.NumUploads, Value: src})
 	heap.Push(&state.completedNodes, &priqueue.Item{Key: dest.NumUploads, Value: dest})
 
+	Log.Debugf("Block transfer from %s to %s has finished!\n", src.Address, dest.Address)
 	state.mutex.Unlock()
 }
 
@@ -226,4 +246,3 @@ func connectAllReplica(replicas []string) []*Node {
 // 		pendingNodes = append(pendingNodes, node.UploadingTo)
 // 	}
 // }
-
