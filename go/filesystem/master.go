@@ -123,8 +123,8 @@ func (server *Server) downloadFileWrapper(task *Request) {
 	server.Mutex.Unlock()
 
 	if !ok {
-		Log.Warn("Download failed for file: ", task.Name)
-		// task.Client.Write([]byte("ERROR\nFile not found\n"))
+		Log.Warn("Download failed for file:", task.Name)
+		task.Client.Write([]byte("ERROR\nFile not found\n"))
 		return
 	}
 

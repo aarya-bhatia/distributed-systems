@@ -39,7 +39,16 @@ func DownloadFile(localFilename string, remoteFilename string) bool {
 		line = line[:len(line)-1]
 		Log.Debug("Received:", line)
 		tokens := strings.Split(line, " ")
+
 		if len(tokens) != 2 {
+
+			if tokens[0] == "ERROR" {
+				Log.Warn("ERROR")
+				line, _ = reader.ReadString('\n') // Read error message on next line
+				Log.Warn(line)
+				return false
+			}
+
 			break
 		}
 

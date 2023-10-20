@@ -42,6 +42,9 @@ type UploadState struct {
 	cond           sync.Cond
 }
 
+const UPLOADER_INTERVAL = 400 * time.Millisecond
+const SCHEDULER_INTERVAL = 100 * time.Millisecond
+
 func StartFastUpload(info *UploadInfo) bool {
 	Log.Infof("Starting fast upload for block %s (%d bytes)", info.blockName, info.blockSize)
 
@@ -99,7 +102,7 @@ func uploader(info *UploadInfo, state *UploadState, done chan bool) {
 		Log.Debug("uploader is waiting...")
 		state.mutex.Unlock()
 
-		time.Sleep(1 * time.Second)
+		time.Sleep(UPLOADER_INTERVAL)
 	}
 
 	Log.Info("Uploader is done with counter: ", c)

@@ -134,7 +134,7 @@ func (server *Server) handleConnection(conn net.Conn) {
 
 	} else if verb == "DOWNLOAD_FILE" { // To write a file to a client
 		if len(tokens) != 2 {
-			// conn.Write([]byte("ERROR\nFilename not specified\n"))
+			Log.Warn("Filename not specified")
 			conn.Close()
 			return
 		}

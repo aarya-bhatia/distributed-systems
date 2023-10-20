@@ -1,5 +1,7 @@
 #!/bin/sh
 
+rm -rf *.out
+
 go build .
 
 echo "Uploading files..."
@@ -14,13 +16,27 @@ echo "Downloading files..."
 ./client get mid mid &
 ./client get large large &
 
-sleep 5
+sleep 60
 
 echo "Comparing files..."
 
-[ -f small ] && diff small small || echo "small file is different"
-[ -f mid ] && diff mid mid || echo "mid file is different"
-[ -f large ] && diff large large || echo "large file is different"
+if [ -f small ]; then
+	diff small small || echo "small file is different"
+else
+	echo "Failed to download small"
+fi
+
+if [ -f mid ]; then
+	diff mid mid || echo "mid file is different"
+else
+	echo "Failed to download mid"
+fi
+
+if [ -f large ]; then
+	diff large large || echo "large file is different"
+else
+	echo "Failed to download large"
+fi
 
 echo "Cleaning up..."
 
