@@ -21,17 +21,18 @@ func GetNodeHash(node string) int {
 	return cache[node]
 }
 
-// Node with smallest ID
-func GetLeaderNode(nodes []string) string {
-	pq := make(priqueue.PriorityQueue, 0)
-	heap.Init(&pq)
-
-	for _, node := range nodes {
-		heap.Push(&pq, &priqueue.Item{Key: GetNodeHash(node), Value: node})
+// First alive node in cluster, i.e. node with smallest ID
+func (server *Server) GetLeaderNode() string {
+	server.Mutex.Lock()
+	defer server.Mutex.Unlock()
+	for _, node := range common.Cluster {
+		ID := node.Hostname + ":" + string(node.TCPPort)
+		if _, ok := server.Nodes[ID]; ok {
+			return ID
+		}
 	}
 
-	item := heap.Pop(&pq).(*priqueue.Item)
-	return item.Value.(string)
+	return server.ID
 }
 
 // The first R nodes with the lowest ID are selected as metadata replicas.
