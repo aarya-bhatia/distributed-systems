@@ -70,10 +70,7 @@ func (server *Server) Start() {
 
 	Log.Infof("TCP Server is listening on port %d...\n", server.Port)
 
-	if GetLeaderNode(server.GetAliveNodes()) == server.ID {
-		Log.Info("Starting master routine...")
-		go server.pollTasks()
-	}
+	go server.pollTasks()
 
 	for {
 		conn, err := listener.Accept()
@@ -189,6 +186,28 @@ func (server *Server) handleConnection(conn net.Conn) {
 		}
 		source := tokens[3]
 		server.replicateBlock(conn, blockName, blockSize, source)
+
+	} else if verb == "GET_LEADER" {
+		conn.Write([]byte(server.GetLeaderNode() + "\n"))
+		conn.Close()
+
+	} else if verb == "QUERY" {
+		if len(tokens) != 2 {
+			conn.Write([]byte(fmt.Sprintf("ERROR\nUsage: QUERY <filename>\n")))
+			conn.Close()
+			return
+		}
+
+		server.Mutex.Lock()
+		filename := tokens[1]
+		file, ok := server.Files[filename]
+		if ok {
+			conn.Write([]byte(fmt.Sprintf("OK\nName:%s Version:%d Size:%d Blocks:%d\n", filename, file.Version, file.FileSize, file.NumBlocks)))
+		} else {
+			conn.Write([]byte("ERROR\nFile not found\n"))
+		}
+		conn.Close()
+		server.Mutex.Unlock()
 
 	} else {
 		Log.Warn("Unknown verb: ", verb)
