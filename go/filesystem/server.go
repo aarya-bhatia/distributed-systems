@@ -265,7 +265,7 @@ func (server *Server) replicateBlock(client net.Conn, blockName string, blockSiz
 func (s *Server) HandleNodeJoin(info *common.Node) {
 	s.Mutex.Lock()
 	node := fmt.Sprintf("%s:%d", info.Hostname, info.TCPPort)
-	Log.Debug("node left: ", node)
+	Log.Debug("node join: ", node)
 	s.Nodes[node] = true
 	s.NodesToBlocks[node] = []string{}
 	s.Mutex.Unlock()
@@ -284,6 +284,7 @@ func (s *Server) HandleNodeLeave(info *common.Node) {
 				// Remove element at index i
 				arr[i], arr[len(arr)-1] = arr[len(arr)-1], arr[i]
 				s.BlockToNodes[block] = arr[:len(arr)-1]
+				Log.Debugf("block %s replicas: %v", block, s.BlockToNodes[block])
 				break
 			}
 		}
