@@ -34,7 +34,7 @@ func (server *Server) pollTasks() {
 
 func (server *Server) uploadFileWrapper(task *Request) {
 	defer task.Client.Close()
-	defer server.getQueue(task.Name).Done()
+	defer server.getQueue(task.Name).WriteDone()
 
 	aliveNodes := server.GetAliveNodes()
 
@@ -116,7 +116,7 @@ func uploadFile(client net.Conn, newFile File, aliveNodes []string) (map[string]
 
 func (server *Server) downloadFileWrapper(task *Request) {
 	defer task.Client.Close()
-	defer server.getQueue(task.Name).Done()
+	defer server.getQueue(task.Name).ReadDone()
 
 	server.Mutex.Lock()
 	file, ok := server.Files[task.Name]

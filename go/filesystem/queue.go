@@ -10,11 +10,13 @@ const (
 )
 
 type Queue struct {
-	Reads  []*Request
-	Writes []*Request
-	Mode   int
-	Count  int
-	Mutex  sync.Mutex
+	Reads     []*Request
+	Writes    []*Request
+	Mode      int
+	Count     int
+	NumReader int
+	NumWriter int
+	Mutex     sync.Mutex
 }
 
 func (q *Queue) PushRead(request *Request) {
@@ -35,6 +37,10 @@ func (q *Queue) TryPop() *Request {
 	q.Mutex.Lock()
 	defer q.Mutex.Unlock()
 
+	if q.NumReader == 2 || q.NumWriter == 1 {
+		return nil
+	}
+
 	if q.Mode == READING {
 		if len(q.Reads) == 0 || q.Count >= 4 {
 			q.Mode = WRITING
@@ -42,7 +48,9 @@ func (q *Queue) TryPop() *Request {
 		} else {
 			res := q.Reads[0]
 			q.Reads = q.Reads[1:]
+			q.NumReader++
 			Log.Debug("A read task was dequeued!")
+			Log.Debug("Num readers: ", q.NumReader)
 			return res
 		}
 	}
@@ -54,7 +62,9 @@ func (q *Queue) TryPop() *Request {
 		} else {
 			res := q.Writes[0]
 			q.Writes = q.Writes[1:]
+			q.NumWriter++
 			Log.Debug("A write task was dequeued!")
+			Log.Debug("Num writers: ", q.NumWriter)
 			return res
 		}
 	}
@@ -62,9 +72,18 @@ func (q *Queue) TryPop() *Request {
 	return nil
 }
 
-func (q *Queue) Done() {
+func (q *Queue) ReadDone() {
 	q.Mutex.Lock()
 	defer q.Mutex.Unlock()
 	q.Count++
-	Log.Debug("A task was completed!")
+	q.NumReader--
+	Log.Debug("A read task was completed!")
+}
+
+func (q *Queue) WriteDone() {
+	q.Mutex.Lock()
+	defer q.Mutex.Unlock()
+	q.Count++
+	q.NumWriter--
+	Log.Debug("A write task was completed!")
 }
