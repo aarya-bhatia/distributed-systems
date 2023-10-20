@@ -10,13 +10,6 @@ import (
 
 const MIN_REPLICAS = 1
 
-<<<<<<< HEAD
-var blockName string
-var blockSize int
-var blockData []byte = make([]byte, common.BLOCK_SIZE)
-
-=======
->>>>>>> 23b94cf (testing fast upload)
 func UploadFile(localFilename string, remoteFilename string) bool {
 	var blockName string
 	var blockSize int
@@ -74,13 +67,9 @@ func UploadFile(localFilename string, remoteFilename string) bool {
 			return false
 		}
 
-<<<<<<< HEAD
-		if !FastUpload(server, replicas) {
-=======
 		info := &UploadInfo{server: server, blockName: blockName, blockData: blockData, blockSize: blockSize, replicas: replicas}
 
 		if !StartFastUpload(info) {
->>>>>>> 23b94cf (testing fast upload)
 			return false
 		}
 
@@ -93,49 +82,6 @@ func UploadFile(localFilename string, remoteFilename string) bool {
 	return true
 }
 
-<<<<<<< HEAD
-func UploadBlockSync(server net.Conn, replicas []string, fileBlock []byte, blockSize int) bool {
-	for _, replica := range replicas {
-		Log.Debugf("Uploading block %s (%d bytes) to %s\n", blockName, blockSize, replica)
-
-		conn, err := net.Dial("tcp", replica)
-		if err != nil {
-			return false
-		}
-
-		defer conn.Close()
-		Log.Debug("Connected to ", replica)
-
-		_, err = conn.Write([]byte(fmt.Sprintf("UPLOAD %s %d\n", blockName, blockSize)))
-		if err != nil {
-			return false
-		}
-
-		Log.Debug("Sent upload block request to ", replica)
-
-		if !common.GetOKMessage(conn) {
-			return false
-		}
-
-		Log.Debug("Got OK from ", replica)
-
-		if common.SendAll(conn, fileBlock[:blockSize], blockSize) < 0 {
-			return false
-		}
-
-		Log.Debugf("Sent block (%d bytes) to %s\n", blockSize, replica)
-
-		_, err = server.Write([]byte(fmt.Sprintf("%s %s\n", blockName, replica)))
-		if err != nil {
-			return false
-		}
-
-		Log.Debug("Sent update to server")
-	}
-
-	return true
-}
-=======
 // func UploadBlockSync(server net.Conn, replicas []string, fileBlock []byte, blockSize int) bool {
 // 	for _, replica := range replicas {
 // 		Log.Debugf("Uploading block %s (%d bytes) to %s\n", blockName, blockSize, replica)
@@ -177,4 +123,3 @@ func UploadBlockSync(server net.Conn, replicas []string, fileBlock []byte, block
 //
 // 	return true
 // }
->>>>>>> 23b94cf (testing fast upload)
