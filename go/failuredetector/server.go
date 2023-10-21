@@ -430,11 +430,11 @@ func (s *Server) HandleTimeout(e timer.TimerEvent) {
 	if e.ID == JOIN_TIMER_ID {
 		if IsIntroducer(s) {
 			if len(s.Members) <= 1 {
-				Log.Info("Timeout: Retrying JOIN.")
+				// Log.Debug("Timeout: Retrying JOIN.")
 				sendJoinRequest(s)
 			}
 		} else if !s.Active {
-			Log.Info("Timeout: Retrying JOIN.")
+			// Log.Debug("Timeout: Retrying JOIN.")
 			sendJoinRequest(s)
 		}
 

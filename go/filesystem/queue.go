@@ -9,6 +9,10 @@ const (
 	WRITING = 1
 )
 
+// The queue is enforces the following polices:
+// 1. At most one writer at a time per file
+// 2. At most two readers at a time per file
+// 3. There can be maximum 4 reads or 4 writes consecutively per file
 type Queue struct {
 	Reads     []*Request
 	Writes    []*Request
@@ -19,6 +23,7 @@ type Queue struct {
 	Mutex     sync.Mutex
 }
 
+// Enqueue a read task for file
 func (q *Queue) PushRead(request *Request) {
 	q.Mutex.Lock()
 	defer q.Mutex.Unlock()
@@ -26,6 +31,7 @@ func (q *Queue) PushRead(request *Request) {
 	Log.Debug("Read task added")
 }
 
+// Enqueue a write task for file
 func (q *Queue) PushWrite(request *Request) {
 	q.Mutex.Lock()
 	defer q.Mutex.Unlock()
@@ -33,6 +39,7 @@ func (q *Queue) PushWrite(request *Request) {
 	Log.Debug("Write task added")
 }
 
+// Get the next task if available, otherwise returns nil
 func (q *Queue) TryPop() *Request {
 	q.Mutex.Lock()
 	defer q.Mutex.Unlock()
@@ -72,6 +79,7 @@ func (q *Queue) TryPop() *Request {
 	return nil
 }
 
+// Must call this after reader is done
 func (q *Queue) ReadDone() {
 	q.Mutex.Lock()
 	defer q.Mutex.Unlock()
@@ -80,6 +88,7 @@ func (q *Queue) ReadDone() {
 	Log.Debug("A read task was completed!")
 }
 
+// Must call this after writer is done
 func (q *Queue) WriteDone() {
 	q.Mutex.Lock()
 	defer q.Mutex.Unlock()

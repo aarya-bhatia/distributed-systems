@@ -7,7 +7,6 @@ import (
 
 // Read a file block from disk and send it to client
 func downloadBlock(directory string, client net.Conn, blockName string) {
-	defer client.Close()
 	Log.Debugf("Sending block %s to client %s", blockName, client.RemoteAddr())
 	if buffer := common.ReadFile(directory, blockName); buffer != nil {
 		common.SendAll(client, buffer, len(buffer))
@@ -16,7 +15,6 @@ func downloadBlock(directory string, client net.Conn, blockName string) {
 
 // Receive a file block from client at node and write it to disk
 func uploadBlock(directory string, client net.Conn, blockName string, blockSize int) bool {
-	defer client.Close()
 	buffer := make([]byte, common.BLOCK_SIZE)
 	bufferSize := 0
 

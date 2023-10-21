@@ -4,8 +4,6 @@ import (
 	"cs425/common"
 	"fmt"
 	"net"
-	"strconv"
-	"strings"
 	"sync"
 )
 
@@ -58,10 +56,14 @@ func NewServer(info common.Node, dbDirectory string) *Server {
 	server.FileQueues = make(map[string]*Queue)
 	server.Nodes = make(map[string]bool)
 	server.Nodes[server.ID] = true
+	server.NodesToBlocks[server.ID] = []string{}
 
 	return server
 }
 
+// Start tcp server on configured port and listen for connections
+// Launches a routine for each connection
+// Starts routine to poll read/write tasks from queue
 func (server *Server) Start() {
 	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", server.Port))
 	if err != nil {
@@ -96,126 +98,6 @@ func (server *Server) getQueue(filename string) *Queue {
 	return q
 }
 
-func (server *Server) handleConnection(conn net.Conn) {
-	buffer := make([]byte, common.MIN_BUFFER_SIZE)
-	n, err := conn.Read(buffer)
-	if err != nil {
-		Log.Warnf("Client %s disconnected\n", conn.RemoteAddr())
-		return
-	}
-
-	Log.Debugf("Received request from %s: %s\n", conn.RemoteAddr(), string(buffer[:n]))
-	lines := strings.Split(string(buffer[:n]), "\n")
-	tokens := strings.Split(lines[0], " ")
-	verb := tokens[0]
-
-	if verb == "UPLOAD_FILE" { // To read a file from client
-		if len(tokens) != 3 {
-			conn.Write([]byte("ERROR\nUsage: UPLOAD_FILE <filename> <filesize>\n"))
-			conn.Close()
-			return
-		}
-		filename := tokens[1]
-		filesize, err := strconv.Atoi(tokens[2])
-		if err != nil || filesize <= 0 {
-			conn.Write([]byte("ERROR\nFile size must be a positive number\n"))
-			conn.Close()
-			return
-		}
-		server.getQueue(filename).PushWrite(&Request{
-			Action: UPLOAD_FILE,
-			Client: conn,
-			Name:   filename,
-			Size:   filesize,
-		})
-
-	} else if verb == "DOWNLOAD_FILE" { // To write a file to a client
-		if len(tokens) != 2 {
-			Log.Warn("Filename not specified")
-			conn.Close()
-			return
-		}
-		filename := tokens[1]
-		Log.Debugf("Received download request for file %s\n", filename)
-		server.getQueue(filename).PushRead(&Request{
-			Action: DOWNLOAD_FILE,
-			Client: conn,
-			Name:   filename,
-		})
-
-	} else if verb == "UPLOAD" { // To upload block at replica
-		if len(tokens) != 3 {
-			conn.Write([]byte("ERROR\nUsage: UPLOAD_BLOCK <blockname> <blocksize>\n"))
-			conn.Close()
-			return
-		}
-		blockName := tokens[1]
-		blockSize, err := strconv.Atoi(tokens[2])
-		if err != nil || blockSize <= 0 {
-			conn.Write([]byte("ERROR\nBlock size must be a positive number\n"))
-			conn.Close()
-			return
-		}
-		if blockSize > common.BLOCK_SIZE {
-			conn.Write([]byte(fmt.Sprintf("ERROR\nMaximum block size is %d\n", common.BLOCK_SIZE)))
-			conn.Close()
-			return
-		}
-
-		uploadBlock(server.Directory, conn, blockName, blockSize)
-
-	} else if verb == "DOWNLOAD" { // To download block at replica
-		if len(tokens) != 2 {
-			conn.Write([]byte("ERROR\nUsage: DOWNLOAD <blockname>\n"))
-			conn.Close()
-			return
-		}
-
-		downloadBlock(server.Directory, conn, tokens[1])
-
-	} else if verb == "ADD_BLOCK" {
-		if len(tokens) != 4 {
-			conn.Close()
-			return
-		}
-		blockName := tokens[1]
-		blockSize, err := strconv.Atoi(tokens[2])
-		if err != nil {
-			conn.Close()
-			return
-		}
-		source := tokens[3]
-		server.replicateBlock(conn, blockName, blockSize, source)
-
-	} else if verb == "GET_LEADER" {
-		conn.Write([]byte(server.GetLeaderNode() + "\n"))
-		conn.Close()
-
-	} else if verb == "QUERY" {
-		if len(tokens) != 2 {
-			conn.Write([]byte(fmt.Sprintf("ERROR\nUsage: QUERY <filename>\n")))
-			conn.Close()
-			return
-		}
-
-		server.Mutex.Lock()
-		filename := tokens[1]
-		file, ok := server.Files[filename]
-		if ok {
-			conn.Write([]byte(fmt.Sprintf("OK\nName:%s Version:%d Size:%d Blocks:%d\n", filename, file.Version, file.FileSize, file.NumBlocks)))
-		} else {
-			conn.Write([]byte("ERROR\nFile not found\n"))
-		}
-		conn.Close()
-		server.Mutex.Unlock()
-
-	} else {
-		Log.Warn("Unknown verb: ", verb)
-		conn.Write([]byte("ERROR\nUnknown verb\n"))
-		conn.Close()
-	}
-}
-
 // To handle replicas after a node fails or rejoins
 func (s *Server) rebalance() {
 	// TODO
@@ -223,7 +105,6 @@ func (s *Server) rebalance() {
 
 // Download a block from source node to replicate it at current node
 func (server *Server) replicateBlock(client net.Conn, blockName string, blockSize int, source string) {
-	defer client.Close()
 	Log.Debugf("To replicate block %s from host %s\n", blockName, source)
 	request := fmt.Sprintf("DOWNLOAD %s\n", blockName)
 	conn, err := net.Dial("tcp", source)

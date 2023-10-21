@@ -13,27 +13,30 @@ import (
 func (server *Server) pollTasks() {
 	for {
 		server.Mutex.Lock()
+
 		for _, queue := range server.FileQueues {
 			task := queue.TryPop()
 			if task == nil {
 				continue
 			}
-			if task.Action == UPLOAD_FILE {
+
+			switch {
+			case task.Action == UPLOAD_FILE:
 				go server.uploadFileWrapper(task)
-			} else if task.Action == DOWNLOAD_FILE {
+			case task.Action == DOWNLOAD_FILE:
 				go server.downloadFileWrapper(task)
-			} else {
+			default:
 				Log.Warn("Invalid Action")
 				task.Client.Close()
 			}
 		}
+
 		server.Mutex.Unlock()
 		time.Sleep(common.POLL_INTERVAL)
 	}
 }
 
 func (server *Server) uploadFileWrapper(task *Request) {
-	defer task.Client.Close()
 	defer server.getQueue(task.Name).WriteDone()
 
 	aliveNodes := server.GetAliveNodes()
@@ -69,6 +72,8 @@ func (server *Server) uploadFileWrapper(task *Request) {
 
 	server.Files[task.Name] = newFile
 	server.Mutex.Unlock()
+
+	server.handleConnection(task.Client) // continue reading requests
 }
 
 // Send replica list to client, wait for client to finish upload, update metdata with client's replica list
@@ -115,7 +120,6 @@ func uploadFile(client net.Conn, newFile File, aliveNodes []string) (map[string]
 }
 
 func (server *Server) downloadFileWrapper(task *Request) {
-	defer task.Client.Close()
 	defer server.getQueue(task.Name).ReadDone()
 
 	server.Mutex.Lock()
@@ -139,6 +143,8 @@ func (server *Server) downloadFileWrapper(task *Request) {
 	Log.Debug("Starting download for file:", task.Name)
 	downloadFile(task.Client, file, blocks)
 	Log.Debug("Download finished for file:", task.Name)
+
+	server.handleConnection(task.Client) // continue reading requests
 }
 
 // Send replica list to client, wait for client to finish download
