@@ -37,8 +37,6 @@ func (server *Server) pollTasks() {
 }
 
 func (server *Server) uploadFileWrapper(task *Request) {
-	defer server.getQueue(task.Name).WriteDone()
-
 	aliveNodes := server.GetAliveNodes()
 
 	server.Mutex.Lock()
@@ -58,6 +56,7 @@ func (server *Server) uploadFileWrapper(task *Request) {
 
 	blocks, ok := uploadFile(task.Client, newFile, aliveNodes)
 	if !ok {
+		server.getQueue(task.Name).WriteDone()
 		return
 	}
 
@@ -73,6 +72,7 @@ func (server *Server) uploadFileWrapper(task *Request) {
 	server.Files[task.Name] = newFile
 	server.Mutex.Unlock()
 
+	server.getQueue(task.Name).WriteDone()
 	server.handleConnection(task.Client) // continue reading requests
 }
 
@@ -120,8 +120,6 @@ func uploadFile(client net.Conn, newFile File, aliveNodes []string) (map[string]
 }
 
 func (server *Server) downloadFileWrapper(task *Request) {
-	defer server.getQueue(task.Name).ReadDone()
-
 	server.Mutex.Lock()
 	file, ok := server.Files[task.Name]
 	server.Mutex.Unlock()
@@ -129,6 +127,7 @@ func (server *Server) downloadFileWrapper(task *Request) {
 	if !ok {
 		Log.Warn("Download failed for file:", task.Name)
 		task.Client.Write([]byte("ERROR\nFile not found\n"))
+		server.getQueue(task.Name).ReadDone()
 		return
 	}
 
@@ -144,6 +143,7 @@ func (server *Server) downloadFileWrapper(task *Request) {
 	downloadFile(task.Client, file, blocks)
 	Log.Debug("Download finished for file:", task.Name)
 
+	server.getQueue(task.Name).ReadDone()
 	server.handleConnection(task.Client) // continue reading requests
 }
 

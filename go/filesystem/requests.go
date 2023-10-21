@@ -142,6 +142,10 @@ func (server *Server) handleConnection(conn net.Conn) {
 				return
 			}
 
+		case verb == "BYE":
+			conn.Close()
+			return
+
 		default:
 			sendError(conn, "Unknown verb")
 		}
