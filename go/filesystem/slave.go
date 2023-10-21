@@ -9,6 +9,7 @@ import (
 func downloadBlock(directory string, client net.Conn, blockName string) {
 	Log.Debugf("Sending block %s to client %s", blockName, client.RemoteAddr())
 	if buffer := common.ReadFile(directory, blockName); buffer != nil {
+		Log.Debug("block size:", len(buffer))
 		common.SendAll(client, buffer, len(buffer))
 	}
 }

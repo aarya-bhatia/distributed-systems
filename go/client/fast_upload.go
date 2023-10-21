@@ -39,7 +39,7 @@ type UploadState struct {
 	busyNodes      map[string]bool
 	completedNodes priqueue.PriorityQueue
 	mutex          sync.Mutex
-	cond           sync.Cond
+	// cond           sync.Cond
 }
 
 const UPLOADER_INTERVAL = 400 * time.Millisecond
@@ -52,7 +52,7 @@ func StartFastUpload(info *UploadInfo) bool {
 	state.pendingNodes = connectAllReplica(info.replicas)
 	state.busyNodes = make(map[string]bool, 0)
 	state.completedNodes = make([]*priqueue.Item, 0)
-	state.cond = *sync.NewCond(&state.mutex)
+	// state.cond = *sync.NewCond(&state.mutex)
 
 	heap.Init(&state.completedNodes)
 
@@ -132,19 +132,15 @@ func scheduler(info *UploadInfo, state *UploadState, done chan bool) {
 			state.busyNodes[completedNode.Address] = true
 			state.busyNodes[pendingNode.Address] = true
 
-			state.mutex.Unlock()
-
 			Log.Debug("scheduler is starting a job...")
 			go copyBlock(info, state, pendingNode, completedNode)
 			c++
-
-			state.mutex.Lock()
 		}
 
 		state.mutex.Unlock()
 
 		Log.Debug("scheduler is waiting...")
-		time.Sleep(1 * time.Second)
+		time.Sleep(SCHEDULER_INTERVAL)
 	}
 
 	Log.Info("Scheduler is done with counter: ", c)

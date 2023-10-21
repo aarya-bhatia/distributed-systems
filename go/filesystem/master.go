@@ -125,7 +125,7 @@ func (server *Server) downloadFileWrapper(task *Request) {
 	server.Mutex.Unlock()
 
 	if !ok {
-		Log.Warn("Download failed for file:", task.Name)
+		Log.Warn("Download failed: file not found")
 		task.Client.Write([]byte("ERROR\nFile not found\n"))
 		server.getQueue(task.Name).ReadDone()
 		return
@@ -150,23 +150,24 @@ func (server *Server) downloadFileWrapper(task *Request) {
 // Send replica list to client, wait for client to finish download
 func downloadFile(client net.Conn, file File, blocks map[string][]string) bool {
 	Log.Debug("Sending client metadata for file", file.Filename)
+	var blockSize int = common.BLOCK_SIZE
 	for i := 0; i < file.NumBlocks; i++ {
+		if i == file.NumBlocks-1 {
+			blockSize = file.FileSize - (file.NumBlocks - 1) * common.BLOCK_SIZE
+		}
 		blockName := fmt.Sprintf("%s:%d:%d", file.Filename, file.Version, i)
-		line := fmt.Sprintf("%s %s\n", blockName, strings.Join(blocks[blockName], ","))
+		replicas := strings.Join(blocks[blockName], ",")
+		line := fmt.Sprintf("%s %d %s\n", blockName, blockSize, replicas)
+		Log.Debug(line)
 		if common.SendAll(client, []byte(line), len(line)) < 0 {
 			Log.Warn("Download failed")
 			return false
 		}
 	}
+
 	client.Write([]byte("END\n"))
-
-	buffer := make([]byte, common.MIN_BUFFER_SIZE)
-	_, err := client.Read(buffer)
-	if err != nil {
-		Log.Warn("Download failed:", err)
-		return false
-	}
-
-	Log.Infof("Client %s downloaded file %s\n", client.RemoteAddr(), file.Filename)
+	Log.Debugf("Waiting for client %s to download %s\n", client.RemoteAddr(), file.Filename)
+	client.Read(make([]byte, common.MIN_BUFFER_SIZE))
+	Log.Infof("Client %s finished download for file %s\n", client.RemoteAddr(), file.Filename)
 	return true
 }

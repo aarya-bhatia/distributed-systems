@@ -63,7 +63,6 @@ func (server *Server) handleConnection(conn net.Conn) {
 			}
 
 			filename := tokens[1]
-			Log.Debugf("Received download request for file %s\n", filename)
 
 			// Add download file request to queue and quit for now
 			server.getQueue(filename).PushRead(&Request{
