@@ -18,7 +18,8 @@ const (
 	MIN_BUFFER_SIZE = 1024
 	REPLICA_FACTOR  = 4
 
-	POLL_INTERVAL = 1 * time.Second
+	POLL_INTERVAL      = 1 * time.Second
+	REBALANCE_INTERVAL = 2 * time.Second
 
 	JOIN_RETRY_TIMEOUT = time.Second * 10
 
@@ -138,21 +139,6 @@ func GetNodeByAddress(hostname string, udpPort int) *Node {
 	}
 	return nil
 }
-
-// func NewLogger(level log.Level, withColors bool, withTimestamp bool) *log.Logger {
-// 	Logger := log.New()
-//
-// 	Logger.SetFormatter(&log.TextFormatter{
-// 		DisableColors: withColors,
-// 		FullTimestamp: withTimestamp,
-// 	})
-//
-// 	Logger.SetReportCaller(true)
-// 	Logger.SetOutput(os.Stderr)
-// 	Logger.SetLevel(level)
-//
-// 	return Logger
-// }
 
 // Hash string s to an integer in [0,N)
 func GetHash(s string, N int) int {

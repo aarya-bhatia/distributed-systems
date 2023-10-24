@@ -117,7 +117,12 @@ func (server *Server) handleConnection(conn net.Conn) {
 			}
 
 			source := tokens[3]
-			server.replicateBlock(conn, blockName, blockSize, source)
+
+			if replicateBlock(server.Directory, blockName, blockSize, source) {
+				conn.Write([]byte("OK\n"))
+			} else {
+				conn.Write([]byte("ERROR\n"))
+			}
 
 		// Send the current leader node address
 		case verb == "GET_LEADER":

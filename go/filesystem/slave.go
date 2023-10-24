@@ -2,6 +2,7 @@ package filesystem
 
 import (
 	"cs425/common"
+	"fmt"
 	"net"
 )
 
@@ -49,5 +50,41 @@ func uploadBlock(directory string, client net.Conn, blockName string, blockSize 
 	}
 
 	client.Write([]byte("OK\n"))
+	return true
+}
+
+// Download a block from source node to replicate it at current node
+func replicateBlock(directory string, blockName string, blockSize int, source string) bool {
+	Log.Debugf("To replicate block %s from host %s\n", blockName, source)
+	request := fmt.Sprintf("DOWNLOAD %s\n", blockName)
+	conn, err := net.Dial("tcp", source)
+	if err != nil {
+		return false
+	}
+
+	defer conn.Close()
+
+	_, err = conn.Write([]byte(request))
+	if err != nil {
+		return false
+	}
+
+	buffer := make([]byte, common.BLOCK_SIZE)
+	size := 0
+	for size < blockSize {
+		n, err := conn.Read(buffer[size:])
+		if err != nil {
+			return false
+		}
+		if n == 0 {
+			break
+		}
+		size += n
+	}
+
+	if !common.WriteFile(directory, blockName, buffer, size) {
+		return false
+	}
+
 	return true
 }

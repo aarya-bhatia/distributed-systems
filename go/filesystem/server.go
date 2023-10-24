@@ -73,6 +73,7 @@ func (server *Server) Start() {
 	Log.Infof("TCP Server is listening on port %d...\n", server.Port)
 
 	go server.pollTasks()
+	go server.startRebalanceRoutine()
 
 	for {
 		conn, err := listener.Accept()
@@ -98,51 +99,6 @@ func (server *Server) getQueue(filename string) *Queue {
 	return q
 }
 
-// To handle replicas after a node fails or rejoins
-func (s *Server) rebalance() {
-	// TODO
-}
-
-// Download a block from source node to replicate it at current node
-func (server *Server) replicateBlock(client net.Conn, blockName string, blockSize int, source string) {
-	Log.Debugf("To replicate block %s from host %s\n", blockName, source)
-	request := fmt.Sprintf("DOWNLOAD %s\n", blockName)
-	conn, err := net.Dial("tcp", source)
-	if err != nil {
-		client.Write([]byte("ERROR\n"))
-		return
-	}
-
-	defer conn.Close()
-
-	_, err = conn.Write([]byte(request))
-	if err != nil {
-		client.Write([]byte("ERROR\n"))
-		return
-	}
-
-	buffer := make([]byte, common.BLOCK_SIZE)
-	size := 0
-	for size < blockSize {
-		n, err := conn.Read(buffer[size:])
-		if err != nil {
-			client.Write([]byte("ERROR\n"))
-			return
-		}
-		if n == 0 {
-			break
-		}
-		size += n
-	}
-
-	if !common.WriteFile(server.Directory, blockName, buffer, size) {
-		client.Write([]byte("ERROR\n"))
-		return
-	}
-
-	client.Write([]byte("OK\n"))
-}
-
 func (s *Server) HandleNodeJoin(info *common.Node) {
 	s.Mutex.Lock()
 	node := fmt.Sprintf("%s:%d", info.Hostname, info.TCPPort)
@@ -150,7 +106,6 @@ func (s *Server) HandleNodeJoin(info *common.Node) {
 	s.Nodes[node] = true
 	s.NodesToBlocks[node] = []string{}
 	s.Mutex.Unlock()
-	s.rebalance()
 }
 
 func (s *Server) HandleNodeLeave(info *common.Node) {
@@ -172,5 +127,46 @@ func (s *Server) HandleNodeLeave(info *common.Node) {
 	}
 	delete(s.NodesToBlocks, node)
 	s.Mutex.Unlock()
-	s.rebalance()
 }
+
+/* func (s *Server) GetBlockSize(blockName string) (int, bool) {
+	s.Mutex.Lock()
+	defer s.Mutex.Unlock()
+	tokens := strings.Split(blockName, ":")
+	filename := tokens[0]
+	version, err := strconv.Atoi(tokens[1])
+	if err != nil {
+		return 0, false
+	}
+
+	blockNum, err := strconv.Atoi(tokens[2])
+	if err != nil {
+		return 0, false
+	}
+
+	file, ok := s.Files[filename]
+	if !ok {
+		return 0, false
+	}
+
+	if file.Version != version {
+		Log.Warn("Invalid block version", blockName)
+		return 0, false
+	}
+
+	if blockNum >= file.NumBlocks {
+		Log.Warn("Invalid block number", blockName)
+		return 0, false
+	}
+
+	if blockNum == file.NumBlocks-1 {
+		r := file.FileSize % common.BLOCK_SIZE
+		if r == 0 {
+			return common.BLOCK_SIZE, true
+		}
+
+		return r, true
+	}
+
+	return common.BLOCK_SIZE, true
+} */
