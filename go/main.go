@@ -41,7 +41,7 @@ func main() {
 	flag.IntVar(&udpPort, "udp", common.DEFAULT_UDP_PORT, "failure detector port")
 	flag.IntVar(&tcpPort, "tcp", common.DEFAULT_TCP_PORT, "file server port")
 	flag.StringVar(&hostname, "h", systemHostname, "hostname")
-	flag.StringVar(&dbDirectory, "db", ".db", "database directory")
+	flag.StringVar(&dbDirectory, "db", "db", "database directory")
 	flag.Parse()
 
 	if hostname == "localhost" || hostname == "127.0.0.1" {
