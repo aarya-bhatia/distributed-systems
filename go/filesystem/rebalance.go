@@ -81,6 +81,8 @@ func (s *Server) sendRebalanceRequests(replica string, requests []string) {
 		return
 	}
 
+	defer conn.Close()
+
 	buffer := make([]byte, common.MIN_BUFFER_SIZE)
 
 	for _, request := range requests {
