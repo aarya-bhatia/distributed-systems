@@ -67,14 +67,28 @@ func DownloadFile(localFilename string, remoteFilename string) bool {
 		}
 
 		replicas := strings.Split(tokens[2], ",")
-		replica := replicas[rand.Intn(len(replicas))] // choose one random replica
+		done := false
 
-		ret := downloadBlock(file, blockName, blockSize, replica)
-		if ret <= 0 {
+		for len(replicas) > 0 {
+			i := rand.Intn(len(replicas))
+			if downloadBlock(file, blockName, blockSize, replicas[i]) {
+				done = true
+				break
+			}
+
+			// Remove current replica from list.
+			// Then, retry download with another replica
+			n := len(replicas)
+			replicas[i], replicas[n-1] = replicas[n-1], replicas[i]
+			replicas = replicas[:n-1]
+		}
+
+		if !done {
+			Log.Warn("Failed to download block", blockName)
 			return false
 		}
 
-		fileSize += ret
+		fileSize += blockSize
 	}
 
 	server.Write([]byte("OK\n"))
@@ -84,11 +98,11 @@ func DownloadFile(localFilename string, remoteFilename string) bool {
 
 // Download block from given replica and append data to file
 // Returns number of bytes written to file, or -1 if failure
-func downloadBlock(file *os.File, blockName string, blockSize int, replica string) int {
+func downloadBlock(file *os.File, blockName string, blockSize int, replica string) bool {
 	Log.Debugf("Downloading block %s from %s\n", blockName, replica)
 	conn := getConnection(replica)
 	if conn == nil {
-		return -1
+		return false
 	}
 
 	request := fmt.Sprintf("DOWNLOAD %s\n", blockName)
@@ -96,7 +110,7 @@ func downloadBlock(file *os.File, blockName string, blockSize int, replica strin
 	_, err := conn.Write([]byte(request))
 	if err != nil {
 		Log.Warn(err)
-		return -1
+		return false
 	}
 
 	buffer := make([]byte, blockSize)
@@ -106,22 +120,22 @@ func downloadBlock(file *os.File, blockName string, blockSize int, replica strin
 		n, err := conn.Read(buffer[bufferSize:])
 		if err != nil {
 			Log.Warn(err)
-			return -1
+			return false
 		}
 		bufferSize += n
 	}
 
 	if bufferSize < blockSize {
 		Log.Warn("Insufficient bytes received for block", blockName)
-		return -1
+		return false
 	}
 
 	Log.Debugf("Received block %s (%d bytes) from %s\n", blockName, bufferSize, replica)
-	n, err := file.Write(buffer[:bufferSize])
+	_, err = file.Write(buffer[:bufferSize])
 	if err != nil {
 		Log.Warn(err)
-		return -1
+		return false
 	}
 
-	return n
+	return true
 }
