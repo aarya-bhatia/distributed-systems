@@ -101,18 +101,24 @@ func (server *Server) getQueue(filename string) *Queue {
 
 func (s *Server) HandleNodeJoin(info *common.Node) {
 	s.Mutex.Lock()
+	defer s.Mutex.Unlock()
+
 	node := fmt.Sprintf("%s:%d", info.Hostname, info.TCPPort)
 	Log.Debug("node join: ", node)
+
 	s.Nodes[node] = true
 	s.NodesToBlocks[node] = []string{}
-	s.Mutex.Unlock()
 }
 
 func (s *Server) HandleNodeLeave(info *common.Node) {
 	s.Mutex.Lock()
+	defer s.Mutex.Unlock()
+
 	node := fmt.Sprintf("%s:%d", info.Hostname, info.TCPPort)
 	Log.Debug("node left: ", node)
+
 	delete(s.Nodes, node)
+
 	for _, block := range s.NodesToBlocks[node] {
 		arr := s.BlockToNodes[block]
 		for i := 0; i < len(arr); i++ {
@@ -120,13 +126,13 @@ func (s *Server) HandleNodeLeave(info *common.Node) {
 				// Remove element at index i
 				arr[i], arr[len(arr)-1] = arr[len(arr)-1], arr[i]
 				s.BlockToNodes[block] = arr[:len(arr)-1]
-				// Log.Debugf("block %s replicas: %v", block, s.BlockToNodes[block])
+				Log.Debugf("block %s has %d replicas", block, len(s.BlockToNodes))
 				break
 			}
 		}
 	}
+
 	delete(s.NodesToBlocks, node)
-	s.Mutex.Unlock()
 }
 
 /* func (s *Server) GetBlockSize(blockName string) (int, bool) {
