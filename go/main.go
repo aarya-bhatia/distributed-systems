@@ -106,6 +106,8 @@ func main() {
 			failureDetectorServer.InputChannel <- command
 		}
 	}
+
+	<-make(chan bool)
 }
 
 func handleCommand(server *filesystem.Server, command string) {

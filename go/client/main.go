@@ -32,8 +32,10 @@ func printUsage() {
 func main() {
 	if os.Getenv("prod") == "true" {
 		common.Cluster = common.ProdCluster
+		Log.Info("using prod cluster", common.Cluster)
 	} else {
 		common.Cluster = common.LocalCluster
+		Log.Info("using local cluster", common.Cluster)
 	}
 
 	if len(os.Args) == 1 {
