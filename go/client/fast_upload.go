@@ -42,8 +42,8 @@ type UploadState struct {
 	// cond           sync.Cond
 }
 
-const UPLOADER_INTERVAL = 250 * time.Millisecond
-const SCHEDULER_INTERVAL = 200 * time.Millisecond
+const UPLOADER_INTERVAL = 150 * time.Millisecond
+const SCHEDULER_INTERVAL = 100 * time.Millisecond
 
 func StartFastUpload(info *UploadInfo) bool {
 	Log.Infof("Starting fast upload for block %s (%d bytes)", info.blockName, info.blockSize)
