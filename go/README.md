@@ -60,5 +60,14 @@
 
 ### Uploading File
 
-- client sends upload_file request to master node
+- C: send upload_file request to master node
+- M: if request is invalid, return error
+- M: enqueue request
+- When master node dequeues the request:
+- M: send OK
+- M: send list of replicas
+- For each block,
+- C: send data to replicas, receive OK
+- C: send master replicas where block was uploaded
+
 

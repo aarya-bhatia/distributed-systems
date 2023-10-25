@@ -1,13 +1,8 @@
 
 # TODO
 
-- Add multiples nodes
-- Modify failure detector to notify MP3 server on failure and rejoins
-- Add request queue & reader/writer synchronization
-- Protocol to upload and download blocks from replica nodes
-- Rebalancing algorithm
-- Upload file blocks for ACKs from replicas
 - Remove nodes
 - API operations for demo
-- clean up cli
-- client should query leader node first from any node
+- client should query leader node first
+
+
