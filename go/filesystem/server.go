@@ -126,7 +126,7 @@ func (s *Server) HandleNodeLeave(info *common.Node) {
 				// Remove element at index i
 				arr[i], arr[len(arr)-1] = arr[len(arr)-1], arr[i]
 				s.BlockToNodes[block] = arr[:len(arr)-1]
-				Log.Debugf("block %s has %d replicas", block, len(s.BlockToNodes))
+				Log.Debugf("block %s has %d replicas", block, len(s.BlockToNodes[block]))
 				break
 			}
 		}
