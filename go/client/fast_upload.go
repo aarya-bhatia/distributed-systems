@@ -42,8 +42,8 @@ type UploadState struct {
 	// cond           sync.Cond
 }
 
-const UPLOADER_INTERVAL = 400 * time.Millisecond
-const SCHEDULER_INTERVAL = 100 * time.Millisecond
+const UPLOADER_INTERVAL = 250 * time.Millisecond
+const SCHEDULER_INTERVAL = 200 * time.Millisecond
 
 func StartFastUpload(info *UploadInfo) bool {
 	Log.Infof("Starting fast upload for block %s (%d bytes)", info.blockName, info.blockSize)
@@ -57,6 +57,10 @@ func StartFastUpload(info *UploadInfo) bool {
 	heap.Init(&state.completedNodes)
 
 	done := make(chan bool)
+
+	if len(state.pendingNodes) == 0 {
+		return false
+	}
 
 	go scheduler(info, state, done)
 	go uploader(info, state, done)

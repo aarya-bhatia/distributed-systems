@@ -7,12 +7,16 @@ import (
 )
 
 // Read a file block from disk and send it to client
-func downloadBlock(directory string, client net.Conn, blockName string) {
+func downloadBlock(directory string, client net.Conn, blockName string) bool {
 	Log.Debugf("Sending block %s to client %s", blockName, client.RemoteAddr())
 	if buffer := common.ReadFile(directory, blockName); buffer != nil {
 		Log.Debug("block size:", len(buffer))
-		common.SendAll(client, buffer, len(buffer))
+		if common.SendAll(client, buffer, len(buffer)) > 0 {
+			return true
+		}
 	}
+
+	return false
 }
 
 // Receive a file block from client at node and write it to disk

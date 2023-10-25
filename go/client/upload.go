@@ -69,14 +69,15 @@ func UploadFile(localFilename string, remoteFilename string) bool {
 		}
 
 		info := &UploadInfo{server: server, blockName: blockName, blockData: blockData, blockSize: blockSize, replicas: replicas}
-		//
-		// if !StartFastUpload(info) {
+
+		if !StartFastUpload(info) {
+			return false
+		}
+
+		// if !UploadBlockSync(server, info) {
 		// 	return false
 		// }
 
-		if !UploadBlockSync(server, info) {
-			return false
-		}
 	}
 
 	server.Write([]byte("END\n"))

@@ -100,7 +100,10 @@ func (server *Server) handleConnection(conn net.Conn) {
 				break
 			}
 
-			downloadBlock(server.Directory, conn, tokens[1])
+			if !downloadBlock(server.Directory, conn, tokens[1]) {
+				conn.Close()
+				return
+			}
 
 		// To request node to download the block from another source
 		case verb == "ADD_BLOCK":
