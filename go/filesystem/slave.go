@@ -24,8 +24,7 @@ func uploadBlock(directory string, client net.Conn, blockName string, blockSize 
 	buffer := make([]byte, common.BLOCK_SIZE)
 	bufferSize := 0
 
-	_, err := client.Write([]byte("OK\n"))
-	if err != nil {
+	if !common.SendMessage(client, "OK") {
 		return false
 	}
 
@@ -49,11 +48,11 @@ func uploadBlock(directory string, client net.Conn, blockName string, blockSize 
 	Log.Debugf("Received block %s (%d bytes) from client %s", blockName, blockSize, client.RemoteAddr())
 
 	if !common.WriteFile(directory, blockName, buffer, blockSize) {
-		Log.Debugf("Added block %s to disk\n", blockName)
+		Log.Warnf("Failed to write block %s to disk\n", blockName)
 		return false
 	}
 
-	client.Write([]byte("OK\n"))
+	Log.Infof("Added block %s to disk\n", blockName)
 	return true
 }
 

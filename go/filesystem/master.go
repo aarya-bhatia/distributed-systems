@@ -79,40 +79,61 @@ func (server *Server) uploadFileWrapper(task *Request) {
 // Send replica list to client, wait for client to finish upload, update metdata with client's replica list
 // Returns local blockToNodes list for current upload
 func uploadFile(client net.Conn, newFile File, aliveNodes []string) (map[string][]string, bool) {
+	if !common.SendMessage(client, "OK") {
+		return nil, false
+	}
+
 	blocks := make(map[string][]string)
 
+	// send client replica list for all blocks to upload
 	for i := 0; i < newFile.NumBlocks; i++ {
 		blockName := fmt.Sprintf("%s:%d:%d", newFile.Filename, newFile.Version, i)
-		line := fmt.Sprintf("%s %s\n", blockName,
-			strings.Join(GetReplicaNodes(aliveNodes, blockName,
-				common.REPLICA_FACTOR), ","))
+		replicas := GetReplicaNodes(aliveNodes, blockName, common.REPLICA_FACTOR)
+		replicaEncoding := strings.Join(replicas, ",")
+		line := fmt.Sprintf("%s %s\n", blockName, replicaEncoding)
 		if common.SendAll(client, []byte(line), len(line)) < 0 {
 			return nil, false
 		}
 	}
 
-	client.Write([]byte("END\n"))
+	if !common.SendMessage(client, "END") {
+		return nil, false
+	}
 
 	reader := bufio.NewReader(client)
+
+	// receive confirmation from client for each uploaded block
 	for {
 		line, err := reader.ReadString('\n')
 		if err != nil {
 			Log.Warn(err)
-			break
+			return nil, false
 		}
 
 		line = line[:len(line)-1]
 		Log.Debug("Received:", line)
 		tokens := strings.Split(line, " ")
-		if len(tokens) != 2 {
+
+		if tokens[0] == "END" {
 			break
+		}
+
+		if len(tokens) != 2 {
+			Log.Warn("illegal response")
+			return nil, false
 		}
 
 		blockName := tokens[0]
 		replicas := tokens[1]
+
 		for _, replica := range strings.Split(replicas, ",") {
 			blocks[blockName] = append(blocks[blockName], replica)
 		}
+	}
+
+	if len(blocks) != newFile.NumBlocks {
+		Log.Warnf("insufficient blocks confirmed: %d out of %d", len(blocks), newFile.NumBlocks)
+		return nil, false
 	}
 
 	Log.Infof("%s: Uploaded file %s\n", client.RemoteAddr(), newFile.Filename)
@@ -153,7 +174,7 @@ func downloadFile(client net.Conn, file File, blocks map[string][]string) bool {
 	var blockSize int = common.BLOCK_SIZE
 	for i := 0; i < file.NumBlocks; i++ {
 		if i == file.NumBlocks-1 {
-			blockSize = file.FileSize - (file.NumBlocks - 1) * common.BLOCK_SIZE
+			blockSize = file.FileSize - (file.NumBlocks-1)*common.BLOCK_SIZE
 		}
 		blockName := fmt.Sprintf("%s:%d:%d", file.Filename, file.Version, i)
 		replicas := strings.Join(blocks[blockName], ",")

@@ -161,6 +161,14 @@ func GetNumFileBlocks(fileSize int64) int {
 	return n
 }
 
+func SendMessage(conn net.Conn, message string) bool {
+	if strings.LastIndex(message, "\n") != len(message)-1 {
+		message += "\n"
+	}
+
+	return SendAll(conn, []byte(message), len(message)) == len(message)
+}
+
 func GetOKMessage(server net.Conn) bool {
 	buffer := make([]byte, MIN_BUFFER_SIZE)
 	n, err := server.Read(buffer)

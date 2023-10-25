@@ -11,6 +11,36 @@ import (
 
 var Log = common.Log
 
+// This helps reuse same TCP connection to download multiple blocks from a replica
+// Maps replcia address to connection
+var Connections map[string]net.Conn = nil
+
+func getConnection(addr string) net.Conn {
+	if Connections == nil {
+		Connections = make(map[string]net.Conn)
+	}
+
+	if _, ok := Connections[addr]; !ok {
+		conn, err := net.Dial("tcp", addr)
+		if err != nil {
+			Log.Warn("Failed to connect to", addr)
+			return nil
+		}
+
+		Log.Info("Connected to", addr)
+		Connections[addr] = conn
+	}
+
+	return Connections[addr]
+}
+
+func closeConnections() {
+	for addr, conn := range Connections {
+		Log.Info("Closing connection with", addr)
+		conn.Close()
+	}
+}
+
 func Connect() net.Conn {
 	for _, node := range common.Cluster {
 		conn, err := net.Dial("tcp", fmt.Sprintf("%s:%d", node.Hostname, node.TCPPort))
@@ -36,7 +66,7 @@ func main() {
 		Log.Fatal(err)
 	}
 
-	if len(hostname) > 0 && strings.Index(hostname, "fa23") == 0 {
+	if strings.Index(os.Getenv("env"), "prod") == 0 || (len(hostname) > 0 && strings.Index(hostname, "fa23") == 0) {
 		common.Cluster = common.ProdCluster
 		Log.Info("using prod cluster", common.Cluster)
 	} else {

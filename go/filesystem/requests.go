@@ -14,8 +14,18 @@ func sendError(conn net.Conn, message string) {
 	conn.Write([]byte("ERROR\n" + message + "\n"))
 }
 
+// Read all requests from client until an UPLOAD_FILE or DOWNLOAD_FILE request,
+// which are then queued. Also disconnects on any errors.
 func (server *Server) handleConnection(conn net.Conn) {
 	reader := bufio.NewReader(conn)
+	isQueued := false
+
+	// Close connection with client unless request was queued
+	defer func() {
+		if !isQueued {
+			conn.Close()
+		}
+	}()
 
 	for {
 		buffer, err := reader.ReadString('\n') // Read from client until newline
@@ -33,128 +43,196 @@ func (server *Server) handleConnection(conn net.Conn) {
 
 		// To read a file from client
 		case verb == "UPLOAD_FILE":
-			if len(tokens) != 3 {
-				sendError(conn, "Usage: UPLOAD_FILE <filename> <filesize>")
-				break
+			if !server.handleUploadFile(conn, tokens) {
+				return
 			}
 
-			filename := tokens[1]
-			filesize, err := strconv.Atoi(tokens[2])
-			if err != nil || filesize <= 0 {
-				sendError(conn, "File size must be a positive number")
-				break
-			}
-
-			// Add upload file request to queue and quit for now
-			server.getQueue(filename).PushWrite(&Request{
-				Action: UPLOAD_FILE,
-				Client: conn,
-				Name:   filename,
-				Size:   filesize,
-			})
-
+			isQueued = true
 			return
 
 		// To write a file to a client
 		case verb == "DOWNLOAD_FILE":
-			if len(tokens) != 2 {
-				sendError(conn, "Usage: DOWNLOAD_FILE <filename>")
-				break
+			if !server.handleDownloadFile(conn, tokens) {
+				return
 			}
 
-			filename := tokens[1]
-
-			// Add download file request to queue and quit for now
-			server.getQueue(filename).PushRead(&Request{
-				Action: DOWNLOAD_FILE,
-				Client: conn,
-				Name:   filename,
-			})
-
+			isQueued = true
 			return
 
 		// To upload block at replica
 		case verb == "UPLOAD":
-			if len(tokens) != 3 {
-				sendError(conn, "Usage: UPLOAD_BLOCK <blockname> <blocksize>")
-				break
+			if !server.handleUploadBlock(conn, tokens) {
+				return
 			}
-
-			blockName := tokens[1]
-			blockSize, err := strconv.Atoi(tokens[2])
-			if err != nil || blockSize <= 0 {
-				sendError(conn, "Block size must be a positive number")
-				break
-			}
-			if blockSize > common.BLOCK_SIZE {
-				sendError(conn, fmt.Sprintf("Maximum block size is %d", common.BLOCK_SIZE))
-				break
-			}
-
-			uploadBlock(server.Directory, conn, blockName, blockSize)
 
 		// To download block at replica
 		case verb == "DOWNLOAD":
-			if len(tokens) != 2 {
-				sendError(conn, "Usage: DOWNLOAD <blockname>")
-				break
-			}
-
-			if !downloadBlock(server.Directory, conn, tokens[1]) {
-				conn.Close()
+			if !server.handleDownloadBlock(conn, tokens) {
 				return
 			}
 
 		// To request node to download the block from another source
 		case verb == "ADD_BLOCK":
-			if len(tokens) != 4 {
-				sendError(conn, "Usage: ADD_BLOCK <name> <size> <source>")
-				break
-			}
-
-			blockName := tokens[1]
-			blockSize, err := strconv.Atoi(tokens[2])
-			if err != nil || blockSize > common.BLOCK_SIZE {
-				sendError(conn, fmt.Sprintf("Block size must be positive integer less than %d", common.BLOCK_SIZE))
-				break
-			}
-
-			source := tokens[3]
-
-			if replicateBlock(server.Directory, blockName, blockSize, source) {
-				conn.Write([]byte("OK\n"))
-			} else {
-				conn.Write([]byte("ERROR\n"))
+			if !server.handleAddBlock(conn, tokens) {
+				return
 			}
 
 		// Send the current leader node address
 		case verb == "GET_LEADER":
-			_, err = conn.Write([]byte(server.GetLeaderNode() + "\n"))
-			if err != nil {
-				conn.Close()
+			if !server.handleGetLeader(conn) {
 				return
 			}
 
 		case verb == "INFO":
-			server.Mutex.Lock()
-			response := fmt.Sprintf("ID: %s, %d files, %d blocks, %d nodes\n",
-				server.ID,
-				len(server.Files),
-				len(server.BlockToNodes),
-				len(server.Nodes))
-			server.Mutex.Unlock()
-
-			if common.SendAll(conn, []byte(response), len(response)) < 0 {
-				conn.Close()
+			if !server.handleInfo(conn) {
 				return
 			}
 
 		case verb == "BYE":
-			conn.Close()
 			return
 
 		default:
-			sendError(conn, "Unknown verb")
+			Log.Warn("Unknown verb")
+			return
 		}
 	}
+}
+
+func (server *Server) handleUploadFile(conn net.Conn, tokens []string) bool {
+	if len(tokens) != 3 {
+		sendError(conn, "Usage: UPLOAD_FILE <filename> <filesize>")
+		return false
+	}
+
+	filename := tokens[1]
+	filesize, err := strconv.Atoi(tokens[2])
+	if err != nil || filesize <= 0 {
+		sendError(conn, "File size must be a positive number")
+		return false
+	}
+
+	// Add upload file request to queue and quit for now
+	server.getQueue(filename).PushWrite(&Request{
+		Action: UPLOAD_FILE,
+		Client: conn,
+		Name:   filename,
+		Size:   filesize,
+	})
+
+	return true
+}
+
+func (server *Server) handleDownloadFile(conn net.Conn, tokens []string) bool {
+	if len(tokens) != 2 {
+		sendError(conn, "Usage: DOWNLOAD_FILE <filename>")
+		return false
+	}
+
+	filename := tokens[1]
+
+	// Add download file request to queue and quit for now
+	server.getQueue(filename).PushRead(&Request{
+		Action: DOWNLOAD_FILE,
+		Client: conn,
+		Name:   filename,
+	})
+
+	return true
+}
+
+func (server *Server) handleUploadBlock(conn net.Conn, tokens []string) bool {
+	if len(tokens) != 3 {
+		sendError(conn, "Usage: UPLOAD_BLOCK <blockname> <blocksize>")
+		return false
+	}
+
+	blockName := tokens[1]
+	blockSize, err := strconv.Atoi(tokens[2])
+	if err != nil || blockSize <= 0 {
+		sendError(conn, "Block size must be a positive number")
+		return false
+	}
+	if blockSize > common.BLOCK_SIZE {
+		sendError(conn, fmt.Sprintf("Maximum block size is %d", common.BLOCK_SIZE))
+		return false
+	}
+
+	if !uploadBlock(server.Directory, conn, blockName, blockSize) {
+		common.SendMessage(conn, "ERROR")
+		return false
+	} else {
+		if !common.SendMessage(conn, "OK") {
+			return false
+		}
+	}
+
+	return true
+}
+
+func (server *Server) handleDownloadBlock(conn net.Conn, tokens []string) bool {
+	if len(tokens) != 2 {
+		sendError(conn, "Usage: DOWNLOAD <blockname>")
+		return false
+	}
+
+	if !downloadBlock(server.Directory, conn, tokens[1]) {
+		conn.Close()
+		return false
+	}
+
+	return true
+}
+
+func (server *Server) handleAddBlock(conn net.Conn, tokens []string) bool {
+	if len(tokens) != 4 {
+		sendError(conn, "Usage: ADD_BLOCK <name> <size> <source>")
+		return false
+	}
+
+	blockName := tokens[1]
+	blockSize, err := strconv.Atoi(tokens[2])
+	if err != nil || blockSize > common.BLOCK_SIZE {
+		sendError(conn, fmt.Sprintf("Block size must be positive integer less than %d", common.BLOCK_SIZE))
+		return false
+	}
+
+	source := tokens[3]
+
+	if replicateBlock(server.Directory, blockName, blockSize, source) {
+		if !common.SendMessage(conn, "OK") {
+			return false
+		}
+	} else {
+		common.SendMessage(conn, "ERROR")
+		return false
+	}
+
+	return true
+}
+
+func (server *Server) handleInfo(conn net.Conn) bool {
+	server.Mutex.Lock()
+	response := fmt.Sprintf("ID: %s, %d files, %d blocks, %d nodes\n",
+		server.ID,
+		len(server.Files),
+		len(server.BlockToNodes),
+		len(server.Nodes))
+	server.Mutex.Unlock()
+
+	if common.SendAll(conn, []byte(response), len(response)) < 0 {
+		conn.Close()
+		return false
+	}
+
+	return true
+}
+
+func (server *Server) handleGetLeader(conn net.Conn) bool {
+	_, err := conn.Write([]byte(server.GetLeaderNode() + "\n"))
+	if err != nil {
+		conn.Close()
+		return false
+	}
+
+	return true
 }

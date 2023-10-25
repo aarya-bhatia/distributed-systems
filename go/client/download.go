@@ -4,37 +4,10 @@ import (
 	"bufio"
 	"fmt"
 	"math/rand"
-	"net"
 	"os"
 	"strconv"
 	"strings"
 )
-
-// This helps reuse same TCP connection to download multiple blocks from a replica
-// Maps replcia address to connection
-var connections map[string]net.Conn = make(map[string]net.Conn)
-
-func getConnection(addr string) net.Conn {
-	if _, ok := connections[addr]; !ok {
-		conn, err := net.Dial("tcp", addr)
-		if err != nil {
-			Log.Warn("Failed to connect to", addr)
-			return nil
-		}
-
-		Log.Info("Connected to", addr)
-		connections[addr] = conn
-	}
-
-	return connections[addr]
-}
-
-func closeConnections() {
-	for addr, conn := range connections {
-		Log.Info("Closing connection with", addr)
-		conn.Close()
-	}
-}
 
 func DownloadFile(localFilename string, remoteFilename string) bool {
 	defer closeConnections()

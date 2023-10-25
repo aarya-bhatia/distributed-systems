@@ -8,6 +8,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/exec"
 	"strings"
 )
 
@@ -66,8 +67,12 @@ func main() {
 		Log.Fatal("Unknown Server")
 	}
 
-	if !exists(dbDirectory) {
-		Log.Fatal("Directory does not exist")
+	if exec.Command("rm", "-rf", dbDirectory).Run() != nil {
+		Log.Fatal("rm failed")
+	}
+
+	if exec.Command("mkdir", dbDirectory).Run() != nil {
+		Log.Fatal("mkdir failed")
 	}
 
 	Log.Info("Directory: ", dbDirectory)
@@ -106,6 +111,7 @@ func main() {
 		}
 	}
 
+	// run server forever
 	<-make(chan bool)
 }
 

@@ -16,6 +16,16 @@ func UploadFile(localFilename string, remoteFilename string) bool {
 	var blockSize int
 	var blockData []byte = make([]byte, common.BLOCK_SIZE)
 
+	connections := make(map[string]net.Conn)
+	result := make(map[string][]string)
+
+	defer func() {
+		for addr, connection := range connections {
+			Log.Info("Closing connection with", addr)
+			connection.Close()
+		}
+	}()
+
 	info, err := os.Stat(localFilename)
 	if err != nil {
 		Log.Warn(err)
@@ -45,18 +55,34 @@ func UploadFile(localFilename string, remoteFilename string) bool {
 
 	reader := bufio.NewReader(server)
 
+	line, err := reader.ReadString('\n')
+	if err != nil {
+		return false
+	}
+
+	if line[:len(line)-1] == "ERROR" {
+		line, _ = reader.ReadString('\n') // Read error message on next line
+		Log.Warn("ERROR", line)
+		return false
+	}
+
 	for {
 		line, err := reader.ReadString('\n')
 		if err != nil {
-			Log.Warn(err)
-			break
+			return false
 		}
 
 		line = line[:len(line)-1]
 		Log.Debug("Received:", line)
+
 		tokens := strings.Split(line, " ")
-		if len(tokens) != 2 {
+		if tokens[0] == "END" {
 			break
+		}
+
+		if len(tokens) < 2 {
+			Log.Warn("Illegal response")
+			return false
 		}
 
 		replicas := strings.Split(tokens[1], ",")
@@ -74,29 +100,41 @@ func UploadFile(localFilename string, remoteFilename string) bool {
 		// 	return false
 		// }
 
-		if !UploadBlockSync(server, info) {
+		if !UploadBlockSync(info, connections, result) {
 			return false
 		}
 
 	}
 
-	server.Write([]byte("END\n"))
-	return true
-}
+	for block, replicas := range result {
+		Log.Info("== RESULT", block, replicas)
 
-func UploadBlockSync(server net.Conn, info *UploadInfo) bool {
-	for _, replica := range info.replicas {
-		Log.Debugf("Uploading block %s (%d bytes) to %s\n", info.blockName, info.blockSize, replica)
-
-		conn, err := net.Dial("tcp", replica)
-		if err != nil {
+		if !common.SendMessage(server, fmt.Sprintf("%s %s\n", block, strings.Join(replicas, ","))) {
 			return false
 		}
 
-		defer conn.Close()
-		Log.Debug("Connected to ", replica)
+		Log.Debug("Sent update to server for block", block)
+	}
 
-		_, err = conn.Write([]byte(fmt.Sprintf("UPLOAD %s %d\n", info.blockName, info.blockSize)))
+	return common.SendMessage(server, "END")
+}
+
+func UploadBlockSync(info *UploadInfo, connections map[string]net.Conn, result map[string][]string) bool {
+	for _, replica := range info.replicas {
+		Log.Debugf("Uploading block %s (%d bytes) to %s\n", info.blockName, info.blockSize, replica)
+
+		if _, ok := connections[replica]; !ok {
+			conn, err := net.Dial("tcp", replica)
+			if err != nil {
+				return false
+			}
+			Log.Debug("Connected to ", replica)
+			connections[replica] = conn
+		}
+
+		conn := connections[replica]
+
+		_, err := conn.Write([]byte(fmt.Sprintf("UPLOAD %s %d\n", info.blockName, info.blockSize)))
 		if err != nil {
 			return false
 		}
@@ -115,12 +153,13 @@ func UploadBlockSync(server net.Conn, info *UploadInfo) bool {
 
 		Log.Debugf("Sent block (%d bytes) to %s\n", info.blockSize, replica)
 
-		_, err = server.Write([]byte(fmt.Sprintf("%s %s\n", info.blockName, replica)))
-		if err != nil {
+		if !common.GetOKMessage(conn) {
 			return false
 		}
 
-		Log.Debug("Sent update to server")
+		Log.Debug("Got OK from ", replica)
+
+		result[info.blockName] = append(result[info.blockName], replica)
 	}
 
 	return true

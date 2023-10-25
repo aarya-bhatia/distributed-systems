@@ -39,10 +39,9 @@ type UploadState struct {
 	busyNodes      map[string]bool
 	completedNodes priqueue.PriorityQueue
 	mutex          sync.Mutex
-	// cond           sync.Cond
 }
 
-const UPLOADER_INTERVAL = 150 * time.Millisecond
+const UPLOADER_INTERVAL = 0 // 100 * time.Millisecond
 const SCHEDULER_INTERVAL = 100 * time.Millisecond
 
 func StartFastUpload(info *UploadInfo) bool {
@@ -52,7 +51,6 @@ func StartFastUpload(info *UploadInfo) bool {
 	state.pendingNodes = connectAllReplica(info.replicas)
 	state.busyNodes = make(map[string]bool, 0)
 	state.completedNodes = make([]*priqueue.Item, 0)
-	// state.cond = *sync.NewCond(&state.mutex)
 
 	heap.Init(&state.completedNodes)
 
