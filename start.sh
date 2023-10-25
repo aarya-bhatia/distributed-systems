@@ -1,18 +1,15 @@
 #!/bin/bash
 
 GIT_BRANCH=main
-
-MP1_LOGS=$HOME/mp1.log
-MP2_LOGS=$HOME/mp2.log
-MP3_LOGS=$HOME/mp3.log
-
-MP1_PORT=3000
-MP2_PORT=6000
-MP3_PORT=5000
-
 CS425_REPO=$HOME/cs425
 
+MP1_LOGS=$HOME/mp1.log
+MP1_PORT=3000
+LOGS=$HOME/log
+
 cd $HOME
+
+rm -rf *.log $LOGS
 
 mkdir -p .ssh/
 
@@ -29,31 +26,27 @@ if [ ! -d $CS425_REPO ]; then
 fi
 
 cd $CS425_REPO
+git reset HEAD
 git checkout $GIT_BRANCH || git checkout -b $GIT_BRANCH
 git pull origin $GIT_BRANCH
 
-cd $CS425_REPO/mp1
-make
-pkill -f bin/server
-nohup bin/server $MP1_PORT >$MP1_LOGS 2>&1 &
-echo "MP1 Server is running at $(hostname):$MP1_PORT$"
+# start shell server
+if ! pgrep -f bin/server >/dev/null; then
+	cd $CS425_REPO/mp1
+	make
+	pkill -f bin/server
+	nohup bin/server $MP1_PORT >$MP1_LOGS 2>&1 &
+	echo "shell server is running at $(hostname):$MP1_PORT$"
+fi
 
-# cd $CS425_REPO/mp2
-# make
-# pkill -f ./main
-# sleep 10
-# echo -n "" > $MP2_LOGS
-# nohup ./main -p $MP2_PORT -l "info" >$MP2_LOGS 2>&1 &
-# echo "MP2 Server is running at $(hostname):$MP2_PORT$"
+# Restart filesystem and failure detector server
+cd $CS425_REPO/go
+pkill -f "go run"
+sleep 10 # wait for other vms to die
+rm -rf db
+mkdir -p db
+go mod tidy
+go build
+nohup ./cs425 -h $(hostname) >$LOGS 2>&1 &
+echo "SDFS server is running at $(hostname)"
 
-cd $CS425_REPO/mp3/server
-make
-
-cd $CS425_REPO/mp3/client
-make
-
-# pkill -f ./main
-# sleep 10
-# echo -n "" > $MP3_LOGS
-# nohup ./main -p $MP3_PORT -l "info" >$MP2_LOGS 2>&1 &
-# echo "MP2 Server is running at $(hostname):$MP2_PORT$"
