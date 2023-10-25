@@ -127,10 +127,6 @@ var LocalCluster = []Node{
 
 var Cluster []Node = LocalCluster
 
-func GetNode(id int) Node {
-	return Cluster[id-1]
-}
-
 func GetNodeByAddress(hostname string, udpPort int) *Node {
 	for _, node := range Cluster {
 		if node.Hostname == hostname && node.UDPPort == udpPort {
@@ -148,6 +144,7 @@ func GetHash(s string, N int) int {
 	return int(hashValue % uint32(N))
 }
 
+// Returns block name using the convention filename:version:blockNumber
 func GetBlockName(filename string, version int, blockNum int) string {
 	return fmt.Sprintf("%s:%d:%d", filename, version, blockNum)
 }
@@ -161,6 +158,7 @@ func GetNumFileBlocks(fileSize int64) int {
 	return n
 }
 
+// Sends message to given connection and returns true if successful
 func SendMessage(conn net.Conn, message string) bool {
 	if strings.LastIndex(message, "\n") != len(message)-1 {
 		message += "\n"
@@ -169,6 +167,7 @@ func SendMessage(conn net.Conn, message string) bool {
 	return SendAll(conn, []byte(message), len(message)) == len(message)
 }
 
+// Returns true if the next message from connection is an OK
 func GetOKMessage(server net.Conn) bool {
 	buffer := make([]byte, MIN_BUFFER_SIZE)
 	n, err := server.Read(buffer)
@@ -177,7 +176,7 @@ func GetOKMessage(server net.Conn) bool {
 		return false
 	}
 
-	Log.Debugf("Received %d bytes\n", n)
+	// Log.Debugf("Received %d bytes\n", n)
 	message := string(buffer[:n])
 
 	if strings.Index(message, "OK") != 0 {
@@ -202,11 +201,11 @@ func SendAll(conn net.Conn, buffer []byte, count int) int {
 		sent += n
 	}
 
-	Log.Debugf("Sent %d bytes to %s\n", sent, conn.RemoteAddr())
-
+	// Log.Debugf("Sent %d bytes to %s\n", sent, conn.RemoteAddr())
 	return sent
 }
 
+// Remove element at index i from slice and return new slice
 func RemoveIndex(arr []int, i int) []int {
 	if i < 0 || i >= len(arr) {
 		return arr
@@ -217,6 +216,7 @@ func RemoveIndex(arr []int, i int) []int {
 	return arr[:n-1]
 }
 
+// Writes all bytes of given file and returns true if successful
 func WriteFile(directory string, filename string, buffer []byte, blockSize int) bool {
 	filepath := fmt.Sprintf("%s/%s", directory, filename)
 	file, err := os.OpenFile(filepath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0666)
@@ -235,6 +235,7 @@ func WriteFile(directory string, filename string, buffer []byte, blockSize int) 
 	return true
 }
 
+// Returns all bytes of given file or nil
 func ReadFile(directory string, filename string) []byte {
 	filepath := fmt.Sprintf("%s/%s", directory, filename)
 	file, err := os.Open(filepath)
@@ -252,6 +253,7 @@ func ReadFile(directory string, filename string) []byte {
 	return buffer
 }
 
+// Return list of file entries in directory which include name and size of file
 func GetFilesInDirectory(directoryPath string) ([]FileEntry, error) {
 	var files []FileEntry
 
@@ -273,4 +275,29 @@ func GetFilesInDirectory(directoryPath string) ([]FileEntry, error) {
 	}
 
 	return files, nil
+}
+
+// Return number of immediate files in directory
+func GetFileCountInDirectory(directory string) int {
+	c := 0
+
+	dir, err := os.Open(directory)
+	if err != nil {
+		return 0
+	}
+
+	defer dir.Close()
+
+	dirEntries, err := dir.Readdir(0)
+	if err != nil {
+		return 0
+	}
+
+	for _, entry := range dirEntries {
+		if !entry.IsDir() {
+			c++
+		}
+	}
+
+	return c
 }

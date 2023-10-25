@@ -59,23 +59,20 @@ func uploadBlock(directory string, client net.Conn, blockName string, blockSize 
 // Download a block from source node to replicate it at current node
 func replicateBlock(directory string, blockName string, blockSize int, source string) bool {
 	Log.Debugf("To replicate block %s from host %s\n", blockName, source)
-	request := fmt.Sprintf("DOWNLOAD %s\n", blockName)
-	conn, err := net.Dial("tcp", source)
+	repliaConn, err := net.Dial("tcp", source)
 	if err != nil {
 		return false
 	}
+	defer repliaConn.Close()
 
-	defer conn.Close()
-
-	_, err = conn.Write([]byte(request))
-	if err != nil {
+	if !common.SendMessage(repliaConn, fmt.Sprintf("DOWNLOAD %s\n", blockName)) {
 		return false
 	}
 
 	buffer := make([]byte, common.BLOCK_SIZE)
 	size := 0
 	for size < blockSize {
-		n, err := conn.Read(buffer[size:])
+		n, err := repliaConn.Read(buffer[size:])
 		if err != nil {
 			return false
 		}
@@ -85,9 +82,5 @@ func replicateBlock(directory string, blockName string, blockSize int, source st
 		size += n
 	}
 
-	if !common.WriteFile(directory, blockName, buffer, size) {
-		return false
-	}
-
-	return true
+	return common.WriteFile(directory, blockName, buffer, size)
 }

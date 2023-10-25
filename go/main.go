@@ -139,6 +139,14 @@ func handleCommand(server *filesystem.Server, command string) {
 		}
 	} else if command == "info" {
 		fmt.Printf("Hostname: %s, Port: %d\n", server.Hostname, server.Port)
-		fmt.Printf("Num files: %d, Num blocks: %d, Num nodes: %d\n", len(server.Files), len(server.BlockToNodes), len(server.NodesToBlocks))
+		server.Mutex.Lock()
+
+		fmt.Printf("Server ID: %s\nTotal files: %d\nNum alive nodes: %d\nNum disk blocks: %d\n",
+			server.ID,
+			len(server.Files),
+			len(server.Nodes),
+			common.GetFileCountInDirectory(server.Directory))
+
+		server.Mutex.Unlock()
 	}
 }

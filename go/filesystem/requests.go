@@ -83,11 +83,7 @@ func (server *Server) handleConnection(conn net.Conn) {
 				return
 			}
 
-		case verb == "INFO":
-			if !server.handleInfo(conn) {
-				return
-			}
-
+		// client exit
 		case verb == "BYE":
 			return
 
@@ -175,12 +171,7 @@ func (server *Server) handleDownloadBlock(conn net.Conn, tokens []string) bool {
 		return false
 	}
 
-	if !downloadBlock(server.Directory, conn, tokens[1]) {
-		conn.Close()
-		return false
-	}
-
-	return true
+	return downloadBlock(server.Directory, conn, tokens[1])
 }
 
 func (server *Server) handleAddBlock(conn net.Conn, tokens []string) bool {
@@ -204,23 +195,6 @@ func (server *Server) handleAddBlock(conn net.Conn, tokens []string) bool {
 		}
 	} else {
 		common.SendMessage(conn, "ERROR")
-		return false
-	}
-
-	return true
-}
-
-func (server *Server) handleInfo(conn net.Conn) bool {
-	server.Mutex.Lock()
-	response := fmt.Sprintf("ID: %s, %d files, %d blocks, %d nodes\n",
-		server.ID,
-		len(server.Files),
-		len(server.BlockToNodes),
-		len(server.Nodes))
-	server.Mutex.Unlock()
-
-	if common.SendAll(conn, []byte(response), len(response)) < 0 {
-		conn.Close()
 		return false
 	}
 

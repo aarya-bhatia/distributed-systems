@@ -111,9 +111,8 @@ func (s *Server) sendRebalanceRequests(replica string, requests []string) {
 
 		s.BlockToNodes[blockName] = append(s.BlockToNodes[blockName], replica)
 		s.NodesToBlocks[replica] = append(s.NodesToBlocks[replica], blockName)
-		Log.Debugf("Updated block metadata %s: %v", blockName, s.BlockToNodes[blockName])
-		Log.Debugf("Updated node metadata %s: %v", replica, s.NodesToBlocks[replica])
-
+		// Log.Debugf("Updated block metadata %s: %v", blockName, s.BlockToNodes[blockName])
+		// Log.Debugf("Updated node metadata %s: %v", replica, s.NodesToBlocks[replica])
 		s.Mutex.Unlock()
 	}
 }
