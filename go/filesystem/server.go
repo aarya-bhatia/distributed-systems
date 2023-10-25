@@ -73,7 +73,7 @@ func (server *Server) Start() {
 	Log.Infof("TCP Server is listening on port %d...\n", server.Port)
 
 	go server.pollTasks()
-	go server.startRebalanceRoutine()
+	// go server.startRebalanceRoutine()
 
 	for {
 		conn, err := listener.Accept()

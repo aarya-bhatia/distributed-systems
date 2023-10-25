@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"cs425/common"
 	"fmt"
+	"net"
 	"os"
 	"strings"
 )
@@ -68,58 +69,58 @@ func UploadFile(localFilename string, remoteFilename string) bool {
 		}
 
 		info := &UploadInfo{server: server, blockName: blockName, blockData: blockData, blockSize: blockSize, replicas: replicas}
+		//
+		// if !StartFastUpload(info) {
+		// 	return false
+		// }
 
-		if !StartFastUpload(info) {
+		if !UploadBlockSync(server, info) {
 			return false
 		}
-
-		/* if !UploadBlockSync(server, replicas, blockData, blockSize) {
-			return false
-		} */
 	}
 
 	server.Write([]byte("END\n"))
 	return true
 }
 
-// func UploadBlockSync(server net.Conn, replicas []string, fileBlock []byte, blockSize int) bool {
-// 	for _, replica := range replicas {
-// 		Log.Debugf("Uploading block %s (%d bytes) to %s\n", blockName, blockSize, replica)
-//
-// 		conn, err := net.Dial("tcp", replica)
-// 		if err != nil {
-// 			return false
-// 		}
-//
-// 		defer conn.Close()
-// 		Log.Debug("Connected to ", replica)
-//
-// 		_, err = conn.Write([]byte(fmt.Sprintf("UPLOAD %s %d\n", blockName, blockSize)))
-// 		if err != nil {
-// 			return false
-// 		}
-//
-// 		Log.Debug("Sent upload block request to ", replica)
-//
-// 		if !common.GetOKMessage(conn) {
-// 			return false
-// 		}
-//
-// 		Log.Debug("Got OK from ", replica)
-//
-// 		if common.SendAll(conn, fileBlock[:blockSize], blockSize) < 0 {
-// 			return false
-// 		}
-//
-// 		Log.Debugf("Sent block (%d bytes) to %s\n", blockSize, replica)
-//
-// 		_, err = server.Write([]byte(fmt.Sprintf("%s %s\n", blockName, replica)))
-// 		if err != nil {
-// 			return false
-// 		}
-//
-// 		Log.Debug("Sent update to server")
-// 	}
-//
-// 	return true
-// }
+func UploadBlockSync(server net.Conn, info *UploadInfo) bool {
+	for _, replica := range info.replicas {
+		Log.Debugf("Uploading block %s (%d bytes) to %s\n", info.blockName, info.blockSize, replica)
+
+		conn, err := net.Dial("tcp", replica)
+		if err != nil {
+			return false
+		}
+
+		defer conn.Close()
+		Log.Debug("Connected to ", replica)
+
+		_, err = conn.Write([]byte(fmt.Sprintf("UPLOAD %s %d\n", info.blockName, info.blockSize)))
+		if err != nil {
+			return false
+		}
+
+		Log.Debug("Sent upload block request to ", replica)
+
+		if !common.GetOKMessage(conn) {
+			return false
+		}
+
+		Log.Debug("Got OK from ", replica)
+
+		if common.SendAll(conn, info.blockData[:info.blockSize], info.blockSize) < 0 {
+			return false
+		}
+
+		Log.Debugf("Sent block (%d bytes) to %s\n", info.blockSize, replica)
+
+		_, err = server.Write([]byte(fmt.Sprintf("%s %s\n", info.blockName, replica)))
+		if err != nil {
+			return false
+		}
+
+		Log.Debug("Sent update to server")
+	}
+
+	return true
+}
