@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -30,7 +31,12 @@ func printUsage() {
 }
 
 func main() {
-	if os.Getenv("prod") == "true" {
+	hostname, err := os.Hostname()
+	if err != nil {
+		Log.Fatal(err)
+	}
+
+	if len(hostname) > 0 && strings.Index(hostname, "fa23") == 0 {
 		common.Cluster = common.ProdCluster
 		Log.Info("using prod cluster", common.Cluster)
 	} else {

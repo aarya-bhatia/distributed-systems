@@ -7,7 +7,6 @@ import (
 	"cs425/filesystem"
 	"flag"
 	"fmt"
-	"log"
 	"os"
 	"strings"
 )
@@ -35,7 +34,7 @@ func main() {
 
 	systemHostname, err := os.Hostname()
 	if err != nil {
-		log.Fatal(err)
+		Log.Fatal(err)
 	}
 
 	flag.IntVar(&udpPort, "udp", common.DEFAULT_UDP_PORT, "failure detector port")
@@ -64,7 +63,7 @@ func main() {
 	}
 
 	if found == nil {
-		log.Fatal("Unknown Server")
+		Log.Fatal("Unknown Server")
 	}
 
 	if !exists(dbDirectory) {
