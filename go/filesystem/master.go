@@ -27,7 +27,7 @@ func (server *Server) pollTasks() {
 			case task.Action == DOWNLOAD_FILE:
 				go server.downloadFileWrapper(task)
 			case task.Action == DELETE_FILE:
-				go server.deleteFile(task)
+				go server.deleteFileWrapper(task)
 			default:
 				Log.Warn("Invalid Action")
 				task.Client.Close()
@@ -72,6 +72,10 @@ func (server *Server) uploadFileWrapper(task *Request) {
 		}
 	}
 
+	if oldFile, ok := server.Files[task.Name]; ok {
+		go server.deleteFile(oldFile)
+	}
+
 	server.Files[task.Name] = newFile
 	server.Mutex.Unlock()
 
@@ -79,18 +83,11 @@ func (server *Server) uploadFileWrapper(task *Request) {
 	server.handleConnection(task.Client) // continue reading requests
 }
 
-func (server *Server) deleteFile(task *Request) {
-	defer server.getQueue(task.Name).WriteDone()
-	defer common.SendMessage(task.Client, "OK")
+func (server *Server) deleteFile(file File) {
+	Log.Debug("To delete", file)
 
 	server.Mutex.Lock()
 	defer server.Mutex.Unlock()
-
-	file, ok := server.Files[task.Name]
-	if !ok {
-		Log.Info("File not found", task.Name)
-		return
-	}
 
 	deleteTasks := make(map[string][]string)
 
@@ -109,8 +106,30 @@ func (server *Server) deleteFile(task *Request) {
 		go server.deleteBlocks(replica, blocks)
 	}
 
-	delete(server.Files, task.Name)
-	Log.Info("Deleted file", task.Name)
+	if found, ok := server.Files[file.Filename]; ok {
+		if found.Version == file.Version {
+			delete(server.Files, file.Filename)
+			Log.Info("Deleted file", file.Filename)
+		} else {
+			Log.Debug("Skip delete as file is outdated")
+		}
+	}
+}
+
+func (server *Server) deleteFileWrapper(task *Request) {
+	defer server.handleConnection(task.Client) // continue reading requests
+	defer server.getQueue(task.Name).WriteDone()
+	defer common.SendMessage(task.Client, "OK")
+
+	server.Mutex.Lock()
+	file, ok := server.Files[task.Name]
+	if !ok {
+		Log.Info("File not found", task.Name)
+		return
+	}
+	server.Mutex.Unlock()
+
+	server.deleteFile(file)
 }
 
 func (server *Server) deleteBlocks(replica string, blocks []string) {
