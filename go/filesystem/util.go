@@ -4,8 +4,11 @@ import (
 	"container/heap"
 	"cs425/common"
 	"cs425/priqueue"
+	"fmt"
+	"net"
 	"os"
 	"strings"
+
 	"github.com/jedib0t/go-pretty/v6/table"
 )
 
@@ -25,7 +28,7 @@ func (server *Server) GetLeaderNode() string {
 	server.Mutex.Lock()
 	defer server.Mutex.Unlock()
 	for _, node := range common.Cluster {
-		ID := node.Hostname + ":" + string(node.TCPPort)
+		ID := node.Hostname + ":" + fmt.Sprint(node.TCPPort)
 		if _, ok := server.Nodes[ID]; ok {
 			return ID
 		}
@@ -34,25 +37,40 @@ func (server *Server) GetLeaderNode() string {
 	return server.ID
 }
 
-// The first R nodes with the lowest ID are selected as metadata replicas.
-// func (s *Server) GetMetadataReplicaNodes(count int) []string {
-// s.Mutex.Lock()
-// defer s.Mutex.Unlock()
-// 	pq := make(priqueue.PriorityQueue, 0)
-// 	heap.Init(&pq)
-//
-// 	for node := range s.Nodes {
-// 		heap.Push(&pq, &priqueue.Item{Key: GetNodeHash(node), Value: node})
-// 	}
-//
-// 	res := []string{}
-// 	for r := 0; r < count && pq.Len() > 0; r++ {
-// 		item := heap.Pop(&pq).(*priqueue.Item)
-// 		res = append(res, item.Value.(string))
-// 	}
-//
-// 	return res
-// }
+// The first R alive nodes with the lowest ID are selected as metadata replicas.
+func (s *Server) GetMetadataReplicaNodes(count int) []string {
+	s.Mutex.Lock()
+	defer s.Mutex.Unlock()
+	res := []string{}
+	for _, node := range common.Cluster {
+		ID := node.Hostname + ":" + fmt.Sprint(node.TCPPort)
+		if _, ok := s.Nodes[ID]; ok {
+			res = append(res, ID)
+		}
+	}
+
+	return res
+}
+
+func (s *Server) IsMetadataReplicaNode(count int, node string) bool {
+	for _, replica := range s.GetMetadataReplicaNodes(count) {
+		if replica == node {
+			return true
+		}
+	}
+	return false
+}
+
+// get copy of replica connections
+func (server *Server) getMetadataReplicaConnections() []net.Conn {
+	server.Mutex.Lock()
+	metadataReplicaConnections := []net.Conn{}
+	for _, conn := range server.MetadataReplicaConn {
+		metadataReplicaConnections = append(metadataReplicaConnections, conn)
+	}
+	server.Mutex.Unlock()
+	return metadataReplicaConnections
+}
 
 // Get the `count` nearest nodes to the file hash
 func GetReplicaNodes(nodes []string, filename string, count int) []string {
@@ -117,4 +135,34 @@ func (server *Server) PrintFileMetadata() {
 	t.AppendSeparator()
 	t.SetStyle(table.StyleLight)
 	t.Render()
+}
+
+// Get list of replicas where any file blocks are stored
+func (server *Server) getFileReplicaUnion(file File) []string {
+	server.Mutex.Lock()
+	defer server.Mutex.Unlock()
+
+	replicaSet := make(map[string]bool)
+
+	for i := 0; i < file.NumBlocks; i++ {
+		blockName := common.GetBlockName(file.Filename, file.Version, i)
+		replicas, ok := server.BlockToNodes[blockName]
+		if !ok {
+			continue
+		}
+
+		for _, replica := range replicas {
+			replicaSet[replica] = true
+		}
+	}
+
+	delete(replicaSet, server.ID) // do not add self
+
+	// return map keys
+	res := []string{}
+	for replica := range replicaSet {
+		res = append(res, replica)
+	}
+
+	return res
 }

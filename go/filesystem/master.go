@@ -5,7 +5,6 @@ import (
 	"cs425/common"
 	"fmt"
 	"net"
-	"os"
 	"strings"
 	"time"
 )
@@ -40,10 +39,14 @@ func (server *Server) pollTasks() {
 }
 
 func (server *Server) uploadFileWrapper(task *Request) {
+	defer server.handleConnection(task.Client)   // continue reading requests ( this is run last )
+	defer server.getQueue(task.Name).WriteDone() // signal write complete
+
 	aliveNodes := server.GetAliveNodes()
+	metadataReplicaConnections := server.getMetadataReplicaConnections()
 
 	server.Mutex.Lock()
-
+	// create metadata of new file
 	newFile := File{
 		Filename:  task.Name,
 		FileSize:  task.Size,
@@ -51,69 +54,93 @@ func (server *Server) uploadFileWrapper(task *Request) {
 		NumBlocks: common.GetNumFileBlocks(int64(task.Size)),
 	}
 
+	// set new file version if file already exists
 	if oldFile, ok := server.Files[task.Name]; ok {
 		newFile.Version = oldFile.Version + 1
 	}
-
 	server.Mutex.Unlock()
 
+	// to send replica list to client and wait for upload to finish
 	blocks, ok := uploadFile(task.Client, newFile, aliveNodes)
 	if !ok {
-		server.getQueue(task.Name).WriteDone()
+		common.SendMessage(task.Client, "UPLOAD_ERROR")
 		return
 	}
 
-	server.Mutex.Lock()
-
 	for block, replicas := range blocks {
+		// update metdata for new block
 		for _, replica := range replicas {
+			server.Mutex.Lock()
 			server.BlockToNodes[block] = append(server.BlockToNodes[block], replica)
 			server.NodesToBlocks[replica] = append(server.NodesToBlocks[replica], block)
+			server.Mutex.Unlock()
+		}
+
+		// replicate metadata for new blocks
+		if replicaBlockMetadata(metadataReplicaConnections, block, replicas) == 0 {
+			common.SendMessage(task.Client, "UPLOAD_ERROR")
+			return
 		}
 	}
 
+	// replicate metadata for new file
+	if replicateFileMetadata(metadataReplicaConnections, newFile) == 0 {
+		common.SendMessage(task.Client, "UPLOAD_ERROR")
+		return
+	}
+
+	// delete old file in background
 	if oldFile, ok := server.Files[task.Name]; ok {
 		go server.deleteFile(oldFile)
 	}
 
+	// set new file metdata
+	server.Mutex.Lock()
 	server.Files[task.Name] = newFile
 	server.Mutex.Unlock()
 
-	server.getQueue(task.Name).WriteDone()
-	server.handleConnection(task.Client) // continue reading requests
+	// upload complete
+	common.SendMessage(task.Client, "UPLOAD_OK")
 }
 
 func (server *Server) deleteFile(file File) {
-	Log.Debug("To delete", file)
+	replicas := server.getFileReplicaUnion(file)
+	if len(replicas) == 0 {
+		return
+	}
 
+	message := fmt.Sprintf("DELETE %s %d %d\n", file.Filename, file.Version, file.NumBlocks)
+
+	// Send delete message to all replicas where a block of file is stored
+	for _, replica := range replicas {
+		go func(addr string) {
+			conn, err := net.Dial("tcp", addr)
+			if err != nil {
+				return
+			}
+			if common.SendMessage(conn, message) {
+				if common.GetOKMessage(conn) {
+					Log.Debugf("File %s deleted from node %s", file.Filename, addr)
+				}
+			}
+		}(replica)
+	}
+
+	// Send delete message to all metadata replicas
 	server.Mutex.Lock()
-	defer server.Mutex.Unlock()
-
-	deleteTasks := make(map[string][]string)
-
-	for i := 0; i < file.NumBlocks; i++ {
-		blockName := common.GetBlockName(file.Filename, file.Version, i)
-		replicas, ok := server.BlockToNodes[blockName]
-		if !ok {
-			continue
-		}
-		for _, replica := range replicas {
-			deleteTasks[replica] = append(deleteTasks[replica], blockName)
-		}
+	for addr, conn := range server.MetadataReplicaConn {
+		go func(addr string, conn net.Conn) {
+			if common.SendMessage(conn, message) {
+				if common.GetOKMessage(conn) {
+					Log.Debugf("File metadata %s deleted from node %s", file.Filename, addr)
+				}
+			}
+		}(addr, conn)
 	}
+	server.Mutex.Unlock()
 
-	for replica, blocks := range deleteTasks {
-		go server.deleteBlocks(replica, blocks)
-	}
-
-	if found, ok := server.Files[file.Filename]; ok {
-		if found.Version == file.Version {
-			delete(server.Files, file.Filename)
-			Log.Info("Deleted file", file.Filename)
-		} else {
-			Log.Debug("Skip delete as file is outdated")
-		}
-	}
+	// Delete all file metadata and disk blocks at server unless newer version of file exists
+	server.DeleteFileAndBlocks(file)
 }
 
 func (server *Server) deleteFileWrapper(task *Request) {
@@ -121,70 +148,18 @@ func (server *Server) deleteFileWrapper(task *Request) {
 	defer server.getQueue(task.Name).WriteDone()
 	defer common.SendMessage(task.Client, "OK")
 
+	Log.Debug("To delete", task.Name)
+
 	server.Mutex.Lock()
 	file, ok := server.Files[task.Name]
-	if !ok {
-		Log.Info("File not found", task.Name)
-		return
-	}
 	server.Mutex.Unlock()
 
+	// file not exist
+	if !ok {
+		return
+	}
+
 	server.deleteFile(file)
-}
-
-func (server *Server) deleteBlocks(replica string, blocks []string) {
-	Log.Debugf("To delete %d block at node %s", len(blocks), replica)
-	blocksDeleted := []string{}
-
-	defer func() {
-		server.Mutex.Lock()
-
-		for _, block := range blocksDeleted {
-			server.BlockToNodes[block] = common.RemoveElement(server.BlockToNodes[block], replica)
-			server.NodesToBlocks[replica] = common.RemoveElement(server.NodesToBlocks[replica], block)
-		}
-
-		server.Mutex.Unlock()
-	}()
-
-	if replica == server.ID {
-		for _, block := range blocks {
-			if os.Remove(server.Directory+"/"+block) == nil {
-				Log.Debug("Deleted block", block)
-				blocksDeleted = append(blocksDeleted, block)
-			} else {
-				Log.Warn("Failed to delete block", block)
-			}
-		}
-		return
-	}
-
-	conn, err := net.Dial("tcp", replica)
-	if err != nil {
-		return
-	}
-
-	buffer := make([]byte, common.MIN_BUFFER_SIZE)
-
-	for _, block := range blocks {
-		if !common.SendMessage(conn, fmt.Sprintf("DELETE %s", block)) {
-			return
-		}
-
-		n, err := conn.Read(buffer)
-		if err != nil {
-			return
-		}
-
-		line := string(buffer[:n-1])
-		tokens := strings.Split(line, " ")
-		if len(tokens) < 2 || tokens[0] != "DELETE_OK" {
-			break
-		}
-
-		Log.Debugf("Block %s deleted at node %s", tokens[1], replica)
-		blocksDeleted = append(blocksDeleted, tokens[1])
-	}
 }
 
 // Send replica list to client, wait for client to finish upload, update metdata with client's replica list
@@ -302,4 +277,59 @@ func downloadFile(client net.Conn, file File, blocks map[string][]string) bool {
 	client.Read(make([]byte, common.MIN_BUFFER_SIZE))
 	Log.Infof("Client %s finished download for file %s\n", client.RemoteAddr(), file.Filename)
 	return true
+}
+
+// To update metadata of new file at replicas and return number of replicas updated
+func replicateFileMetadata(connections []net.Conn, newFile File) int {
+	c := 0
+
+	message := fmt.Sprintf("SETFILE %s %d %d %d\n", newFile.Filename, newFile.Version, newFile.FileSize, newFile.NumBlocks)
+	buffer := make([]byte, common.MIN_BUFFER_SIZE)
+
+	for _, conn := range connections {
+		Log.Debug("replicating metadata for file", newFile.Filename)
+
+		if !common.SendMessage(conn, message) {
+			continue
+		}
+
+		n, err := conn.Read(buffer)
+		if err != nil {
+			continue
+		}
+
+		response := string(buffer[:n-1])
+		if response == "SETFILE_OK" {
+			c++
+		}
+	}
+
+	return c
+}
+
+func replicaBlockMetadata(connections []net.Conn, blockName string, replicas []string) int {
+	c := 0
+
+	message := fmt.Sprintf("SETBLOCK %s %s\n", blockName, strings.Join(replicas, ","))
+	buffer := make([]byte, common.MIN_BUFFER_SIZE)
+
+	for _, conn := range connections {
+		Log.Debugf("replicating metadata for block %s at %s", blockName, conn.RemoteAddr())
+
+		if !common.SendMessage(conn, message) {
+			continue
+		}
+
+		n, err := conn.Read(buffer)
+		if err != nil {
+			continue
+		}
+
+		response := string(buffer[:n-1])
+		if response == "SETBLOCK_OK" {
+			c++
+		}
+	}
+
+	return c
 }

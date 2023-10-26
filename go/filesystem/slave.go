@@ -4,25 +4,7 @@ import (
 	"cs425/common"
 	"fmt"
 	"net"
-	"os"
 )
-
-// Delete given block from disk
-func deleteBlock(directory string, client net.Conn, blockName string) bool {
-	path := directory + "/" + blockName
-
-	if !common.FileExists(path) {
-		return common.SendMessage(client, "DELETE_OK "+blockName)
-	}
-
-	err := os.Remove(path)
-	if err != nil {
-		Log.Warn(err)
-		return false
-	}
-
-	return common.SendMessage(client, "DELETE_OK "+blockName)
-}
 
 // Read a file block from disk and send it to client
 func downloadBlock(directory string, client net.Conn, blockName string) bool {

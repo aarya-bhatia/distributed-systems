@@ -19,7 +19,7 @@ const (
 	REPLICA_FACTOR  = 4
 
 	POLL_INTERVAL      = 1 * time.Second
-	REBALANCE_INTERVAL = 2 * time.Second
+	REBALANCE_INTERVAL = 3 * time.Second
 
 	JOIN_RETRY_TIMEOUT = time.Second * 10
 
@@ -62,10 +62,10 @@ type Logger struct {
 
 func NewLogger() *Logger {
 	l := new(Logger)
-	l.InfoLogger = log.New(os.Stderr, "INFO ", log.Ldate|log.Ltime|log.Lshortfile)
-	l.WarnLogger = log.New(os.Stderr, "WARN ", log.Ldate|log.Ltime|log.Lshortfile)
-	l.DebugLogger = log.New(os.Stderr, "DEBUG ", log.Ldate|log.Ltime|log.Lshortfile)
-	l.FatalLogger = log.New(os.Stderr, "ERROR ", log.Ldate|log.Ltime|log.Lshortfile)
+	l.InfoLogger = log.New(os.Stderr, "INFO ", log.Ldate|log.Ltime)
+	l.WarnLogger = log.New(os.Stderr, "WARN ", log.Ldate|log.Ltime)
+	l.DebugLogger = log.New(os.Stderr, "DEBUG ", log.Ldate|log.Ltime)
+	l.FatalLogger = log.New(os.Stderr, "ERROR ", log.Ldate|log.Ltime)
 
 	return l
 }
@@ -316,6 +316,7 @@ func FileExists(path string) bool {
 	return false
 }
 
+// Remove element if exists and return new slice
 func RemoveElement(array []string, target string) []string {
 	for i, element := range array {
 		if element == target {
@@ -326,4 +327,15 @@ func RemoveElement(array []string, target string) []string {
 	}
 
 	return array
+}
+
+// Add element if not exists and return new slice
+func AddUniqueElement(array []string, target string) []string {
+	for _, element := range array {
+		if element == target {
+			return array
+		}
+	}
+
+	return append(array, target)
 }

@@ -58,7 +58,7 @@ func main() {
 		Log.Fatal("rm failed")
 	}
 
-	if exec.Command("mkdir", dbDirectory).Run() != nil {
+	if exec.Command("mkdir", "-p", dbDirectory).Run() != nil {
 		Log.Fatal("mkdir failed")
 	}
 

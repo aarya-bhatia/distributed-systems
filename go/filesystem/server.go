@@ -4,6 +4,7 @@ import (
 	"cs425/common"
 	"fmt"
 	"net"
+	"os"
 	"sync"
 )
 
@@ -22,19 +23,19 @@ type Request struct {
 }
 
 type Server struct {
-	Hostname  string
-	Port      int
-	ID        string          // hostname:port
-	Directory string          // Path to save blocks on disk
-	Files     map[string]File // Files stored by system
-	Nodes     map[string]bool // Set of alive nodes
-	Mutex     sync.Mutex
+	Hostname            string
+	Port                int
+	ID                  string          // hostname:port
+	Directory           string          // Path to save blocks on disk
+	Files               map[string]File // Files stored by system
+	Nodes               map[string]bool // Set of alive nodes
+	Mutex               sync.Mutex
+	FileQueues          map[string]*Queue   // Handle read/write operations for each file
+	MetadataReplicaConn map[string]net.Conn // connection with metadata replica nodes
 
 	// A block is represented as "filename:version:blocknum"
 	NodesToBlocks map[string][]string // Maps node ID to the blocks they are storing
 	BlockToNodes  map[string][]string // Maps block to list of node IDs that store the block
-
-	FileQueues map[string]*Queue // Handle read/write operations for each file
 }
 
 const (
@@ -58,6 +59,7 @@ func NewServer(info common.Node, dbDirectory string) *Server {
 	server.Nodes = make(map[string]bool)
 	server.Nodes[server.ID] = true
 	server.NodesToBlocks[server.ID] = []string{}
+	server.MetadataReplicaConn = make(map[string]net.Conn)
 
 	return server
 }
@@ -79,11 +81,11 @@ func (server *Server) Start() {
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
-			Log.Warnf("Error accepting connection: %s\n", err)
+			// Log.Warnf("Error accepting connection: %s\n", err)
 			continue
 		}
 
-		Log.Debugf("Accepted connection from %s\n", conn.RemoteAddr())
+		// Log.Debugf("Accepted connection from %s\n", conn.RemoteAddr())
 		go server.handleConnection(conn)
 	}
 }
@@ -102,13 +104,13 @@ func (server *Server) getQueue(filename string) *Queue {
 
 func (s *Server) HandleNodeJoin(info *common.Node) {
 	s.Mutex.Lock()
-	defer s.Mutex.Unlock()
-
 	node := fmt.Sprintf("%s:%d", info.Hostname, info.TCPPort)
 	Log.Debug("node join: ", node)
-
 	s.Nodes[node] = true
 	s.NodesToBlocks[node] = []string{}
+	s.Mutex.Unlock()
+
+	s.addMetadataReplicaConnection(node)
 }
 
 func (s *Server) HandleNodeLeave(info *common.Node) {
@@ -134,46 +136,59 @@ func (s *Server) HandleNodeLeave(info *common.Node) {
 	}
 
 	delete(s.NodesToBlocks, node)
+
+	if found, ok := s.MetadataReplicaConn[node]; ok {
+		found.Close()
+		delete(s.MetadataReplicaConn, node)
+	}
 }
 
-/* func (s *Server) GetBlockSize(blockName string) (int, bool) {
-	s.Mutex.Lock()
-	defer s.Mutex.Unlock()
-	tokens := strings.Split(blockName, ":")
-	filename := tokens[0]
-	version, err := strconv.Atoi(tokens[1])
-	if err != nil {
-		return 0, false
-	}
+func (server *Server) DeleteFileAndBlocks(file File) {
+	server.Mutex.Lock()
+	defer server.Mutex.Unlock()
 
-	blockNum, err := strconv.Atoi(tokens[2])
-	if err != nil {
-		return 0, false
-	}
+	for i := 0; i < file.NumBlocks; i++ {
+		blockName := common.GetBlockName(file.Filename, file.Version, i)
 
-	file, ok := s.Files[filename]
-	if !ok {
-		return 0, false
-	}
-
-	if file.Version != version {
-		Log.Warn("Invalid block version", blockName)
-		return 0, false
-	}
-
-	if blockNum >= file.NumBlocks {
-		Log.Warn("Invalid block number", blockName)
-		return 0, false
-	}
-
-	if blockNum == file.NumBlocks-1 {
-		r := file.FileSize % common.BLOCK_SIZE
-		if r == 0 {
-			return common.BLOCK_SIZE, true
+		if replicas, ok := server.BlockToNodes[blockName]; ok {
+			for _, replica := range replicas {
+				server.NodesToBlocks[replica] = common.RemoveElement(server.NodesToBlocks[replica], blockName)
+			}
 		}
 
-		return r, true
+		if common.FileExists(server.Directory + "/" + blockName) {
+			os.Remove(server.Directory + "/" + blockName)
+		}
+
+		delete(server.BlockToNodes, blockName)
 	}
 
-	return common.BLOCK_SIZE, true
-} */
+	if found, ok := server.Files[file.Filename]; ok && found.Version > file.Version {
+		return
+	}
+
+	delete(server.Files, file.Filename)
+	Log.Warn("File was deleted:", file.Filename)
+}
+
+func (s *Server) addMetadataReplicaConnection(node string) {
+	if !s.IsMetadataReplicaNode(common.REPLICA_FACTOR, node) {
+		return
+	}
+
+	s.Mutex.Lock()
+	if found, ok := s.MetadataReplicaConn[node]; ok {
+		found.Close()
+	}
+	s.Mutex.Unlock()
+
+	conn, err := net.Dial("tcp", node)
+	if err != nil {
+		Log.Warn("Failed to connect", node)
+		return
+	}
+
+	s.Mutex.Lock()
+	s.MetadataReplicaConn[node] = conn
+	s.Mutex.Unlock()
+}

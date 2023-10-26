@@ -34,7 +34,7 @@ func (server *Server) handleConnection(conn net.Conn) {
 			return
 		}
 
-		Log.Debugf("Received request from %s: %s", conn.RemoteAddr(), string(buffer))
+		Log.Debugf("Request from %s: %s", conn.RemoteAddr(), string(buffer))
 		buffer = buffer[:len(buffer)-1] // Erase newline byte
 		tokens := strings.Split(buffer, " ")
 		verb := tokens[0]
@@ -59,7 +59,7 @@ func (server *Server) handleConnection(conn net.Conn) {
 			isQueued = true
 			return
 
-		// To delete file
+		// To request file delete
 		case verb == "DELETE_FILE":
 			if !server.handleDeleteFile(conn, tokens) {
 				return
@@ -80,12 +80,6 @@ func (server *Server) handleConnection(conn net.Conn) {
 				return
 			}
 
-		// To delete block at replica
-		case verb == "DELETE":
-			if !server.handleDeleteBlock(conn, tokens) {
-				return
-			}
-
 		// To request node to download the block from another source
 		case verb == "ADD_BLOCK":
 			if !server.handleAddBlock(conn, tokens) {
@@ -98,6 +92,18 @@ func (server *Server) handleConnection(conn net.Conn) {
 				return
 			}
 
+		// To udpate block metadata
+		case verb == "SETBLOCK":
+			server.handleSetBlock(conn, tokens)
+
+		// To udpate file metadata
+		case verb == "SETFILE":
+			server.handleSetFile(conn, tokens)
+
+		// To delete file blocks and metadata
+		case verb == "DELETE":
+			server.handleDelete(conn, tokens)
+
 		// client exit
 		case verb == "BYE":
 			return
@@ -109,6 +115,7 @@ func (server *Server) handleConnection(conn net.Conn) {
 	}
 }
 
+// Usage: UPLOAD_FILE <filename> <filesize>
 func (server *Server) handleUploadFile(conn net.Conn, tokens []string) bool {
 	if len(tokens) != 3 {
 		sendError(conn, "Usage: UPLOAD_FILE <filename> <filesize>")
@@ -133,6 +140,7 @@ func (server *Server) handleUploadFile(conn net.Conn, tokens []string) bool {
 	return true
 }
 
+// Usage: DELETE_FILE <filename>
 func (server *Server) handleDeleteFile(conn net.Conn, tokens []string) bool {
 	if len(tokens) != 2 {
 		sendError(conn, "Usage: DELETE_FILE <filename>")
@@ -151,6 +159,7 @@ func (server *Server) handleDeleteFile(conn net.Conn, tokens []string) bool {
 	return true
 }
 
+// Usage: DOWNLOAD_FILE <filename>
 func (server *Server) handleDownloadFile(conn net.Conn, tokens []string) bool {
 	if len(tokens) != 2 {
 		sendError(conn, "Usage: DOWNLOAD_FILE <filename>")
@@ -169,9 +178,10 @@ func (server *Server) handleDownloadFile(conn net.Conn, tokens []string) bool {
 	return true
 }
 
+// Usage: UPLOAD <blockName> <blockSize>
 func (server *Server) handleUploadBlock(conn net.Conn, tokens []string) bool {
 	if len(tokens) != 3 {
-		sendError(conn, "Usage: UPLOAD_BLOCK <blockname> <blocksize>")
+		sendError(conn, "Usage: UPLOAD <blockname> <blocksize>")
 		return false
 	}
 
@@ -198,6 +208,7 @@ func (server *Server) handleUploadBlock(conn net.Conn, tokens []string) bool {
 	return true
 }
 
+// Usage: DOWNLOAD <blockName>
 func (server *Server) handleDownloadBlock(conn net.Conn, tokens []string) bool {
 	if len(tokens) != 2 {
 		sendError(conn, "Usage: DOWNLOAD <blockname>")
@@ -207,15 +218,7 @@ func (server *Server) handleDownloadBlock(conn net.Conn, tokens []string) bool {
 	return downloadBlock(server.Directory, conn, tokens[1])
 }
 
-func (server *Server) handleDeleteBlock(conn net.Conn, tokens []string) bool {
-	if len(tokens) != 2 {
-		sendError(conn, "Usage: DELETE <blockname>")
-		return false
-	}
-
-	return deleteBlock(server.Directory, conn, tokens[1])
-}
-
+// Usage: ADD_BLOCK <name> <size> <source>
 func (server *Server) handleAddBlock(conn net.Conn, tokens []string) bool {
 	if len(tokens) != 4 {
 		sendError(conn, "Usage: ADD_BLOCK <name> <size> <source>")
@@ -227,6 +230,11 @@ func (server *Server) handleAddBlock(conn net.Conn, tokens []string) bool {
 	if err != nil || blockSize > common.BLOCK_SIZE {
 		sendError(conn, fmt.Sprintf("Block size must be positive integer less than %d", common.BLOCK_SIZE))
 		return false
+	}
+
+	// check if block already exists
+	if common.FileExists(server.Directory + "/" + blockName) {
+		return true
 	}
 
 	source := tokens[3]
@@ -243,6 +251,7 @@ func (server *Server) handleAddBlock(conn net.Conn, tokens []string) bool {
 	return true
 }
 
+// Usage: GET_LEADER
 func (server *Server) handleGetLeader(conn net.Conn) bool {
 	_, err := conn.Write([]byte(server.GetLeaderNode() + "\n"))
 	if err != nil {
@@ -251,4 +260,58 @@ func (server *Server) handleGetLeader(conn net.Conn) bool {
 	}
 
 	return true
+}
+
+// Usage: SETFILE <filename> <version> <size> <numBlocks>
+func (server *Server) handleSetFile(conn net.Conn, tokens []string) {
+	if len(tokens) != 5 {
+		common.SendMessage(conn, "SETFILE_ERROR")
+		return
+	}
+
+	filename := tokens[1]
+	version, _ := strconv.Atoi(tokens[2])
+	size, _ := strconv.Atoi(tokens[3])
+	numBlocks, _ := strconv.Atoi(tokens[4])
+
+	server.Mutex.Lock()
+	server.Files[filename] = File{Filename: filename, Version: version, FileSize: size, NumBlocks: numBlocks}
+	server.Mutex.Unlock()
+
+	common.SendMessage(conn, "SETFILE_OK")
+}
+
+// Usage: SETBLOCK <blockName> <replicas,...>
+func (server *Server) handleSetBlock(conn net.Conn, tokens []string) {
+	if len(tokens) != 3 {
+		common.SendMessage(conn, "SETBLOCK_ERROR")
+		return
+	}
+
+	blockName := tokens[1]
+	replicas := strings.Split(tokens[2], ",")
+
+	server.Mutex.Lock()
+	server.BlockToNodes[blockName] = replicas
+	for _, replica := range replicas {
+		common.AddUniqueElement(server.NodesToBlocks[replica], blockName)
+	}
+	server.Mutex.Unlock()
+
+	common.SendMessage(conn, "SETBLOCK_OK")
+}
+
+// Usage: DELETE <filename> <version> <numBlocks>
+func (server *Server) handleDelete(conn net.Conn, tokens []string) {
+	if len(tokens) != 4 {
+		common.SendMessage(conn, "ERROR")
+		return
+	}
+
+	filename := tokens[1]
+	version, _ := strconv.Atoi(tokens[2])
+	numBlocks, _ := strconv.Atoi(tokens[3])
+
+	server.DeleteFileAndBlocks(File{Filename: filename, Version: version, NumBlocks: numBlocks})
+	common.SendMessage(conn, "OK")
 }

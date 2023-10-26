@@ -17,6 +17,8 @@ func makeSet(values []string) map[string]bool {
 	return res
 }
 
+// TODO: rebalance metadata
+
 // To periodically redistribute file blocks to replicas to maintain equal load
 func (s *Server) startRebalanceRoutine() {
 	Log.Debug("Starting rebalance routine")
@@ -61,6 +63,8 @@ func (s *Server) startRebalanceRoutine() {
 				}
 			}
 		}
+
+		delete(replicaTasks, s.ID)
 
 		s.Mutex.Unlock()
 

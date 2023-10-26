@@ -57,7 +57,7 @@ func (q *Queue) TryPop() *Request {
 			q.Reads = q.Reads[1:]
 			q.NumReader++
 			Log.Debug("A read task was dequeued!")
-			Log.Debug("Num readers: ", q.NumReader)
+			// Log.Debug("Num readers: ", q.NumReader)
 			return res
 		}
 	}
@@ -71,7 +71,7 @@ func (q *Queue) TryPop() *Request {
 			q.Writes = q.Writes[1:]
 			q.NumWriter++
 			Log.Debug("A write task was dequeued!")
-			Log.Debug("Num writers: ", q.NumWriter)
+			// Log.Debug("Num writers: ", q.NumWriter)
 			return res
 		}
 	}

@@ -11,6 +11,7 @@ import (
 
 const MIN_REPLICAS = 1
 
+// TODO: handle upload confirmation from master node
 func UploadFile(localFilename string, remoteFilename string) bool {
 	var blockName string
 	var blockSize int
@@ -116,7 +117,17 @@ func UploadFile(localFilename string, remoteFilename string) bool {
 		Log.Debug("Sent update to server for block", block)
 	}
 
-	return common.SendMessage(server, "END")
+	if !common.SendMessage(server, "END") {
+		return false
+	}
+
+	buffer := make([]byte, common.MIN_BUFFER_SIZE)
+	n, err := server.Read(buffer)
+	if err != nil {
+		return false
+	}
+
+	return string(buffer[:n-1]) == "UPLOAD_OK"
 }
 
 func UploadBlockSync(info *UploadInfo, connections map[string]net.Conn, result map[string][]string) bool {
