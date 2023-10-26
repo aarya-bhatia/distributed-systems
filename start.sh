@@ -2,7 +2,6 @@
 
 GIT_BRANCH=main
 CS425_REPO=$HOME/cs425
-
 MP1_LOGS=$HOME/mp1.log
 MP1_PORT=3000
 LOGS=$HOME/log
@@ -43,10 +42,7 @@ fi
 cd $CS425_REPO/go
 pkill -f "go run"
 sleep 10 # wait for other vms to die
-rm -rf db
-mkdir -p db
 go mod tidy
-go build
-nohup ./cs425 -h $(hostname) >$LOGS 2>&1 &
+nohup go run . >$LOGS 2>&1 &
 echo "SDFS server is running at $(hostname)"
 
