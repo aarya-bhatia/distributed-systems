@@ -40,6 +40,7 @@ type Server struct {
 const (
 	DOWNLOAD_FILE = 1
 	UPLOAD_FILE   = 2
+	DELETE_FILE   = 3
 )
 
 var Log *common.Logger = common.Log

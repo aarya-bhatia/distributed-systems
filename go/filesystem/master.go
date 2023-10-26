@@ -5,6 +5,7 @@ import (
 	"cs425/common"
 	"fmt"
 	"net"
+	"os"
 	"strings"
 	"time"
 )
@@ -25,6 +26,8 @@ func (server *Server) pollTasks() {
 				go server.uploadFileWrapper(task)
 			case task.Action == DOWNLOAD_FILE:
 				go server.downloadFileWrapper(task)
+			case task.Action == DELETE_FILE:
+				go server.deleteFile(task)
 			default:
 				Log.Warn("Invalid Action")
 				task.Client.Close()
@@ -74,6 +77,95 @@ func (server *Server) uploadFileWrapper(task *Request) {
 
 	server.getQueue(task.Name).WriteDone()
 	server.handleConnection(task.Client) // continue reading requests
+}
+
+func (server *Server) deleteFile(task *Request) {
+	defer server.getQueue(task.Name).WriteDone()
+	defer common.SendMessage(task.Client, "OK")
+
+	server.Mutex.Lock()
+	defer server.Mutex.Unlock()
+
+	file, ok := server.Files[task.Name]
+	if !ok {
+		Log.Info("File not found", task.Name)
+		return
+	}
+
+	deleteTasks := make(map[string][]string)
+
+	for i := 0; i < file.NumBlocks; i++ {
+		blockName := common.GetBlockName(file.Filename, file.Version, i)
+		replicas, ok := server.BlockToNodes[blockName]
+		if !ok {
+			continue
+		}
+		for _, replica := range replicas {
+			deleteTasks[replica] = append(deleteTasks[replica], blockName)
+		}
+	}
+
+	for replica, blocks := range deleteTasks {
+		go server.deleteBlocks(replica, blocks)
+	}
+
+	delete(server.Files, task.Name)
+	Log.Info("Deleted file", task.Name)
+}
+
+func (server *Server) deleteBlocks(replica string, blocks []string) {
+	Log.Debugf("To delete %d block at node %s", len(blocks), replica)
+	blocksDeleted := []string{}
+
+	defer func() {
+		server.Mutex.Lock()
+
+		for _, block := range blocksDeleted {
+			server.BlockToNodes[block] = common.RemoveElement(server.BlockToNodes[block], replica)
+			server.NodesToBlocks[replica] = common.RemoveElement(server.NodesToBlocks[replica], block)
+		}
+
+		server.Mutex.Unlock()
+	}()
+
+	if replica == server.ID {
+		for _, block := range blocks {
+			if os.Remove(server.Directory+"/"+block) == nil {
+				Log.Debug("Deleted block", block)
+				blocksDeleted = append(blocksDeleted, block)
+			} else {
+				Log.Warn("Failed to delete block", block)
+			}
+		}
+		return
+	}
+
+	conn, err := net.Dial("tcp", replica)
+	if err != nil {
+		return
+	}
+
+	buffer := make([]byte, common.MIN_BUFFER_SIZE)
+
+	for _, block := range blocks {
+		if !common.SendMessage(conn, fmt.Sprintf("DELETE %s", block)) {
+			return
+		}
+
+		n, err := conn.Read(buffer)
+		if err != nil {
+			return
+		}
+
+		line := string(buffer[:n-1])
+		tokens := strings.Split(line, " ")
+		if len(tokens) < 2 || tokens[0] != "DELETE_OK" {
+			break
+		}
+
+		Log.Debugf("Block %s deleted at node %s", tokens[1], replica)
+		blocksDeleted = append(blocksDeleted, tokens[1])
+	}
 }
 
 // Send replica list to client, wait for client to finish upload, update metdata with client's replica list

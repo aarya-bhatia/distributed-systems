@@ -14,19 +14,6 @@ import (
 
 var Log = common.Log
 
-func exists(path string) bool {
-	_, err := os.Stat(path)
-	if err == nil {
-		return true
-	}
-	if os.IsNotExist(err) {
-		Log.Warn(err)
-		return false
-	}
-	Log.Warn(err)
-	return false
-}
-
 func main() {
 	var err error
 	var hostname string

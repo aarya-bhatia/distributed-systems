@@ -59,6 +59,15 @@ func (server *Server) handleConnection(conn net.Conn) {
 			isQueued = true
 			return
 
+		// To delete file
+		case verb == "DELETE_FILE":
+			if !server.handleDeleteFile(conn, tokens) {
+				return
+			}
+
+			isQueued = true
+			return
+
 		// To upload block at replica
 		case verb == "UPLOAD":
 			if !server.handleUploadBlock(conn, tokens) {
@@ -68,6 +77,12 @@ func (server *Server) handleConnection(conn net.Conn) {
 		// To download block at replica
 		case verb == "DOWNLOAD":
 			if !server.handleDownloadBlock(conn, tokens) {
+				return
+			}
+
+		// To delete block at replica
+		case verb == "DELETE":
+			if !server.handleDeleteBlock(conn, tokens) {
 				return
 			}
 
@@ -113,6 +128,24 @@ func (server *Server) handleUploadFile(conn net.Conn, tokens []string) bool {
 		Client: conn,
 		Name:   filename,
 		Size:   filesize,
+	})
+
+	return true
+}
+
+func (server *Server) handleDeleteFile(conn net.Conn, tokens []string) bool {
+	if len(tokens) != 2 {
+		sendError(conn, "Usage: DELETE_FILE <filename>")
+		return false
+	}
+
+	filename := tokens[1]
+
+	// Add delete file request to queue and quit for now
+	server.getQueue(filename).PushWrite(&Request{
+		Action: DELETE_FILE,
+		Client: conn,
+		Name:   filename,
 	})
 
 	return true
@@ -172,6 +205,15 @@ func (server *Server) handleDownloadBlock(conn net.Conn, tokens []string) bool {
 	}
 
 	return downloadBlock(server.Directory, conn, tokens[1])
+}
+
+func (server *Server) handleDeleteBlock(conn net.Conn, tokens []string) bool {
+	if len(tokens) != 2 {
+		sendError(conn, "Usage: DELETE <blockname>")
+		return false
+	}
+
+	return deleteBlock(server.Directory, conn, tokens[1])
 }
 
 func (server *Server) handleAddBlock(conn net.Conn, tokens []string) bool {

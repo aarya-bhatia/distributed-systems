@@ -301,3 +301,29 @@ func GetFileCountInDirectory(directory string) int {
 
 	return c
 }
+
+// Returns true if given file exists
+func FileExists(path string) bool {
+	_, err := os.Stat(path)
+	if err == nil {
+		return true
+	}
+	if os.IsNotExist(err) {
+		Log.Warn(err)
+		return false
+	}
+	Log.Warn(err)
+	return false
+}
+
+func RemoveElement(array []string, target string) []string {
+	for i, element := range array {
+		if element == target {
+			n := len(array)
+			array[i], array[n-1] = array[n-1], array[i]
+			return array[:n-1]
+		}
+	}
+
+	return array
+}
