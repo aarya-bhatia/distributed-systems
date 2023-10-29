@@ -1,5 +1,5 @@
 CC=g++
-INCLUDES=-Isrc
+INCLUDES=-Iserver
 CFLAGS=-DDEBUG -D_GNU_SOURCE -std=c++14 -g \
 	   -Wall -Wextra -Werror -Wno-pointer-arith -pedantic -O0 \
 	  -Wno-gnu-zero-variadic-macro-arguments \
@@ -11,23 +11,19 @@ LDFLAGS=-pthread
 
 .PHONY: all clean
 
-all: bin/server bin/client bin/test
+all: server
 
-bin/server: .obj/server.o .obj/common.o
+server: .obj/server.o .obj/common.o
 	mkdir -p bin
-	$(CC) $^ -o $@ $(LDFLAGS)
+	$(CC) $^ -o bin/server $(LDFLAGS)
 
-bin/test: .obj/test.o .obj/common.o
+test: .obj/test.o .obj/common.o
 	mkdir -p bin
-	$(CC) $^ -o $@ $(LDFLAGS)
+	$(CC) $^ -o bin/test $(LDFLAGS)
 
-.obj/%.o: src/server/%.cpp
+.obj/%.o: server/%.cpp
 	mkdir -p .obj
 	$(CC) $(CFLAGS) -o $@ $<
-
-bin/client: $(wildcard src/client/*.go)
-	go build src/client/*.go
-	mv client bin/client
 
 clean:
 	rm -rf .obj/ bin/
