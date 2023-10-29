@@ -53,11 +53,24 @@ func Connect() net.Conn {
 	return nil
 }
 
+func deleteFile(filename string) bool {
+	server := Connect()
+	defer server.Close()
+
+	if !common.SendMessage(server, "DELETE_FILE "+filename) {
+		return false
+	}
+
+	return common.GetOKMessage(server)
+}
+
 func printUsage() {
 	fmt.Println("Usage:")
 	fmt.Println("Upload file: put <local_filename> <remote_filename>")
 	fmt.Println("Download file: get <remote_filename> <local_filename>")
-	fmt.Println("Query file: query <remote_filename>")
+	fmt.Println("Delete file: delete <filename>")
+	fmt.Println()
+	// fmt.Println("Query file: query <remote_filename>")
 }
 
 func main() {
@@ -115,6 +128,17 @@ func main() {
 			elapsed := endTime - startTime
 			fmt.Println("Download time (sec): ", float64(elapsed)*1e-9)
 		}
+
+	} else if verb == "delete" {
+		if len(tokens) != 2 {
+			printUsage()
+			return
+		}
+
+		if deleteFile(tokens[1]) {
+			Log.Debug("Success!")
+		}
+
 	} else {
 		Log.Warn("Unknown command ", verb)
 		printUsage()
