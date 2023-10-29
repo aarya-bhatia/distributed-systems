@@ -41,8 +41,8 @@ fi
 # Restart filesystem and failure detector server
 cd $CS425_REPO/go
 pkill -f "go run"
-sleep 10 # wait for other vms to die
-go mod tidy
-nohup go run . >$LOGS 2>&1 &
-echo "SDFS server is running at $(hostname)"
+# sleep 10 # wait for other vms to die
+# go mod tidy
+# nohup go run . >$LOGS 2>&1 &
+# echo "SDFS server is running at $(hostname)"
 

@@ -176,15 +176,15 @@ func Worker(host *Host, client *Client) {
 		return
 	}
 
-	outputFilename := fmt.Sprintf("%s/vm%s.output", client.args.outputDirectory, host.id)
-	outputFile, err := os.OpenFile(outputFilename, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, DEFAULT_FILE_MODE)
-
-	if err != nil {
-		log.Println(err)
-		return
-	}
-
-	defer outputFile.Close()
+	// outputFilename := fmt.Sprintf("%s/vm%s.output", client.args.outputDirectory, host.id)
+	// outputFile, err := os.OpenFile(outputFilename, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, DEFAULT_FILE_MODE)
+	//
+	// if err != nil {
+	// 	log.Println(err)
+	// 	return
+	// }
+	//
+	// defer outputFile.Close()
 
 	// serverSignature := fmt.Sprintf("%s %s:%s", host.id, host.host, host.port)
 	// log.Println("Connected to: " + serverSignature)
@@ -224,7 +224,7 @@ func Worker(host *Host, client *Client) {
 			// outputStr := fmt.Sprintf("%s %s:%s %s", host.id, host.host, host.port, str)
 			outputStr := fmt.Sprintf("%s: %s", host.id, str)
 			client.queue.push(outputStr)
-			outputFile.WriteString(str)
+			// outputFile.WriteString(str)
 		}
 	}
 

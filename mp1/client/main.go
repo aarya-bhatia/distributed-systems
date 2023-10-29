@@ -3,20 +3,19 @@ package main
 import (
 	"flag"
 	"fmt"
-	"log"
+	// "log"
 	"os"
-	"os/exec"
+	// "os/exec"
 	// "path/filepath"
 	// "time"
 )
 
 func main() {
 	var args ClientArgs
-	var err error
+	// var err error
 
-	var reportsDirectory string
-
-	flag.StringVar(&reportsDirectory, "reports", "reports", "The directory to create the report file with current timestamp")
+	// var reportsDirectory string
+	// flag.StringVar(&reportsDirectory, "reports", "reports", "The directory to create the report file with current timestamp")
 
 	flag.StringVar(&args.hosts, "hosts", "hosts", "The file containing hosts in the format <id, hostname, port>")
 	flag.StringVar(&args.logsDirectory, "logs", "data", "The path containing the log files in format vm{i}.log")
@@ -42,17 +41,17 @@ func main() {
 		args.grep = "grep " + args.grep
 	}
 
-	err = exec.Command("mkdir", "-p", args.outputDirectory).Run()
-
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	err = exec.Command("mkdir", "-p", reportsDirectory).Run()
-
-	if err != nil {
-		log.Fatal(err)
-	}
+	// err = exec.Command("mkdir", "-p", args.outputDirectory).Run()
+	//
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
+	//
+	// err = exec.Command("mkdir", "-p", reportsDirectory).Run()
+	//
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
 
 	client := RunClient(args)
 
