@@ -186,8 +186,8 @@ func Worker(host *Host, client *Client) {
 
 	defer outputFile.Close()
 
-	serverSignature := fmt.Sprintf("%s %s:%s", host.id, host.host, host.port)
-	log.Println("Connected to: " + serverSignature)
+	// serverSignature := fmt.Sprintf("%s %s:%s", host.id, host.host, host.port)
+	// log.Println("Connected to: " + serverSignature)
 
 	serverLogFile := fmt.Sprintf("%s/vm%s.log", client.args.logsDirectory, host.id)
 
@@ -200,7 +200,7 @@ func Worker(host *Host, client *Client) {
 		command = client.args.command + "\n"
 	}
 
-	log.Print("Command: ", command)
+	// log.Print("Command: ", command)
 	_, err = conn.Write([]byte(command))
 	conn.(*net.TCPConn).CloseWrite()
 
@@ -221,7 +221,8 @@ func Worker(host *Host, client *Client) {
 			host.dataSize += len(str)
 			host.lines++
 
-			outputStr := fmt.Sprintf("%s %s:%s %s", host.id, host.host, host.port, str)
+			// outputStr := fmt.Sprintf("%s %s:%s %s", host.id, host.host, host.port, str)
+			outputStr := fmt.Sprintf("%s: %s", host.id, str)
 			client.queue.push(outputStr)
 			outputFile.WriteString(str)
 		}
