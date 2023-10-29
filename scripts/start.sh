@@ -5,6 +5,8 @@ CS425_REPO=$HOME/cs425
 MP1_LOGS=$HOME/mp1.log
 MP1_PORT=3000
 LOGS=$HOME/log
+TCP_PORT=5000
+UDP_PORT=6000
 
 cd $HOME
 
@@ -40,7 +42,12 @@ fi
 
 # Restart filesystem and failure detector server
 cd $CS425_REPO/go
-pkill -f "go run"
+if ! which nc >/dev/null; then
+	pkill -f "go run"
+else
+	echo "KILL" | nc localhost $TCP_PORT
+fi
+
 # sleep 10 # wait for other vms to die
 # go mod tidy
 # nohup go run . >$LOGS 2>&1 &
