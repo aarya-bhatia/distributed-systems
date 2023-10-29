@@ -5,6 +5,7 @@ import (
 	"cs425/common"
 	"fmt"
 	"net"
+	"os"
 	"strconv"
 	"strings"
 )
@@ -107,6 +108,10 @@ func (server *Server) handleConnection(conn net.Conn) {
 		// client exit
 		case verb == "BYE":
 			return
+
+		// exit server
+		case verb == "KILL":
+			os.Exit(1)
 
 		default:
 			Log.Warn("Unknown verb")
