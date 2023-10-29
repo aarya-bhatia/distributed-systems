@@ -32,7 +32,6 @@ func (s *Server) startRebalanceRoutine() {
 				block := common.GetBlockName(file.Filename, file.Version, i)
 				nodes, ok := s.BlockToNodes[block]
 				if !ok {
-					Log.Warn("Block is missing:", block)
 					continue
 				}
 
@@ -41,7 +40,6 @@ func (s *Server) startRebalanceRoutine() {
 				}
 
 				replicas := GetReplicaNodes(aliveNodes, block, common.REPLICA_FACTOR)
-
 				if len(replicas) == 0 {
 					continue
 				}

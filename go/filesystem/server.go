@@ -171,24 +171,38 @@ func (server *Server) DeleteFileAndBlocks(file File) {
 	Log.Warn("File was deleted:", file.Filename)
 }
 
-func (s *Server) addMetadataReplicaConnection(node string) {
+func (s *Server) addMetadataReplicaConnection(node string) bool {
 	if !s.IsMetadataReplicaNode(common.REPLICA_FACTOR, node) {
-		return
+		return false
 	}
-
-	s.Mutex.Lock()
-	if found, ok := s.MetadataReplicaConn[node]; ok {
-		found.Close()
-	}
-	s.Mutex.Unlock()
 
 	conn, err := net.Dial("tcp", node)
 	if err != nil {
 		Log.Warn("Failed to connect", node)
-		return
+		return false
 	}
 
 	s.Mutex.Lock()
+	defer s.Mutex.Unlock()
+
+	// close old connection if there is one
+	if found, ok := s.MetadataReplicaConn[node]; ok {
+		found.Close()
+	}
+
 	s.MetadataReplicaConn[node] = conn
-	s.Mutex.Unlock()
+
+	// replicata all metdata
+	for _, file := range s.Files {
+		go replicateFileMetadata([]net.Conn{conn}, file)
+
+		for i := 0; i < file.NumBlocks; i++ {
+			blockName := common.GetBlockName(file.Filename, file.Version, i)
+			go replicaBlockMetadata([]net.Conn{conn}, blockName, s.BlockToNodes[blockName])
+		}
+	}
+
+	// NOTE: rebalance routine will replicate data blocks
+
+	return true
 }

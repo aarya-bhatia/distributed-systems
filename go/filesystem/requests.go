@@ -228,27 +228,30 @@ func (server *Server) handleAddBlock(conn net.Conn, tokens []string) bool {
 	blockName := tokens[1]
 	blockSize, err := strconv.Atoi(tokens[2])
 	if err != nil || blockSize > common.BLOCK_SIZE {
-		sendError(conn, fmt.Sprintf("Block size must be positive integer less than %d", common.BLOCK_SIZE))
+		common.SendMessage(conn, "ERROR")
 		return false
 	}
 
 	// check if block already exists
 	if common.FileExists(server.Directory + "/" + blockName) {
-		return true
+		return common.SendMessage(conn, "OK")
 	}
 
 	source := tokens[3]
 
-	if replicateBlock(server.Directory, blockName, blockSize, source) {
-		if !common.SendMessage(conn, "OK") {
-			return false
-		}
-	} else {
+	if !replicateBlock(server.Directory, blockName, blockSize, source) {
 		common.SendMessage(conn, "ERROR")
+
 		return false
 	}
 
-	return true
+	// update metadata (only matters if this is a metadata replica)
+	server.Mutex.Lock()
+	server.BlockToNodes[blockName] = common.AddUniqueElement(server.BlockToNodes[blockName], server.ID)
+	server.NodesToBlocks[server.ID] = common.AddUniqueElement(server.NodesToBlocks[server.ID], blockName)
+	server.Mutex.Unlock()
+
+	return common.SendMessage(conn, "OK")
 }
 
 // Usage: GET_LEADER
