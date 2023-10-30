@@ -7,6 +7,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 )
 
 func DownloadFile(localFilename string, remoteFilename string) bool {
@@ -32,12 +33,20 @@ func DownloadFile(localFilename string, remoteFilename string) bool {
 	reader := bufio.NewReader(server)
 	fileSize := 0
 
+	var startTime int64 = 0
+	var endTime int64 = 0
+
 	Log.Debug("Reading file block list")
 	for {
 		line, err := reader.ReadString('\n')
 		if err != nil {
 			Log.Warn(err)
 			break
+		}
+
+		if fileSize == 0 {
+			Log.Info("Starting download now...")
+			startTime = time.Now().UnixNano()
 		}
 
 		line = line[:len(line)-1]
@@ -90,6 +99,9 @@ func DownloadFile(localFilename string, remoteFilename string) bool {
 
 		fileSize += blockSize
 	}
+
+	endTime = time.Now().UnixNano()
+	fmt.Printf("Downloaded in %f seconds", float64(endTime-startTime)*1e-9)
 
 	server.Write([]byte("OK\n"))
 	Log.Infof("Downloaded file %s with %d bytes\n", localFilename, fileSize)

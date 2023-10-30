@@ -13,13 +13,15 @@ import (
 func main() {
 	var args ClientArgs
 	// var err error
-
 	// var reportsDirectory string
 	// flag.StringVar(&reportsDirectory, "reports", "reports", "The directory to create the report file with current timestamp")
+	// flag.StringVar(&args.hosts, "hosts", "hosts", "The file containing hosts in the format <id, hostname, port>")
+	// flag.StringVar(&args.outputDirectory, "outputs", "outputs", "The path to store the output data from the server")
+	var quiet bool
 
-	flag.StringVar(&args.hosts, "hosts", "hosts", "The file containing hosts in the format <id, hostname, port>")
+	flag.BoolVar(&quiet, "q", false, "quiet")
+
 	flag.StringVar(&args.logsDirectory, "logs", "data", "The path containing the log files in format vm{i}.log")
-	flag.StringVar(&args.outputDirectory, "outputs", "outputs", "The path to store the output data from the server")
 	flag.BoolVar(&args.silence, "silence", false, "To suppress the output of the commands on stdout")
 	flag.StringVar(&args.command, "c", "", "The command to execute remotely. Either or 'grep' must be specified.")
 	flag.StringVar(&args.grep, "grep", "", "The grep query to execute remotely. Either 'command' or 'grep' must be specified.")
@@ -76,6 +78,8 @@ func main() {
 		}
 	}
 
-	fmt.Printf("Total lines received: %d\n", client.stat.totalLines)
-	fmt.Printf("Total hosts successful: %v out of %v\n", count, len(client.hosts))
+	if !quiet {
+		fmt.Printf("Total lines received: %d\n", client.stat.totalLines)
+		fmt.Printf("Total hosts successful: %v out of %v\n", count, len(client.hosts))
+	}
 }

@@ -52,7 +52,7 @@ func (q *Queue) TryPop() *Request {
 		if len(q.Reads) == 0 || q.Count >= 4 {
 			q.Mode = WRITING
 			q.Count = 0
-		} else {
+		} else if q.NumWriter == 0 {
 			res := q.Reads[0]
 			q.Reads = q.Reads[1:]
 			q.NumReader++
@@ -66,7 +66,7 @@ func (q *Queue) TryPop() *Request {
 		if len(q.Writes) == 0 || q.Count >= 4 {
 			q.Mode = READING
 			q.Count = 0
-		} else {
+		} else if q.NumReader == 0 {
 			res := q.Writes[0]
 			q.Writes = q.Writes[1:]
 			q.NumWriter++

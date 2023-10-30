@@ -10,7 +10,7 @@ UDP_PORT=6000
 
 cd $HOME
 
-rm -rf *.log $LOGS
+rm -rf log client.log *.out data/
 
 mkdir -p .ssh/
 
@@ -42,14 +42,18 @@ fi
 
 # Restart filesystem and failure detector server
 cd $CS425_REPO/go
-if ! which nc >/dev/null; then
-	pkill -f "go run"
-else
+
+if pgrep -f cs425 >/dev/null; then
 	echo "KILL" | nc localhost $TCP_PORT
 fi
 
-# sleep 10 # wait for other vms to die
-# go mod tidy
-# nohup go run . >$LOGS 2>&1 &
-# echo "SDFS server is running at $(hostname)"
+sleep 10 # wait for other vms to die
+go mod tidy
+nohup go run . >$LOGS 2>&1 &
+echo "SDFS server is running at $(hostname)"
+
+# Build client to home directory
+cd $CS425_REPO/go/client
+go build
+mv client $HOME/client
 

@@ -35,10 +35,11 @@ func (server *Server) handleConnection(conn net.Conn) {
 			return
 		}
 
-		Log.Debugf("Request from %s: %s", conn.RemoteAddr(), string(buffer))
 		buffer = buffer[:len(buffer)-1] // Erase newline byte
 		tokens := strings.Split(buffer, " ")
 		verb := tokens[0]
+
+		Log.Debugf("Request from %s: %s", conn.RemoteAddr(), verb)
 
 		switch {
 

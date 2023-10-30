@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"strings"
+	"time"
 )
 
 const MIN_REPLICAS = 1
@@ -67,6 +68,11 @@ func UploadFile(localFilename string, remoteFilename string) bool {
 		return false
 	}
 
+	Log.Info("Starting upload now...")
+
+	var startTime int64 = time.Now().UnixNano()
+	var endTime int64 = 0
+
 	for {
 		line, err := reader.ReadString('\n')
 		if err != nil {
@@ -126,6 +132,9 @@ func UploadFile(localFilename string, remoteFilename string) bool {
 	if err != nil {
 		return false
 	}
+
+	endTime = time.Now().UnixNano()
+	fmt.Printf("Uploaded in %f seconds", float64(endTime-startTime)*1e-9)
 
 	return string(buffer[:n-1]) == "UPLOAD_OK"
 }

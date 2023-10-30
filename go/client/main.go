@@ -74,7 +74,7 @@ func printUsage() {
 }
 
 func main() {
-	f, err := os.OpenFile(os.Getenv("HOME") + "/client.log", os.O_TRUNC|os.O_CREATE|os.O_RDWR, 0666)
+	f, err := os.OpenFile(os.Getenv("HOME") + "/client.log", os.O_APPEND|os.O_CREATE|os.O_RDWR, 0666)
 	if err != nil {
 		fmt.Printf("error opening file: %v", err)
 	}
@@ -120,7 +120,7 @@ func main() {
 			Log.Debug("Success!")
 			endTime := time.Now().UnixNano()
 			elapsed := endTime - startTime
-			fmt.Println("Upload time (sec): ", float64(elapsed)*1e-9)
+			fmt.Println("Total Upload time (sec): ", float64(elapsed)*1e-9)
 		}
 
 	} else if verb == "get" {
@@ -137,7 +137,7 @@ func main() {
 			Log.Debug("Success!")
 			endTime := time.Now().UnixNano()
 			elapsed := endTime - startTime
-			fmt.Println("Download time (sec): ", float64(elapsed)*1e-9)
+			fmt.Println("Total Download time (sec): ", float64(elapsed)*1e-9)
 		}
 
 	} else if verb == "delete" {

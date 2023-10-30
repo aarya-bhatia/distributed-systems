@@ -35,10 +35,9 @@ type ClientStat struct {
 
 // Struct of CLI arguments
 type ClientArgs struct {
-	hosts           string
 	command         string
 	grep            string
-	outputDirectory string
+	// outputDirectory string
 	logsDirectory   string
 	silence         bool
 }
@@ -74,7 +73,7 @@ func NewHost(id string, host string, port string) *Host {
 func RunClient(args ClientArgs) *Client {
 	client := &Client{}
 	client.args = args
-	client.hosts = readHosts(args.hosts)
+	client.hosts = readHosts()
 	client.finishedChannel = make(chan bool)
 	client.queue = &Queue[string]{}
 	client.queue.init()
@@ -133,17 +132,19 @@ func OutputConsumerRoutine(client *Client) {
 	}
 }
 
-// Read the hosts file and initialize host array
-func readHosts(filename string) []*Host {
+func readHosts() []*Host {
 	hosts := []*Host{}
-	file, err := os.Open(filename)
-	defer file.Close()
-	if err != nil {
-		log.Fatal(err)
-	}
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		line := scanner.Text()
+
+	reader := bufio.NewReader(os.Stdin)
+
+	for {
+		// Read a line from stdin
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			break // Reached EOF or encountered an error
+		}
+
+		line = line[:len(line)-1]
 
 		// Ignore lines that start with '!', are empty, or contain only whitespace
 		if strings.HasPrefix(line, "!") || strings.TrimSpace(line) == "" {
@@ -153,10 +154,6 @@ func readHosts(filename string) []*Host {
 		words := strings.Split(line, " ")
 		host := NewHost(words[0], words[1], words[2])
 		hosts = append(hosts, host)
-	}
-
-	if err := scanner.Err(); err != nil {
-		log.Fatal(err)
 	}
 
 	return hosts
