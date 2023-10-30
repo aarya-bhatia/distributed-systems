@@ -101,7 +101,7 @@ func DownloadFile(localFilename string, remoteFilename string) bool {
 	}
 
 	endTime = time.Now().UnixNano()
-	fmt.Printf("Downloaded in %f seconds", float64(endTime-startTime)*1e-9)
+	fmt.Printf("Downloaded in %f seconds\n", float64(endTime-startTime)*1e-9)
 
 	server.Write([]byte("OK\n"))
 	Log.Infof("Downloaded file %s with %d bytes\n", localFilename, fileSize)

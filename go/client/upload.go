@@ -134,7 +134,7 @@ func UploadFile(localFilename string, remoteFilename string) bool {
 	}
 
 	endTime = time.Now().UnixNano()
-	fmt.Printf("Uploaded in %f seconds", float64(endTime-startTime)*1e-9)
+	fmt.Printf("Uploaded in %f seconds\n", float64(endTime-startTime)*1e-9)
 
 	return string(buffer[:n-1]) == "UPLOAD_OK"
 }
