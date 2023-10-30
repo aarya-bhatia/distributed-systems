@@ -74,12 +74,23 @@ func printUsage() {
 }
 
 func main() {
+	f, err := os.OpenFile(os.Getenv("HOME") + "/client.log", os.O_TRUNC|os.O_CREATE|os.O_RDWR, 0666)
+	if err != nil {
+		fmt.Printf("error opening file: %v", err)
+	}
+	defer f.Close()
+
+	Log.DebugLogger.SetOutput(f)
+	Log.InfoLogger.SetOutput(f)
+	Log.WarnLogger.SetOutput(f)
+	Log.FatalLogger.SetOutput(f)
+
 	hostname, err := os.Hostname()
 	if err != nil {
 		Log.Fatal(err)
 	}
 
-	if strings.Index(os.Getenv("env"), "prod") == 0 || (len(hostname) > 0 && strings.Index(hostname, "fa23") == 0) {
+	if strings.Index(os.Getenv("env"), "prod") == 0 || (len(hostname) > 0 && strings.Index(hostname, "illinois.edu") > 0) {
 		common.Cluster = common.ProdCluster
 		Log.Info("using prod cluster", common.Cluster)
 	} else {
