@@ -104,20 +104,11 @@ func readHosts() []*Host {
 	reader := bufio.NewReader(os.Stdin)
 	line, _ := reader.ReadString('\n')
 	line = line[:len(line)-1]
-
 	hosts := []*Host{}
 
-	if line == "all" {
-		for _, hostname := range hostnames {
-			hosts = append(hosts, NewHost(hostname))
-		}
-
-		return hosts
-	}
-
-	for _, id := range strings.Split(line, " ") {
-		idx, _ := strconv.Atoi(id)
-		hosts = append(hosts, NewHost(hostnames[idx-1]))
+	for _, token := range strings.Split(line, " ") {
+		idx, _ := strconv.Atoi(token)
+		hosts = append(hosts, NewHost(hostnames[idx]))
 	}
 
 	return hosts
