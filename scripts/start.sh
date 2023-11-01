@@ -44,10 +44,10 @@ fi
 cd $CS425_REPO/go
 
 if pgrep -f cs425 >/dev/null; then
-	echo "KILL" | nc localhost $TCP_PORT
+	echo KILL | nc localhost $TCP_PORT
 fi
 
-sleep 10 # wait for other vms to die
+sleep 5 # wait for other vms to die
 go mod tidy
 nohup go run . >$LOGS 2>&1 &
 echo "SDFS server is running at $(hostname)"
