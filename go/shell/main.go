@@ -12,6 +12,7 @@ import (
 )
 
 var hostnames = []string{
+	"localhost",
 	"fa23-cs425-0701.cs.illinois.edu",
 	"fa23-cs425-0702.cs.illinois.edu",
 	"fa23-cs425-0703.cs.illinois.edu",
