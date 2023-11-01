@@ -31,11 +31,7 @@ struct Connection {
  *
  * Returns a status of SUCCESS or FAILURE.
  */
-int send_command_output(char **command, int client_sock) {
-  assert(command);
-  assert(command[0] != NULL);
-  assert(client_sock >= 0);
-
+int send_command_output(char command[], int client_sock) {
   int pipefd[2];
 
   if (pipe(pipefd) < 0) {
@@ -56,8 +52,8 @@ int send_command_output(char **command, int client_sock) {
     close(pipefd[READ]);
     dup2(pipefd[WRITE], 1);
     close(pipefd[WRITE]);
-    execvp(command[0], (char **)command);
-    log_error("cannot exec command %s", command[0]);
+    execlp("sh", "sh", "-c", command, NULL);
+    log_error("exec failed for %s", command);
     exit(1);
   } else {
     close(pipefd[WRITE]);
@@ -123,19 +119,12 @@ void *worker(void *args) {
   log_info("Request from client (%zu bytes) %s: %s", strlen(message),
            client_addr_str, message);
 
-  char **command = split_string(message);
-
-  if (send_command_output(command, conn->client_sock) == FAILURE) {
+  if (send_command_output(message, conn->client_sock) == FAILURE) {
     perror("send_command_output");
   }
 
   shutdown(conn->client_sock, SHUT_WR);
   close(conn->client_sock);
-
-  for (char **s = command; *s != NULL; s++) {
-    free(*s);
-  }
-  free(command);
 
   delete conn;
   return NULL;
