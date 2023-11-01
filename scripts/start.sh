@@ -31,18 +31,18 @@ git reset HEAD
 git checkout $GIT_BRANCH || git checkout -b $GIT_BRANCH
 git pull origin $GIT_BRANCH
 
+pkill -f bin/server
+pkill -f server
+
+cd $CS425_REPO/go
+
 # start shell server
-if ! pgrep -f bin/server >/dev/null; then
-	cd $CS425_REPO/mp1
-	make
-	pkill -f bin/server
-	nohup bin/server $MP1_PORT >$MP1_LOGS 2>&1 &
+if ! pgrep -f server >/dev/null; then
+	nohup go run cs425/shell/server $MP1_PORT >$MP1_LOGS 2>&1 &
 	echo "shell server is running at $(hostname):$MP1_PORT$"
 fi
 
 # Restart filesystem and failure detector server
-cd $CS425_REPO/go
-
 if pgrep -f cs425 >/dev/null; then
 	echo KILL | nc localhost $TCP_PORT
 fi
@@ -55,5 +55,5 @@ echo "SDFS server is running at $(hostname)"
 # Build client to home directory
 cd $CS425_REPO/go/client
 go build
-mv client $HOME/client
+cp client $HOME/client
 
