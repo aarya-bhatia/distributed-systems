@@ -1,9 +1,6 @@
 #!/bin/bash
-
-GIT_BRANCH=frontend-server
-
+GIT_BRANCH=main
 CS425_REPO=$HOME/cs425
-
 MP1_LOGS=$HOME/mp1.log
 MP1_PORT=3000
 LOGS=$HOME/log
@@ -18,17 +15,11 @@ git reset HEAD
 git checkout $GIT_BRANCH || git checkout -b $GIT_BRANCH
 git pull origin $GIT_BRANCH
 
+pkill -f cs425
+
 go mod tidy
-
-if ! pgrep -f server >/dev/null; then
-	nohup go run cs425/shell/server $MP1_PORT >$MP1_LOGS 2>&1 &
-fi
-
-if pgrep -f cs425 >/dev/null; then
-	echo KILL | nc localhost $TCP_PORT
-fi
-
+nohup go run cs425/shell/server $MP1_PORT >$MP1_LOGS 2>&1 &
+# echo KILL | nc localhost $TCP_PORT
 sleep 5 # wait for other vms to die
-
-nohup go run . >$LOGS 2>&1 &
+nohup go run cs425 >$LOGS 2>&1 &
 
