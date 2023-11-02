@@ -1,0 +1,4 @@
+fa23-cs425-0701.cs.illinois.edu:4000 put /home/aaryab2/hello hello
+fa23-cs425-0702.cs.illinois.edu:4000 put /home/aaryab2/file file
+fa23-cs425-0701.cs.illinois.edu:4000 get file /home/aaryab2/file.out
+fa23-cs425-0702.cs.illinois.edu:4000 get hello /home/aaryab2/hello.out

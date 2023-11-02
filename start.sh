@@ -1,12 +1,13 @@
 #!/bin/bash
 
-GIT_BRANCH=main
+GIT_BRANCH=frontend-server
+
 CS425_REPO=$HOME/cs425
+
 MP1_LOGS=$HOME/mp1.log
 MP1_PORT=3000
 LOGS=$HOME/log
 TCP_PORT=5000
-UDP_PORT=6000
 
 cd $HOME
 rm -rf log *.log *.out data
