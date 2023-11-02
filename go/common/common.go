@@ -32,15 +32,17 @@ const (
 	NODE_SUSPECTED = 1
 	NODE_FAILED    = 2
 
-	DEFAULT_TCP_PORT = 5000
-	DEFAULT_UDP_PORT = 6000
+	DEFAULT_FRONTEND_PORT = 4000
+	DEFAULT_BACKEND_PORT  = 5000
+	DEFAULT_UDP_PORT      = 6000
 )
 
 type Node struct {
-	ID       int
-	Hostname string
-	UDPPort  int
-	TCPPort  int
+	ID           int
+	Hostname     string
+	UDPPort      int
+	TCPPort      int
+	FrontendPort int
 }
 
 type FileEntry struct {
@@ -105,24 +107,24 @@ func (l *Logger) Debug(args ...any) {
 var Log = NewLogger()
 
 var ProdCluster = []Node{
-	{1, "fa23-cs425-0701.cs.illinois.edu", DEFAULT_UDP_PORT, DEFAULT_TCP_PORT},
-	{2, "fa23-cs425-0702.cs.illinois.edu", DEFAULT_UDP_PORT, DEFAULT_TCP_PORT},
-	{3, "fa23-cs425-0703.cs.illinois.edu", DEFAULT_UDP_PORT, DEFAULT_TCP_PORT},
-	{4, "fa23-cs425-0704.cs.illinois.edu", DEFAULT_UDP_PORT, DEFAULT_TCP_PORT},
-	{5, "fa23-cs425-0705.cs.illinois.edu", DEFAULT_UDP_PORT, DEFAULT_TCP_PORT},
-	{6, "fa23-cs425-0706.cs.illinois.edu", DEFAULT_UDP_PORT, DEFAULT_TCP_PORT},
-	{7, "fa23-cs425-0707.cs.illinois.edu", DEFAULT_UDP_PORT, DEFAULT_TCP_PORT},
-	{8, "fa23-cs425-0708.cs.illinois.edu", DEFAULT_UDP_PORT, DEFAULT_TCP_PORT},
-	{9, "fa23-cs425-0709.cs.illinois.edu", DEFAULT_UDP_PORT, DEFAULT_TCP_PORT},
-	{10, "fa23-cs425-0710.cs.illinois.edu", DEFAULT_UDP_PORT, DEFAULT_TCP_PORT},
+	{1, "fa23-cs425-0701.cs.illinois.edu", DEFAULT_UDP_PORT, DEFAULT_BACKEND_PORT, DEFAULT_FRONTEND_PORT},
+	{2, "fa23-cs425-0702.cs.illinois.edu", DEFAULT_UDP_PORT, DEFAULT_BACKEND_PORT, DEFAULT_FRONTEND_PORT},
+	{3, "fa23-cs425-0703.cs.illinois.edu", DEFAULT_UDP_PORT, DEFAULT_BACKEND_PORT, DEFAULT_FRONTEND_PORT},
+	{4, "fa23-cs425-0704.cs.illinois.edu", DEFAULT_UDP_PORT, DEFAULT_BACKEND_PORT, DEFAULT_FRONTEND_PORT},
+	{5, "fa23-cs425-0705.cs.illinois.edu", DEFAULT_UDP_PORT, DEFAULT_BACKEND_PORT, DEFAULT_FRONTEND_PORT},
+	{6, "fa23-cs425-0706.cs.illinois.edu", DEFAULT_UDP_PORT, DEFAULT_BACKEND_PORT, DEFAULT_FRONTEND_PORT},
+	{7, "fa23-cs425-0707.cs.illinois.edu", DEFAULT_UDP_PORT, DEFAULT_BACKEND_PORT, DEFAULT_FRONTEND_PORT},
+	{8, "fa23-cs425-0708.cs.illinois.edu", DEFAULT_UDP_PORT, DEFAULT_BACKEND_PORT, DEFAULT_FRONTEND_PORT},
+	{9, "fa23-cs425-0709.cs.illinois.edu", DEFAULT_UDP_PORT, DEFAULT_BACKEND_PORT, DEFAULT_FRONTEND_PORT},
+	{10, "fa23-cs425-0710.cs.illinois.edu", DEFAULT_UDP_PORT, DEFAULT_BACKEND_PORT, DEFAULT_FRONTEND_PORT},
 }
 
 var LocalCluster = []Node{
-	{1, "localhost", 6001, 5001},
-	{2, "localhost", 6002, 5002},
-	{3, "localhost", 6003, 5003},
-	{4, "localhost", 6004, 5004},
-	{5, "localhost", 6005, 5005},
+	{1, "localhost", 6001, 5001, 4001},
+	{2, "localhost", 6002, 5002, 4002},
+	{3, "localhost", 6003, 5003, 4003},
+	{4, "localhost", 6004, 5004, 4004},
+	{5, "localhost", 6005, 5005, 4005},
 }
 
 var Cluster []Node = LocalCluster

@@ -1,4 +1,4 @@
-package main
+package frontend
 
 import (
 	"container/heap"
@@ -24,14 +24,6 @@ type Node struct {
 	State       int
 	NumUploads  int
 	UploadingTo *Node
-}
-
-type UploadInfo struct {
-	server    net.Conn
-	blockSize int
-	blockData []byte
-	blockName string
-	replicas  []string
 }
 
 type UploadState struct {

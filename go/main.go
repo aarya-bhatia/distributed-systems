@@ -5,53 +5,58 @@ import (
 	"cs425/common"
 	"cs425/failuredetector"
 	"cs425/filesystem"
-	"flag"
+	"cs425/frontend"
 	"fmt"
 	"os"
 	"os/exec"
+	"path"
+	"strconv"
 	"strings"
 )
 
 var Log = common.Log
 
-func main() {
-	var err error
-	var hostname string
-	var udpPort, tcpPort int
-	var dbDirectory string
+func findNode(hostname string) *common.Node {
+	for _, node := range common.Cluster {
+		if node.Hostname == hostname {
+			return &node
+		}
+	}
 
-	systemHostname, err := os.Hostname()
+	return nil
+}
+
+// Usage: go run . [ID]
+func main() {
+	hostname, err := os.Hostname()
 	if err != nil {
 		Log.Fatal(err)
 	}
 
-	flag.IntVar(&udpPort, "udp", common.DEFAULT_UDP_PORT, "failure detector port")
-	flag.IntVar(&tcpPort, "tcp", common.DEFAULT_TCP_PORT, "file server port")
-	flag.StringVar(&hostname, "h", systemHostname, "hostname")
-	flag.StringVar(&dbDirectory, "db", "db", "database directory")
-	flag.Parse()
-
-	if hostname == "localhost" || hostname == "127.0.0.1" {
-		Log.Info("Using local cluster")
-		common.Cluster = common.LocalCluster
-	} else {
-		Log.Info("Using prod cluster")
-		common.Cluster = common.ProdCluster
+	cwd, err := os.Getwd()
+	if err != nil {
+		Log.Fatal(err)
 	}
 
-	Log.Debug(common.Cluster)
+	var dbDirectory string
+	var info common.Node
 
-	var found *common.Node = nil
-
-	for _, node := range common.Cluster {
-		if node.Hostname == hostname && node.UDPPort == udpPort && node.TCPPort == tcpPort {
-			found = &node
-			break
+	if len(os.Args) > 1 {
+		id, err := strconv.Atoi(os.Args[1])
+		if err != nil {
+			Log.Fatal(err)
 		}
-	}
-
-	if found == nil {
-		Log.Fatal("Unknown Server")
+		common.Cluster = common.LocalCluster
+		dbDirectory = path.Join(path.Join(cwd, "db"), os.Args[1])
+		info = common.Cluster[id-1]
+	} else {
+		common.Cluster = common.ProdCluster
+		dbDirectory = path.Join(cwd, "db")
+		found := findNode(hostname)
+		if found == nil {
+			Log.Fatal("Unknown node")
+		}
+		info = *found
 	}
 
 	if exec.Command("rm", "-rf", dbDirectory).Run() != nil {
@@ -62,14 +67,20 @@ func main() {
 		Log.Fatal("mkdir failed")
 	}
 
-	Log.Info("Directory: ", dbDirectory)
+	Log.Info("Data directory:", dbDirectory)
+	Log.Debug("Cluster:", common.Cluster)
+	Log.Debug("Node Info:", info)
 
-	fileServer := filesystem.NewServer(*found, dbDirectory)
+	fileServer := filesystem.NewServer(info, dbDirectory)
 
-	failureDetectorServer := failuredetector.NewServer(found.Hostname, found.UDPPort, common.GOSPSIP_SUSPICION_PROTOCOL, fileServer)
+	failureDetectorServer := failuredetector.NewServer(info.Hostname,
+		info.UDPPort, common.GOSPSIP_SUSPICION_PROTOCOL, fileServer)
+
+	frontend := frontend.NewServer(info, fileServer)
 
 	go fileServer.Start()
 	go failureDetectorServer.Start()
+	go frontend.Start()
 
 	mode := 1
 	scanner := bufio.NewScanner(os.Stdin)
@@ -102,6 +113,7 @@ func main() {
 	<-make(chan bool)
 }
 
+// TODO
 func handleCommand(server *filesystem.Server, command string) {
 	if command == "help" {
 		fmt.Println("ls: Display metadata table")

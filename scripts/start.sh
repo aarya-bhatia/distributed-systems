@@ -12,11 +12,10 @@ cd $HOME
 
 rm -rf log client.log *.out data/
 
-mkdir -p .ssh/
-
-[ -e ssh_cs425 ] && mv ssh_cs425 .ssh/cs425
-[ -e ssh_cs425.pub ] && mv ssh_cs425.pub .ssh/cs425.pub
-[ -e ssh_config ] && mv ssh_config .ssh/config
+# mkdir -p .ssh/
+# [ -e ssh_cs425 ] && mv ssh_cs425 .ssh/cs425
+# [ -e ssh_cs425.pub ] && mv ssh_cs425.pub .ssh/cs425.pub
+# [ -e ssh_config ] && mv ssh_config .ssh/config
 
 if [ ! -d $CS425_REPO ]; then
 	git clone ssh://git@gitlab.engr.illinois.edu/aaryab2/cs425.git cs425
@@ -31,10 +30,8 @@ git reset HEAD
 git checkout $GIT_BRANCH || git checkout -b $GIT_BRANCH
 git pull origin $GIT_BRANCH
 
-pkill -f bin/server
-pkill -f server
-
 cd $CS425_REPO/go
+go mod tidy
 
 # start shell server
 if ! pgrep -f server >/dev/null; then
@@ -48,7 +45,6 @@ if pgrep -f cs425 >/dev/null; then
 fi
 
 sleep 5 # wait for other vms to die
-go mod tidy
 nohup go run . >$LOGS 2>&1 &
 echo "SDFS server is running at $(hostname)"
 
