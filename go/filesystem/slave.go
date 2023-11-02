@@ -4,13 +4,14 @@ import (
 	"cs425/common"
 	"fmt"
 	"net"
+	log "github.com/sirupsen/logrus"
 )
 
 // Read a file block from disk and send it to client
 func downloadBlock(directory string, client net.Conn, blockName string) bool {
-	Log.Debugf("Sending block %s to client %s", blockName, client.RemoteAddr())
+	log.Debugf("Sending block %s to client %s", blockName, client.RemoteAddr())
 	if buffer := common.ReadFile(directory, blockName); buffer != nil {
-		// Log.Debug("block size:", len(buffer))
+		// log.Debug("block size:", len(buffer))
 		if common.SendAll(client, buffer, len(buffer)) > 0 {
 			return true
 		}
@@ -31,7 +32,7 @@ func uploadBlock(directory string, client net.Conn, blockName string, blockSize 
 	for bufferSize < blockSize {
 		numRead, err := client.Read(buffer[bufferSize:])
 		if err != nil {
-			Log.Warn(err)
+			log.Warn(err)
 			return false
 		}
 		if numRead == 0 {
@@ -41,24 +42,24 @@ func uploadBlock(directory string, client net.Conn, blockName string, blockSize 
 	}
 
 	if bufferSize < blockSize {
-		Log.Warnf("Insufficient bytes read (%d of %d)\n", bufferSize, blockSize)
+		log.Warnf("Insufficient bytes read (%d of %d)\n", bufferSize, blockSize)
 		return false
 	}
 
-	Log.Debugf("Received block %s (%d bytes) from client %s", blockName, blockSize, client.RemoteAddr())
+	log.Debugf("Received block %s (%d bytes) from client %s", blockName, blockSize, client.RemoteAddr())
 
 	if !common.WriteFile(directory, blockName, buffer, blockSize) {
-		Log.Warnf("Failed to write block %s to disk\n", blockName)
+		log.Warnf("Failed to write block %s to disk\n", blockName)
 		return false
 	}
 
-	// Log.Infof("Added block %s to disk\n", blockName)
+	// log.Infof("Added block %s to disk\n", blockName)
 	return true
 }
 
 // Download a block from source node to replicate it at current node
 func replicateBlock(directory string, blockName string, blockSize int, source string) bool {
-	Log.Debugf("To replicate block %s from host %s\n", blockName, source)
+	log.Debugf("To replicate block %s from host %s\n", blockName, source)
 	repliaConn, err := net.Dial("tcp", source)
 	if err != nil {
 		return false

@@ -3,6 +3,7 @@ package filesystem
 import (
 	"cs425/common"
 	"fmt"
+	log "github.com/sirupsen/logrus"
 	"math/rand"
 	"net"
 	"strings"
@@ -21,7 +22,7 @@ func makeSet(values []string) map[string]bool {
 
 // To periodically redistribute file blocks to replicas to maintain equal load
 func (s *Server) startRebalanceRoutine() {
-	Log.Debug("Starting rebalance routine")
+	log.Debug("Starting rebalance routine")
 	for {
 		aliveNodes := s.GetAliveNodes()
 		s.Mutex.Lock()
@@ -67,7 +68,7 @@ func (s *Server) startRebalanceRoutine() {
 		s.Mutex.Unlock()
 
 		for replica, tasks := range replicaTasks {
-			Log.Infof("To send requests to %s: %v", replica, tasks)
+			log.Infof("Sending %d replication tasks to node %s", len(tasks), replica)
 			go s.sendRebalanceRequests(replica, tasks)
 		}
 
@@ -89,7 +90,7 @@ func (s *Server) sendRebalanceRequests(replica string, requests []string) {
 
 	for _, request := range requests {
 		if strings.Index(request, "ADD_BLOCK") != 0 {
-			Log.Warn("Invalid request: ", request)
+			log.Warn("Invalid request: ", request)
 			continue
 		}
 
@@ -110,11 +111,8 @@ func (s *Server) sendRebalanceRequests(replica string, requests []string) {
 		blockName := strings.Split(request, " ")[1]
 
 		s.Mutex.Lock()
-
 		s.BlockToNodes[blockName] = append(s.BlockToNodes[blockName], replica)
 		s.NodesToBlocks[replica] = append(s.NodesToBlocks[replica], blockName)
-		// Log.Debugf("Updated block metadata %s: %v", blockName, s.BlockToNodes[blockName])
-		// Log.Debugf("Updated node metadata %s: %v", replica, s.NodesToBlocks[replica])
 		s.Mutex.Unlock()
 	}
 }

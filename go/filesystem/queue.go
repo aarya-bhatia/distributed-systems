@@ -2,6 +2,7 @@ package filesystem
 
 import (
 	"sync"
+	log "github.com/sirupsen/logrus"
 )
 
 const (
@@ -28,7 +29,7 @@ func (q *Queue) PushRead(request *Request) {
 	q.Mutex.Lock()
 	defer q.Mutex.Unlock()
 	q.Reads = append(q.Reads, request)
-	// Log.Debug("Read task added")
+	// log.Debug("Read task added")
 }
 
 // Enqueue a write task for file
@@ -36,7 +37,7 @@ func (q *Queue) PushWrite(request *Request) {
 	q.Mutex.Lock()
 	defer q.Mutex.Unlock()
 	q.Writes = append(q.Writes, request)
-	// Log.Debug("Write task added")
+	// log.Debug("Write task added")
 }
 
 // Get the next task if available, otherwise returns nil
@@ -56,8 +57,8 @@ func (q *Queue) TryPop() *Request {
 			res := q.Reads[0]
 			q.Reads = q.Reads[1:]
 			q.NumReader++
-			Log.Debug("A read task was dequeued!")
-			// Log.Debug("Num readers: ", q.NumReader)
+			log.Debug("A read task was dequeued!")
+			// log.Debug("Num readers: ", q.NumReader)
 			return res
 		}
 	}
@@ -70,8 +71,8 @@ func (q *Queue) TryPop() *Request {
 			res := q.Writes[0]
 			q.Writes = q.Writes[1:]
 			q.NumWriter++
-			Log.Debug("A write task was dequeued!")
-			// Log.Debug("Num writers: ", q.NumWriter)
+			log.Debug("A write task was dequeued!")
+			// log.Debug("Num writers: ", q.NumWriter)
 			return res
 		}
 	}
@@ -85,7 +86,7 @@ func (q *Queue) ReadDone() {
 	defer q.Mutex.Unlock()
 	q.Count++
 	q.NumReader--
-	Log.Debug("A read task was completed!")
+	log.Debug("A read task was completed!")
 }
 
 // Must call this after writer is done
@@ -94,5 +95,5 @@ func (q *Queue) WriteDone() {
 	defer q.Mutex.Unlock()
 	q.Count++
 	q.NumWriter--
-	Log.Debug("A write task was completed!")
+	log.Debug("A write task was completed!")
 }

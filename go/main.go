@@ -12,9 +12,9 @@ import (
 	"path"
 	"strconv"
 	"strings"
-)
 
-var Log = common.Log
+	log "github.com/sirupsen/logrus"
+)
 
 func findNode(hostname string) *common.Node {
 	for _, node := range common.Cluster {
@@ -28,14 +28,23 @@ func findNode(hostname string) *common.Node {
 
 // Usage: go run . [ID]
 func main() {
+	customFormatter := new(log.TextFormatter)
+	customFormatter.TimestampFormat = "2006-01-02 15:04:05"
+	customFormatter.FullTimestamp = true
+	log.SetFormatter(customFormatter)
+
+	log.SetReportCaller(false)
+	log.SetLevel(log.DebugLevel)
+	log.SetOutput(os.Stderr)
+
 	hostname, err := os.Hostname()
 	if err != nil {
-		Log.Fatal(err)
+		log.Fatal(err)
 	}
 
 	cwd, err := os.Getwd()
 	if err != nil {
-		Log.Fatal(err)
+		log.Fatal(err)
 	}
 
 	var dbDirectory string
@@ -44,7 +53,7 @@ func main() {
 	if len(os.Args) > 1 {
 		id, err := strconv.Atoi(os.Args[1])
 		if err != nil {
-			Log.Fatal(err)
+			log.Fatal(err)
 		}
 		common.Cluster = common.LocalCluster
 		dbDirectory = path.Join(path.Join(cwd, "db"), os.Args[1])
@@ -54,22 +63,22 @@ func main() {
 		dbDirectory = path.Join(cwd, "db")
 		found := findNode(hostname)
 		if found == nil {
-			Log.Fatal("Unknown node")
+			log.Fatal("Unknown node")
 		}
 		info = *found
 	}
 
 	if exec.Command("rm", "-rf", dbDirectory).Run() != nil {
-		Log.Fatal("rm failed")
+		log.Fatal("rm failed")
 	}
 
 	if exec.Command("mkdir", "-p", dbDirectory).Run() != nil {
-		Log.Fatal("mkdir failed")
+		log.Fatal("mkdir failed")
 	}
 
-	Log.Info("Data directory:", dbDirectory)
-	Log.Debug("Cluster:", common.Cluster)
-	Log.Debug("Node Info:", info)
+	log.Info("Data directory:", dbDirectory)
+	log.Debug("Cluster:", common.Cluster)
+	log.Debug("Node Info:", info)
 
 	fileServer := filesystem.NewServer(info, dbDirectory)
 
@@ -129,7 +138,7 @@ func handleCommand(server *filesystem.Server, command string) {
 		fmt.Println("storage:")
 		files, err := common.GetFilesInDirectory(server.Directory)
 		if err != nil {
-			Log.Warn(err)
+			log.Warn(err)
 			return
 		}
 		for _, f := range files {

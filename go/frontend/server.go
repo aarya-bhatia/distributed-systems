@@ -5,6 +5,7 @@ import (
 	"cs425/common"
 	"cs425/filesystem"
 	"fmt"
+	log "github.com/sirupsen/logrus"
 	"math/rand"
 	"net"
 	"os"
@@ -25,9 +26,6 @@ type UploadInfo struct {
 	blockName string
 	replicas  []string
 }
-
-// TODO set log file
-var Log = common.Log
 
 const MalformedRequestError = "ERROR Malformed Request"
 const UnknownRequestError = "ERROR Unknown Request"
@@ -63,10 +61,10 @@ func (server *FrontendServer) handleConnection(conn net.Conn) {
 			}
 
 			if !server.uploadFile(tokens[1], tokens[2]) {
-				Log.Warn("Upload failed!")
+				log.Warn("Upload failed!")
 				common.SendMessage(conn, "UPLOAD_ERROR")
 			} else {
-				Log.Debug("Upload successful!")
+				log.Debug("Upload successful!")
 				common.SendMessage(conn, "UPLOAD_OK")
 			}
 
@@ -77,10 +75,10 @@ func (server *FrontendServer) handleConnection(conn net.Conn) {
 			}
 
 			if !server.downloadFile(tokens[2], tokens[1]) {
-				Log.Debug("Download failed!")
+				log.Debug("Download failed!")
 				common.SendMessage(conn, "DOWNLOAD_ERROR")
 			} else {
-				Log.Debug("Download success!")
+				log.Debug("Download success!")
 				common.SendMessage(conn, "DOWNLOAD_OK")
 			}
 
@@ -91,10 +89,10 @@ func (server *FrontendServer) handleConnection(conn net.Conn) {
 			}
 
 			if !server.deleteFile(tokens[1]) {
-				Log.Warn("Delete failed!")
+				log.Warn("Delete failed!")
 				common.SendMessage(conn, "DELETE_ERROR")
 			} else {
-				Log.Info("Delete successful!")
+				log.Info("Delete successful!")
 				common.SendMessage(conn, "DELETE_OK")
 			}
 
@@ -109,10 +107,10 @@ func (server *FrontendServer) handleConnection(conn net.Conn) {
 func (server *FrontendServer) Start() {
 	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", server.Port))
 	if err != nil {
-		Log.Fatal("Error starting server: ", err)
+		log.Fatal(err)
 	}
 
-	Log.Infof("frontend server is listening on port %d...\n", server.Port)
+	log.Infof("Frontend TCP server is listening on port %d...\n", server.Port)
 
 	for {
 		conn, err := listener.Accept()
@@ -120,7 +118,7 @@ func (server *FrontendServer) Start() {
 			continue
 		}
 
-		Log.Debugf("Accepted connection from %s\n", conn.RemoteAddr())
+		// log.Debugf("Accepted connection from %s\n", conn.RemoteAddr())
 		go server.handleConnection(conn)
 	}
 }
@@ -131,11 +129,11 @@ func (server *FrontendServer) getLeaderConnection() net.Conn {
 	leader := server.BackendServer.GetLeaderNode()
 	conn, err := net.Dial("tcp", leader)
 	if err != nil {
-		Log.Warn("Leader is offline", leader)
+		log.Warn("Leader is offline:", leader)
 		return nil
 	}
 
-	Log.Info("Connected to leader", leader)
+	log.Info("Connected to leader:", leader)
 	return conn
 }
 
@@ -161,7 +159,7 @@ func (server *FrontendServer) downloadFile(localFilename string, remoteFilename 
 
 	file, err := os.Create(localFilename)
 	if err != nil {
-		Log.Warn(err)
+		log.Warn(err)
 		return false
 	}
 	defer file.Close()
@@ -173,7 +171,7 @@ func (server *FrontendServer) downloadFile(localFilename string, remoteFilename 
 	defer leader.Close()
 
 	request := fmt.Sprintf("DOWNLOAD_FILE %s\n", remoteFilename)
-	Log.Debug(request)
+	log.Debug(request)
 	if !common.SendMessage(leader, request) {
 		return false
 	}
@@ -184,42 +182,42 @@ func (server *FrontendServer) downloadFile(localFilename string, remoteFilename 
 	var startTime int64 = 0
 	var endTime int64 = 0
 
-	Log.Debug("Reading file block list")
+	// log.Debug("Reading file block list")
 	for {
 		line, err := reader.ReadString('\n')
 		if err != nil {
-			Log.Warn(err)
+			log.Warn(err)
 			break
 		}
 
 		if fileSize == 0 {
-			Log.Info("Starting download now...")
+			// log.Info("Starting download now...")
 			startTime = time.Now().UnixNano()
 		}
 
 		line = line[:len(line)-1]
-		Log.Debug("Received:", line)
+		log.Debug("Received:", line)
 		tokens := strings.Split(line, " ")
 
 		if len(tokens) == 1 {
 			if tokens[0] == "ERROR" {
-				Log.Warn("ERROR")
+				log.Warn("ERROR")
 				line, _ = reader.ReadString('\n') // Read error message on next line
-				Log.Warn(line)
+				log.Warn(line)
 				return false
 			}
 			break
 		}
 
 		if len(tokens) != 3 {
-			Log.Warn("Invalid number of tokens")
+			log.Warn("Invalid number of tokens")
 			return false
 		}
 
 		blockName := tokens[0]
 		blockSize, err := strconv.Atoi(tokens[1])
 		if err != nil {
-			Log.Warn(err)
+			log.Warn(err)
 			return false
 		}
 
@@ -241,7 +239,7 @@ func (server *FrontendServer) downloadFile(localFilename string, remoteFilename 
 		}
 
 		if !done {
-			Log.Warn("Failed to download block", blockName)
+			log.Warn("Failed to download block:", blockName)
 			return false
 		}
 
@@ -249,24 +247,24 @@ func (server *FrontendServer) downloadFile(localFilename string, remoteFilename 
 	}
 
 	endTime = time.Now().UnixNano()
-	Log.Infof("Downloaded file %s (%d bytes) in %f seconds to %s\n", remoteFilename, fileSize, float64(endTime-startTime)*1e-9, localFilename)
+	log.Infof("Downloaded file %s (%d bytes) in %f seconds to %s\n", remoteFilename, fileSize, float64(endTime-startTime)*1e-9, localFilename)
 	return common.SendMessage(leader, "OK")
 }
 
 // Download block from given replica and append data to file
 // Returns number of bytes written to file, or -1 if failure
 func downloadBlock(file *os.File, blockName string, blockSize int, replica string, connCache *ConnectionCache) bool {
-	Log.Debugf("Downloading block %s from %s\n", blockName, replica)
+	log.Debugf("Downloading block %s from %s\n", blockName, replica)
 	conn := connCache.GetConnection(replica)
 	if conn == nil {
 		return false
 	}
 
 	request := fmt.Sprintf("DOWNLOAD %s\n", blockName)
-	Log.Debug(request)
+	log.Debug(request)
 	_, err := conn.Write([]byte(request))
 	if err != nil {
-		Log.Warn(err)
+		log.Warn(err)
 		return false
 	}
 
@@ -276,21 +274,21 @@ func downloadBlock(file *os.File, blockName string, blockSize int, replica strin
 	for bufferSize < blockSize {
 		n, err := conn.Read(buffer[bufferSize:])
 		if err != nil {
-			Log.Warn(err)
+			log.Warn(err)
 			return false
 		}
 		bufferSize += n
 	}
 
 	if bufferSize < blockSize {
-		Log.Warn("Insufficient bytes received for block", blockName)
+		log.Warn("Insufficient bytes:", blockName)
 		return false
 	}
 
-	Log.Debugf("Received block %s (%d bytes) from %s\n", blockName, bufferSize, replica)
+	log.Debugf("Received block %s (%d bytes) from %s\n", blockName, bufferSize, replica)
 	_, err = file.Write(buffer[:bufferSize])
 	if err != nil {
-		Log.Warn(err)
+		log.Warn(err)
 		return false
 	}
 
@@ -311,18 +309,18 @@ func (server *FrontendServer) uploadFile(localFilename string, remoteFilename st
 
 	info, err := os.Stat(localFilename)
 	if err != nil {
-		Log.Warn(err)
+		log.Warn(err)
 		return false
 	}
 
 	fileSize := info.Size()
 	file, err := os.Open(localFilename)
 	if err != nil {
-		Log.Warn(err)
+		log.Warn(err)
 		return false
 	}
 
-	Log.Debugf("To upload file %s with %d bytes (%d blocks)", localFilename, fileSize, common.GetNumFileBlocks(int64(fileSize)))
+	log.Debugf("To upload file %s with %d bytes (%d blocks)", localFilename, fileSize, common.GetNumFileBlocks(int64(fileSize)))
 	defer file.Close()
 
 	leader := server.getLeaderConnection()
@@ -332,7 +330,7 @@ func (server *FrontendServer) uploadFile(localFilename string, remoteFilename st
 	defer leader.Close()
 
 	request := fmt.Sprintf("UPLOAD_FILE %s %d\n", remoteFilename, fileSize)
-	Log.Debug(request)
+	log.Debug(request)
 	if !common.SendMessage(leader, request) {
 		return false
 	}
@@ -346,11 +344,9 @@ func (server *FrontendServer) uploadFile(localFilename string, remoteFilename st
 
 	if line[:len(line)-1] == "ERROR" {
 		line, _ = reader.ReadString('\n') // Read error message on next line
-		Log.Warn("ERROR", line)
+		log.Warn("ERROR:", line)
 		return false
 	}
-
-	Log.Info("Starting upload now...")
 
 	var startTime int64 = time.Now().UnixNano()
 	var endTime int64 = 0
@@ -362,7 +358,7 @@ func (server *FrontendServer) uploadFile(localFilename string, remoteFilename st
 		}
 
 		line = line[:len(line)-1]
-		Log.Debug("Received:", line)
+		log.Debug("Received:", line)
 
 		tokens := strings.Split(line, " ")
 		if tokens[0] == "END" {
@@ -370,7 +366,7 @@ func (server *FrontendServer) uploadFile(localFilename string, remoteFilename st
 		}
 
 		if len(tokens) < 2 {
-			Log.Warn("Illegal response")
+			log.Warn("Illegal response")
 			return false
 		}
 
@@ -379,15 +375,11 @@ func (server *FrontendServer) uploadFile(localFilename string, remoteFilename st
 		blockName = tokens[0]
 		blockSize, err = file.Read(blockData)
 		if err != nil {
-			Log.Warn(err)
+			log.Warn(err)
 			return false
 		}
 
 		info := &UploadInfo{server: leader, blockName: blockName, blockData: blockData, blockSize: blockSize, replicas: replicas}
-
-		// if !StartFastUpload(info) {
-		// 	return false
-		// }
 
 		if !UploadBlockSync(info, connCache, result) {
 			return false
@@ -396,13 +388,10 @@ func (server *FrontendServer) uploadFile(localFilename string, remoteFilename st
 	}
 
 	for block, replicas := range result {
-		Log.Info("== RESULT", block, replicas)
-
+		log.Info(block, replicas)
 		if !common.SendMessage(leader, fmt.Sprintf("%s %s\n", block, strings.Join(replicas, ","))) {
 			return false
 		}
-
-		Log.Debug("Sent update to server for block", block)
 	}
 
 	if !common.SendMessage(leader, "END") {
@@ -423,7 +412,7 @@ func (server *FrontendServer) uploadFile(localFilename string, remoteFilename st
 
 func UploadBlockSync(info *UploadInfo, connCache *ConnectionCache, result map[string][]string) bool {
 	for _, replica := range info.replicas {
-		Log.Debugf("Uploading block %s (%d bytes) to %s\n", info.blockName, info.blockSize, replica)
+		log.Debugf("Uploading block %s (%d bytes) to %s\n", info.blockName, info.blockSize, replica)
 
 		conn := connCache.GetConnection(replica)
 		if conn == nil {
@@ -435,25 +424,17 @@ func UploadBlockSync(info *UploadInfo, connCache *ConnectionCache, result map[st
 			return false
 		}
 
-		Log.Debug("Sent upload block request to ", replica)
-
 		if !common.GetOKMessage(conn) {
 			return false
 		}
-
-		// Log.Debug("Got OK from ", replica)
 
 		if common.SendAll(conn, info.blockData[:info.blockSize], info.blockSize) < 0 {
 			return false
 		}
 
-		Log.Debugf("Sent block (%d bytes) to %s\n", info.blockSize, replica)
-
 		if !common.GetOKMessage(conn) {
 			return false
 		}
-
-		// Log.Debug("Got OK from ", replica)
 
 		result[info.blockName] = append(result[info.blockName], replica)
 	}

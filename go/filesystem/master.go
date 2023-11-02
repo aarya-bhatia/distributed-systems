@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"cs425/common"
 	"fmt"
+	log "github.com/sirupsen/logrus"
 	"net"
 	"strings"
 	"time"
@@ -28,7 +29,7 @@ func (server *Server) pollTasks() {
 			case task.Action == DELETE_FILE:
 				go server.deleteFileWrapper(task)
 			default:
-				Log.Warn("Invalid Action")
+				log.Warn("Invalid Action")
 				task.Client.Close()
 			}
 		}
@@ -120,7 +121,7 @@ func (server *Server) deleteFile(file File) {
 			}
 			if common.SendMessage(conn, message) {
 				if common.GetOKMessage(conn) {
-					Log.Debugf("File %s deleted from node %s", file.Filename, addr)
+					log.Debugf("File %s deleted from node %s", file.Filename, addr)
 				}
 			}
 		}(replica)
@@ -132,7 +133,7 @@ func (server *Server) deleteFile(file File) {
 		go func(addr string, conn net.Conn) {
 			if common.SendMessage(conn, message) {
 				if common.GetOKMessage(conn) {
-					Log.Debugf("File metadata %s deleted from node %s", file.Filename, addr)
+					log.Debugf("File metadata %s deleted from node %s", file.Filename, addr)
 				}
 			}
 		}(addr, conn)
@@ -147,8 +148,6 @@ func (server *Server) deleteFileWrapper(task *Request) {
 	defer server.handleConnection(task.Client) // continue reading requests
 	defer server.getQueue(task.Name).WriteDone()
 	defer common.SendMessage(task.Client, "OK")
-
-	Log.Debug("To delete", task.Name)
 
 	server.Mutex.Lock()
 	file, ok := server.Files[task.Name]
@@ -192,12 +191,12 @@ func uploadFile(client net.Conn, newFile File, aliveNodes []string) (map[string]
 	for {
 		line, err := reader.ReadString('\n')
 		if err != nil {
-			Log.Warn(err)
+			log.Warn(err)
 			return nil, false
 		}
 
 		line = line[:len(line)-1]
-		Log.Debug("Received:", line)
+		log.Debug("Received:", line)
 		tokens := strings.Split(line, " ")
 
 		if tokens[0] == "END" {
@@ -205,7 +204,7 @@ func uploadFile(client net.Conn, newFile File, aliveNodes []string) (map[string]
 		}
 
 		if len(tokens) != 2 {
-			Log.Warn("illegal response")
+			log.Warn("illegal response")
 			return nil, false
 		}
 
@@ -218,11 +217,11 @@ func uploadFile(client net.Conn, newFile File, aliveNodes []string) (map[string]
 	}
 
 	if len(blocks) != newFile.NumBlocks {
-		Log.Warnf("insufficient blocks confirmed: %d out of %d", len(blocks), newFile.NumBlocks)
+		log.Warnf("insufficient blocks confirmed: %d out of %d", len(blocks), newFile.NumBlocks)
 		return nil, false
 	}
 
-	Log.Infof("%s: Uploaded file %s\n", client.RemoteAddr(), newFile.Filename)
+	log.Infof("%s: Uploaded file %s\n", client.RemoteAddr(), newFile.Filename)
 	return blocks, true
 }
 
@@ -232,7 +231,7 @@ func (server *Server) downloadFileWrapper(task *Request) {
 	server.Mutex.Unlock()
 
 	if !ok {
-		Log.Warn("Download failed: file not found")
+		log.Warn("Download failed: file not found")
 		task.Client.Write([]byte("ERROR\nFile not found\n"))
 		server.getQueue(task.Name).ReadDone()
 		return
@@ -246,9 +245,9 @@ func (server *Server) downloadFileWrapper(task *Request) {
 	}
 	server.Mutex.Unlock()
 
-	Log.Debug("Starting download for file:", task.Name)
+	log.Debug("Starting download for file:", task.Name)
 	downloadFile(task.Client, file, blocks)
-	// Log.Debug("Download finished for file:", task.Name)
+	// log.Debug("Download finished for file:", task.Name)
 
 	server.getQueue(task.Name).ReadDone()
 	server.handleConnection(task.Client) // continue reading requests
@@ -256,7 +255,6 @@ func (server *Server) downloadFileWrapper(task *Request) {
 
 // Send replica list to client, wait for client to finish download
 func downloadFile(client net.Conn, file File, blocks map[string][]string) bool {
-	Log.Debug("Sending client metadata for file", file.Filename)
 	var blockSize int = common.BLOCK_SIZE
 	for i := 0; i < file.NumBlocks; i++ {
 		if i == file.NumBlocks-1 {
@@ -265,17 +263,17 @@ func downloadFile(client net.Conn, file File, blocks map[string][]string) bool {
 		blockName := fmt.Sprintf("%s:%d:%d", file.Filename, file.Version, i)
 		replicas := strings.Join(blocks[blockName], ",")
 		line := fmt.Sprintf("%s %d %s\n", blockName, blockSize, replicas)
-		Log.Debug(line)
+		log.Debug(line)
 		if common.SendAll(client, []byte(line), len(line)) < 0 {
-			Log.Warn("Download failed")
+			log.Warn("Download failed")
 			return false
 		}
 	}
 
 	client.Write([]byte("END\n"))
-	Log.Debugf("Waiting for client %s to download %s\n", client.RemoteAddr(), file.Filename)
+	log.Debugf("Waiting for client %s to download %s\n", client.RemoteAddr(), file.Filename)
 	client.Read(make([]byte, common.MIN_BUFFER_SIZE))
-	Log.Infof("Client %s finished download for file %s\n", client.RemoteAddr(), file.Filename)
+	log.Infof("Client %s finished download for file %s\n", client.RemoteAddr(), file.Filename)
 	return true
 }
 
@@ -284,11 +282,11 @@ func replicateFileMetadata(connections []net.Conn, newFile File) int {
 	c := 0
 
 	message := fmt.Sprintf("SETFILE %s %d %d %d\n", newFile.Filename, newFile.Version, newFile.FileSize, newFile.NumBlocks)
+	log.Debug(message)
 	buffer := make([]byte, common.MIN_BUFFER_SIZE)
 
 	for _, conn := range connections {
-		Log.Debug("replicating metadata for file", newFile.Filename)
-
+		// log.Debug("Replicating file metadata:", newFile.Filename)
 		if !common.SendMessage(conn, message) {
 			continue
 		}
@@ -311,11 +309,11 @@ func replicaBlockMetadata(connections []net.Conn, blockName string, replicas []s
 	c := 0
 
 	message := fmt.Sprintf("SETBLOCK %s %s\n", blockName, strings.Join(replicas, ","))
+	log.Debug(message)
 	buffer := make([]byte, common.MIN_BUFFER_SIZE)
 
 	for _, conn := range connections {
-		Log.Debugf("replicating metadata for block %s at %s", blockName, conn.RemoteAddr())
-
+		// log.Debugf("replicating metadata for block %s at %s", blockName, conn.RemoteAddr())
 		if !common.SendMessage(conn, message) {
 			continue
 		}

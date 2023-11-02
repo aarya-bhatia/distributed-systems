@@ -6,4 +6,9 @@
 - client - retry upload/download on failures - unless not enough nodes
 - client - caching on retry - if have time
 - server - persistent connections with all replicas forever
-
+- client:
+    - input from stdin
+    - format: `<vms> <command> <Args>...`
+    - Eg: 1,2,4 put file file
+- add unique block elements
+- finish report

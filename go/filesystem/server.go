@@ -3,6 +3,7 @@ package filesystem
 import (
 	"cs425/common"
 	"fmt"
+	log "github.com/sirupsen/logrus"
 	"net"
 	"os"
 	"sync"
@@ -44,8 +45,6 @@ const (
 	DELETE_FILE   = 3
 )
 
-var Log *common.Logger = common.Log
-
 func NewServer(info common.Node, dbDirectory string) *Server {
 	server := new(Server)
 	server.Hostname = info.Hostname
@@ -70,10 +69,10 @@ func NewServer(info common.Node, dbDirectory string) *Server {
 func (server *Server) Start() {
 	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", server.Port))
 	if err != nil {
-		Log.Fatal("Error starting server: ", err)
+		log.Fatal("Error starting server: ", err)
 	}
 
-	Log.Infof("TCP File Server is listening on port %d...\n", server.Port)
+	log.Infof("TCP File Server is listening on port %d...\n", server.Port)
 
 	go server.pollTasks()
 	go server.startRebalanceRoutine()
@@ -81,11 +80,9 @@ func (server *Server) Start() {
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
-			// Log.Warnf("Error accepting connection: %s\n", err)
 			continue
 		}
 
-		// Log.Debugf("Accepted connection from %s\n", conn.RemoteAddr())
 		go server.handleConnection(conn)
 	}
 }
@@ -105,7 +102,7 @@ func (server *Server) getQueue(filename string) *Queue {
 func (s *Server) HandleNodeJoin(info *common.Node) {
 	s.Mutex.Lock()
 	node := fmt.Sprintf("%s:%d", info.Hostname, info.TCPPort)
-	Log.Debug("node join: ", node)
+	log.Debug("node join: ", node)
 	s.Nodes[node] = true
 	s.NodesToBlocks[node] = []string{}
 	s.Mutex.Unlock()
@@ -115,10 +112,8 @@ func (s *Server) HandleNodeJoin(info *common.Node) {
 
 func (s *Server) HandleNodeLeave(info *common.Node) {
 	s.Mutex.Lock()
-	defer s.Mutex.Unlock()
-
 	node := fmt.Sprintf("%s:%d", info.Hostname, info.TCPPort)
-	Log.Debug("node left: ", node)
+	log.Debug("node left: ", node)
 
 	delete(s.Nodes, node)
 
@@ -129,7 +124,7 @@ func (s *Server) HandleNodeLeave(info *common.Node) {
 				// Remove element at index i
 				arr[i], arr[len(arr)-1] = arr[len(arr)-1], arr[i]
 				s.BlockToNodes[block] = arr[:len(arr)-1]
-				Log.Debugf("block %s has %d replicas", block, len(s.BlockToNodes[block]))
+				log.Debugf("block %s has %d replicas", block, len(s.BlockToNodes[block]))
 				break
 			}
 		}
@@ -141,6 +136,7 @@ func (s *Server) HandleNodeLeave(info *common.Node) {
 		found.Close()
 		delete(s.MetadataReplicaConn, node)
 	}
+	s.Mutex.Unlock()
 }
 
 func (server *Server) DeleteFileAndBlocks(file File) {
@@ -168,7 +164,7 @@ func (server *Server) DeleteFileAndBlocks(file File) {
 	}
 
 	delete(server.Files, file.Filename)
-	Log.Warn("File was deleted:", file.Filename)
+	log.Warn("File was deleted:", file.Filename)
 }
 
 func (s *Server) addMetadataReplicaConnection(node string) bool {
@@ -178,7 +174,7 @@ func (s *Server) addMetadataReplicaConnection(node string) bool {
 
 	conn, err := net.Dial("tcp", node)
 	if err != nil {
-		Log.Warn("Failed to connect", node)
+		log.Warn("Failed to connect", node)
 		return false
 	}
 
@@ -194,12 +190,12 @@ func (s *Server) addMetadataReplicaConnection(node string) bool {
 
 	// replicata all metdata
 	for _, file := range s.Files {
-		go replicateFileMetadata([]net.Conn{conn}, file)
-
 		for i := 0; i < file.NumBlocks; i++ {
 			blockName := common.GetBlockName(file.Filename, file.Version, i)
 			go replicaBlockMetadata([]net.Conn{conn}, blockName, s.BlockToNodes[blockName])
 		}
+		go replicateFileMetadata([]net.Conn{conn}, file)
+
 	}
 
 	// NOTE: rebalance routine will replicate data blocks

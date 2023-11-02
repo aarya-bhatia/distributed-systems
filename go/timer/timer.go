@@ -1,13 +1,9 @@
 package timer
 
 import (
-	"cs425/common"
-	// "fmt"
 	"sync"
 	"time"
 )
-
-var Log = common.Log
 
 const (
 	TIMER_TIMEOUT_EVENT = 1
@@ -29,18 +25,18 @@ type Timer struct {
 }
 
 func (timer *Timer) Start() {
-	// Log.Debug(fmt.Sprintf("Timer %s has started.\n", timer.ID))
+	// log.Debug(fmt.Sprintf("Timer %s has started.\n", timer.ID))
 	select {
 	case event := <-timer.TimerChannel:
 		if event.EventType == TIMER_STOP_EVENT {
-			// Log.Debugf("Timer %s has stopped.\n", timer.ID)
+			// log.Debugf("Timer %s has stopped.\n", timer.ID)
 			timer.Mutex.Lock()
 			timer.Alive = false
 			close(timer.TimerChannel)
 			timer.Mutex.Unlock()
 		}
 	case <-time.After(timer.TimeoutDuration):
-		// Log.Debugf("Timer %s has timed out.\n", timer.ID)
+		// log.Debugf("Timer %s has timed out.\n", timer.ID)
 		timer.Mutex.Lock()
 		if !timer.Alive {
 			close(timer.TimerChannel)

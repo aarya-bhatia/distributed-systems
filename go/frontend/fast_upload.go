@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	 log "github.com/sirupsen/logrus"
 )
 
 const (
@@ -37,7 +38,7 @@ const UPLOADER_INTERVAL = 0 // 100 * time.Millisecond
 const SCHEDULER_INTERVAL = 100 * time.Millisecond
 
 func StartFastUpload(info *UploadInfo) bool {
-	Log.Infof("Starting fast upload for block %s (%d bytes)", info.blockName, info.blockSize)
+	log.Infof("Starting fast upload for block %s (%d bytes)", info.blockName, info.blockSize)
 
 	state := new(UploadState)
 	state.pendingNodes = connectAllReplica(info.replicas)
@@ -76,30 +77,30 @@ func uploader(info *UploadInfo, state *UploadState, done chan bool) {
 			state.pendingNodes = state.pendingNodes[1:]
 			node.State = BUSY
 			state.busyNodes[node.Address] = true
-			Log.Debug("uploading block to ", node.Address)
+			log.Debug("uploading block to ", node.Address)
 			state.mutex.Unlock()
 
 			if !UploadBlock(node.Connection, info) {
-				Log.Fatal("Failed to upload")
+				log.Fatal("Failed to upload")
 				// node.State = FAILED
 				// node.Connection.Close()
 			}
 
 			state.mutex.Lock()
 			c++
-			Log.Info("Uploaded block to ", node.Address)
+			log.Info("Uploaded block to ", node.Address)
 			delete(state.busyNodes, node.Address)
 			node.State = COMPLETED
 			heap.Push(&state.completedNodes, &priqueue.Item{Key: node.NumUploads, Value: node})
 		}
 
-		Log.Debug("uploader is waiting...")
+		log.Debug("uploader is waiting...")
 		state.mutex.Unlock()
 
 		time.Sleep(UPLOADER_INTERVAL)
 	}
 
-	Log.Info("Uploader is done with counter: ", c)
+	log.Info("Uploader is done with counter: ", c)
 	done <- true
 }
 
@@ -126,18 +127,18 @@ func scheduler(info *UploadInfo, state *UploadState, done chan bool) {
 			state.busyNodes[completedNode.Address] = true
 			state.busyNodes[pendingNode.Address] = true
 
-			Log.Debug("scheduler is starting a job...")
+			log.Debug("scheduler is starting a job...")
 			go copyBlock(info, state, pendingNode, completedNode)
 			c++
 		}
 
 		state.mutex.Unlock()
 
-		Log.Debug("scheduler is waiting...")
+		log.Debug("scheduler is waiting...")
 		time.Sleep(SCHEDULER_INTERVAL)
 	}
 
-	Log.Info("Scheduler is done with counter: ", c)
+	log.Info("Scheduler is done with counter: ", c)
 	done <- true
 }
 
@@ -165,33 +166,33 @@ func UploadBlock(conn net.Conn, info *UploadInfo) bool {
 		return false
 	}
 
-	Log.Debug("Sent upload block request to ", conn.RemoteAddr())
+	log.Debug("Sent upload block request to ", conn.RemoteAddr())
 
 	if !common.GetOKMessage(conn) {
 		return false
 	}
 
-	Log.Debug("Got OK from ", conn.RemoteAddr())
+	log.Debug("Got OK from ", conn.RemoteAddr())
 
 	if common.SendAll(conn, info.blockData[:info.blockSize], info.blockSize) < 0 {
 		return false
 	}
 
-	Log.Debugf("Sent block (%d bytes) to %s\n", info.blockSize, conn.RemoteAddr())
+	log.Debugf("Sent block (%d bytes) to %s\n", info.blockSize, conn.RemoteAddr())
 	return true
 }
 
 func copyBlock(info *UploadInfo, state *UploadState, dest *Node, src *Node) {
-	Log.Debugf("Starting transfer from %s to %s\n", src.Address, dest.Address)
+	log.Debugf("Starting transfer from %s to %s\n", src.Address, dest.Address)
 	request := fmt.Sprintf("ADD_BLOCK %s %d %s\n", info.blockName, info.blockSize, src.Address)
 	_, err := dest.Connection.Write([]byte(request))
 	if err != nil {
 		// handleFailure(dest)
-		Log.Fatal("failed due to ", dest.Address)
+		log.Fatal("failed due to ", dest.Address)
 		return
 	}
 	if !common.GetOKMessage(dest.Connection) {
-		Log.Fatal("failed due to ", dest.Address)
+		log.Fatal("failed due to ", dest.Address)
 		// handleFailure(dest)
 		return
 	}
@@ -210,7 +211,7 @@ func copyBlock(info *UploadInfo, state *UploadState, dest *Node, src *Node) {
 	heap.Push(&state.completedNodes, &priqueue.Item{Key: src.NumUploads, Value: src})
 	heap.Push(&state.completedNodes, &priqueue.Item{Key: dest.NumUploads, Value: dest})
 
-	Log.Debugf("Block transfer from %s to %s has finished!\n", src.Address, dest.Address)
+	log.Debugf("Block transfer from %s to %s has finished!\n", src.Address, dest.Address)
 	state.mutex.Unlock()
 }
 
@@ -219,9 +220,9 @@ func connectAllReplica(replicas []string) []*Node {
 	for _, replica := range replicas {
 		conn, err := net.Dial("tcp", replica)
 		if err != nil {
-			Log.Warn("Failed to connect to: ", replica)
+			log.Warn("Failed to connect to: ", replica)
 		} else {
-			Log.Info("Connected to: ", replica)
+			log.Info("Connected to: ", replica)
 			node := new(Node)
 			node.Address = replica
 			node.Connection = conn

@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"cs425/common"
 	"fmt"
+	log "github.com/sirupsen/logrus"
 	"net"
 	"os"
 	"strconv"
@@ -11,7 +12,7 @@ import (
 )
 
 func sendError(conn net.Conn, message string) {
-	Log.Warnf("(Client %s) Error: %s", conn.RemoteAddr(), message)
+	log.Warnf("(Client %s) Error: %s", conn.RemoteAddr(), message)
 	conn.Write([]byte("ERROR\n" + message + "\n"))
 }
 
@@ -31,7 +32,7 @@ func (server *Server) handleConnection(conn net.Conn) {
 	for {
 		buffer, err := reader.ReadString('\n') // Read from client until newline
 		if err != nil {
-			Log.Warnf("Client %s disconnected\n", conn.RemoteAddr())
+			// log.Debugf("Client %s disconnected\n", conn.RemoteAddr())
 			return
 		}
 
@@ -39,7 +40,7 @@ func (server *Server) handleConnection(conn net.Conn) {
 		tokens := strings.Split(buffer, " ")
 		verb := tokens[0]
 
-		Log.Debugf("Request from %s: %s", conn.RemoteAddr(), verb)
+		log.Debugf("Request from %s: %s", conn.RemoteAddr(), verb)
 
 		switch {
 
@@ -115,7 +116,7 @@ func (server *Server) handleConnection(conn net.Conn) {
 			os.Exit(1)
 
 		default:
-			Log.Warn("Unknown verb")
+			log.Warn("Unknown verb")
 			return
 		}
 	}

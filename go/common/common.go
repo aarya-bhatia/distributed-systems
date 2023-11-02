@@ -2,10 +2,10 @@ package common
 
 import (
 	"fmt"
+	log "github.com/sirupsen/logrus"
 	"hash"
 	"hash/fnv"
 	"io"
-	"log"
 	"net"
 	"os"
 	"strings"
@@ -54,57 +54,6 @@ type Notifier interface {
 	HandleNodeJoin(node *Node)
 	HandleNodeLeave(node *Node)
 }
-
-type Logger struct {
-	InfoLogger  *log.Logger
-	WarnLogger  *log.Logger
-	DebugLogger *log.Logger
-	FatalLogger *log.Logger
-}
-
-func NewLogger() *Logger {
-	l := new(Logger)
-	l.InfoLogger = log.New(os.Stderr, "INFO ", log.Ldate|log.Ltime)
-	l.WarnLogger = log.New(os.Stderr, "WARN ", log.Ldate|log.Ltime)
-	l.DebugLogger = log.New(os.Stderr, "DEBUG ", log.Ldate|log.Ltime)
-	l.FatalLogger = log.New(os.Stderr, "ERROR ", log.Ldate|log.Ltime)
-
-	return l
-}
-
-func (l *Logger) Fatalf(format string, args ...any) {
-	l.FatalLogger.Fatalf(format, args...)
-}
-
-func (l *Logger) Infof(format string, args ...any) {
-	l.InfoLogger.Printf(format, args...)
-}
-
-func (l *Logger) Warnf(format string, args ...any) {
-	l.WarnLogger.Printf(format, args...)
-}
-
-func (l *Logger) Debugf(format string, args ...any) {
-	l.DebugLogger.Printf(format, args...)
-}
-
-func (l *Logger) Fatal(args ...any) {
-	l.FatalLogger.Fatal(args...)
-}
-
-func (l *Logger) Info(args ...any) {
-	l.InfoLogger.Println(args...)
-}
-
-func (l *Logger) Warn(args ...any) {
-	l.WarnLogger.Println(args...)
-}
-
-func (l *Logger) Debug(args ...any) {
-	l.DebugLogger.Println(args...)
-}
-
-var Log = NewLogger()
 
 var ProdCluster = []Node{
 	{1, "fa23-cs425-0701.cs.illinois.edu", DEFAULT_UDP_PORT, DEFAULT_BACKEND_PORT, DEFAULT_FRONTEND_PORT},
@@ -179,15 +128,14 @@ func GetOKMessage(server net.Conn) bool {
 	buffer := make([]byte, MIN_BUFFER_SIZE)
 	n, err := server.Read(buffer)
 	if err != nil {
-		Log.Warn(err)
+		log.Warn(err)
 		return false
 	}
 
-	// Log.Debugf("Received %d bytes\n", n)
 	message := string(buffer[:n])
 
 	if strings.Index(message, "OK") != 0 {
-		Log.Warn(message)
+		log.Warn(message)
 		return false
 	}
 
@@ -202,13 +150,12 @@ func SendAll(conn net.Conn, buffer []byte, count int) int {
 	for sent < count && n != 0 {
 		n, err := conn.Write(buffer[sent:count])
 		if err != nil {
-			Log.Warn(err)
+			log.Warn(err)
 			return -1
 		}
 		sent += n
 	}
 
-	// Log.Debugf("Sent %d bytes to %s\n", sent, conn.RemoteAddr())
 	return sent
 }
 
@@ -228,14 +175,14 @@ func WriteFile(directory string, filename string, buffer []byte, blockSize int) 
 	filepath := fmt.Sprintf("%s/%s", directory, filename)
 	file, err := os.OpenFile(filepath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0666)
 	if err != nil {
-		Log.Warn(err)
+		log.Warn(err)
 		return false
 	}
 	defer file.Close()
 
 	_, err = file.Write(buffer[:blockSize])
 	if err != nil {
-		Log.Warn(err)
+		log.Warn(err)
 		return false
 	}
 
@@ -247,13 +194,13 @@ func ReadFile(directory string, filename string) []byte {
 	filepath := fmt.Sprintf("%s/%s", directory, filename)
 	file, err := os.Open(filepath)
 	if err != nil {
-		Log.Warn(err)
+		log.Warn(err)
 		return nil
 	}
 
 	buffer, err := io.ReadAll(file)
 	if err != nil {
-		Log.Warn(err)
+		log.Warn(err)
 		return nil
 	}
 
@@ -316,10 +263,8 @@ func FileExists(path string) bool {
 		return true
 	}
 	if os.IsNotExist(err) {
-		Log.Warn(err)
 		return false
 	}
-	Log.Warn(err)
 	return false
 }
 
