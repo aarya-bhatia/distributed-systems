@@ -17,10 +17,20 @@ func runTask(task string, output chan string, done chan bool) {
 		done <- true
 	}()
 
-	log.Println("Task started:", task)
-
 	tokens := strings.Split(task, " ")
 	addr := tokens[0]
+
+	if strings.Index(addr, ":") == -1 {
+		index, err := strconv.Atoi(addr)
+		if err != nil {
+			log.Println(err)
+			return
+		}
+		node := common.ProdCluster[index]
+		addr = fmt.Sprintf("%s:%d", node.Hostname, node.FrontendPort)
+	}
+
+	log.Printf("Starting task for node %s: %s\n", addr, task)
 
 	conn, err := net.Dial("tcp", addr)
 	if err != nil {
@@ -58,29 +68,16 @@ func consumer(output chan string) {
 }
 
 func main() {
-	taskFile := "tasks"
-	if len(os.Args) > 1 {
-		taskFile = os.Args[1]
-	}
-
-	log.Println("Using file:", taskFile)
-
 	output := make(chan string)
 	go consumer(output)
 
-	file, err := os.Open(taskFile)
-	if err != nil {
-		log.Fatal(err)
-	}
-
 	done := make(chan bool)
-	scanner := bufio.NewScanner(file)
+	scanner := bufio.NewScanner(os.Stdin)
 	startTime := time.Now().UnixNano()
 	numTasks := 0
 
 	for scanner.Scan() {
 		line := scanner.Text()
-		fmt.Println(line)
 
 		if len(line) == 0 || line[0] == '#' {
 			continue
