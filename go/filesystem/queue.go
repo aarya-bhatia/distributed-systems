@@ -28,7 +28,7 @@ func (q *Queue) PushRead(request *Request) {
 	q.Mutex.Lock()
 	defer q.Mutex.Unlock()
 	q.Reads = append(q.Reads, request)
-	Log.Debug("Read task added")
+	// Log.Debug("Read task added")
 }
 
 // Enqueue a write task for file
@@ -36,7 +36,7 @@ func (q *Queue) PushWrite(request *Request) {
 	q.Mutex.Lock()
 	defer q.Mutex.Unlock()
 	q.Writes = append(q.Writes, request)
-	Log.Debug("Write task added")
+	// Log.Debug("Write task added")
 }
 
 // Get the next task if available, otherwise returns nil

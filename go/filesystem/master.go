@@ -248,7 +248,7 @@ func (server *Server) downloadFileWrapper(task *Request) {
 
 	Log.Debug("Starting download for file:", task.Name)
 	downloadFile(task.Client, file, blocks)
-	Log.Debug("Download finished for file:", task.Name)
+	// Log.Debug("Download finished for file:", task.Name)
 
 	server.getQueue(task.Name).ReadDone()
 	server.handleConnection(task.Client) // continue reading requests

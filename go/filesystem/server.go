@@ -73,7 +73,7 @@ func (server *Server) Start() {
 		Log.Fatal("Error starting server: ", err)
 	}
 
-	Log.Infof("TCP Server is listening on port %d...\n", server.Port)
+	Log.Infof("TCP File Server is listening on port %d...\n", server.Port)
 
 	go server.pollTasks()
 	go server.startRebalanceRoutine()

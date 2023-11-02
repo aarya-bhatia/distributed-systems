@@ -10,7 +10,7 @@ import (
 func downloadBlock(directory string, client net.Conn, blockName string) bool {
 	Log.Debugf("Sending block %s to client %s", blockName, client.RemoteAddr())
 	if buffer := common.ReadFile(directory, blockName); buffer != nil {
-		Log.Debug("block size:", len(buffer))
+		// Log.Debug("block size:", len(buffer))
 		if common.SendAll(client, buffer, len(buffer)) > 0 {
 			return true
 		}
@@ -52,7 +52,7 @@ func uploadBlock(directory string, client net.Conn, blockName string, blockSize 
 		return false
 	}
 
-	Log.Infof("Added block %s to disk\n", blockName)
+	// Log.Infof("Added block %s to disk\n", blockName)
 	return true
 }
 

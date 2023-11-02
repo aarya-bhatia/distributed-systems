@@ -3,7 +3,7 @@
 # Default values
 readNodes=""
 writeNodes=""
-filename="file"
+filename="hello"
 
 print_usage=false
 
@@ -33,7 +33,6 @@ while [[ $# -gt 0 ]]; do
 			;;
 		-f=*)
 			filename="${1#-f=}"
-			filename=$(echo "\$HOME/$filename")
 			shift
 			;;
 		--usage)
@@ -59,14 +58,21 @@ echo "readNodes: $readNodes"
 echo "writeNodes: $writeNodes"
 echo "filename: $filename"
 
-h="/home/aaryab2"
-
-if [ -z ${readNodes} ]; then
-	echo ${readNodes} | go run . ${h}/client get ${filename} ${h}/${filename}.out &
+if [ ! -z ${readNodes} ]; then
+	for readNode in ${readNodes}; do
+		port=$((4000+$readNode))
+		echo $port
+		remote=$(echo $filename | tr '/' '_')
+		echo get $remote /tmp/${filename} | nc localhost $port -q 1 && echo file saved as /tmp/${filename} &
+	done
 fi
 
-if [ -z ${writeNodes} ]; then
-	echo ${writeNodes} | go run . ${h}/client put ${h}/${filename} ${filename} &
+if [ ! -z ${writeNodes} ]; then
+	for writeNode in ${writeNodes}; do
+		port=$((4000+$writeNode))
+		remote=$(echo $filename | tr '/' '_')
+		echo $port
+		echo put $filename $remote | nc localhost $port -q 1 && echo file saved on server as $remote &
+	done
 fi
 
-echo "running"
