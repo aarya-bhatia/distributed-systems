@@ -5,9 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net"
-	"os"
 	"os/exec"
-	"strconv"
 )
 
 func worker(conn net.Conn) {
@@ -31,7 +29,9 @@ func worker(conn net.Conn) {
 	cmd.Run()
 }
 
-func start(port int) {
+func main() {
+	port := 3000
+
 	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 	if err != nil {
 		log.Fatal("Error starting server:", err)
@@ -50,17 +50,3 @@ func start(port int) {
 		go worker(conn)
 	}
 }
-
-func main() {
-	if len(os.Args) < 2 {
-		log.Fatal("Usage: ./server port")
-	}
-
-	port, err := strconv.Atoi(os.Args[1])
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	start(port)
-}
-
