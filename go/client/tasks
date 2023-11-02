@@ -1,6 +1,6 @@
 fa23-cs425-0701.cs.illinois.edu:4000 put /home/aaryab2/hello hello
 fa23-cs425-0701.cs.illinois.edu:4000 put /home/aaryab2/mid mid
-fa23-cs425-0702.cs.illinois.edu:4000 put /home/aaryab2/file file
+# fa23-cs425-0702.cs.illinois.edu:4000 put /home/aaryab2/file file
 # fa23-cs425-0702.cs.illinois.edu:4000 put /home/aaryab2/file file
 
 sleep 2

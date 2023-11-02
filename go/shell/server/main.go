@@ -19,6 +19,12 @@ func worker(conn net.Conn) {
 		return
 	}
 
+	command = command[:len(command)-1]
+
+	if command == "KILL" {
+		log.Fatal("Exiting")
+	}
+
 	cmd := exec.Command("sh", "-c", command)
 	cmd.Stdout = conn
 	cmd.Stderr = conn
