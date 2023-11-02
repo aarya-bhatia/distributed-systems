@@ -125,6 +125,11 @@ var LocalCluster = []Node{
 	{3, "localhost", 6003, 5003, 4003},
 	{4, "localhost", 6004, 5004, 4004},
 	{5, "localhost", 6005, 5005, 4005},
+	{6, "localhost", 6006, 5006, 4006},
+	{7, "localhost", 6007, 5007, 4007},
+	{8, "localhost", 6008, 5008, 4008},
+	{9, "localhost", 6009, 5009, 4009},
+	{10, "localhost", 6010, 5010, 4010},
 }
 
 var Cluster []Node = LocalCluster

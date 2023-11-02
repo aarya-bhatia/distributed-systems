@@ -1,12 +1,13 @@
 package main
 
 import (
+	"bufio"
 	"cs425/common"
 	"fmt"
-	"io"
 	"log"
 	"net"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -16,6 +17,8 @@ func runTask(task string, output chan string, done chan bool) {
 		done <- true
 	}()
 
+	log.Println("Task started:", task)
+
 	tokens := strings.Split(task, " ")
 	addr := tokens[0]
 
@@ -24,6 +27,8 @@ func runTask(task string, output chan string, done chan bool) {
 		log.Println(err)
 		return
 	}
+
+	defer conn.Close()
 
 	request := strings.Join(tokens[1:], " ")
 	log.Println(addr, request)
@@ -41,41 +46,68 @@ func runTask(task string, output chan string, done chan bool) {
 	output <- string(buffer[:n-1])
 }
 
+func consumer(output chan string) {
+	for {
+		message, ok := <-output
+		if !ok {
+			break
+		}
+
+		fmt.Println(message)
+	}
+}
+
 func main() {
 	taskFile := "tasks"
 	if len(os.Args) > 1 {
 		taskFile = os.Args[1]
 	}
 
-	file, _ := os.Open(taskFile)
-	data, _ := io.ReadAll(file)
-	lines := strings.Split(string(data), "\n")
+	log.Println("Using file:", taskFile)
 
-	numTasks := 0
 	output := make(chan string)
+	go consumer(output)
+
+	file, err := os.Open(taskFile)
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	done := make(chan bool)
-
+	scanner := bufio.NewScanner(file)
 	startTime := time.Now().UnixNano()
+	numTasks := 0
 
-	for _, line := range lines {
-		if len(line) <= 1 || line[0] == '#' {
+	for scanner.Scan() {
+		line := scanner.Text()
+		fmt.Println(line)
+
+		if line[0] == '#' {
 			continue
 		}
 
-		line = line[:len(line)-1]
-		go runTask(line, output, done)
+		if strings.Index(line, "sleep") == 0 {
+			interval, err := strconv.Atoi(line[6:])
+			if err != nil {
+				log.Println(err)
+			}
+			log.Println("Sleeping for", interval, "seconds")
+			time.Sleep(time.Duration(interval) * time.Second)
+		} else {
+			go runTask(line, output, done)
+			numTasks++
+		}
 	}
 
 	c := 0
 
 	for c < numTasks {
-		select {
-		case message := <-output:
-			fmt.Println(message)
-		case <-done:
-			c++
-		}
+		<-done
+		c++
 	}
+
+	close(output)
+	close(done)
 
 	endTime := time.Now().UnixNano()
 	elapsedTime := float64(endTime-startTime) * 1e-9
