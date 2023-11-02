@@ -82,7 +82,7 @@ func main() {
 		line := scanner.Text()
 		fmt.Println(line)
 
-		if line[0] == '#' {
+		if len(line) == 0 || line[0] == '#' {
 			continue
 		}
 

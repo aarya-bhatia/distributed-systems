@@ -1,3 +1,7 @@
 localhost:4001 put data/small small
+localhost:4002 put data/mid mid.out
+localhost:4001 put data/mid mid.out
 sleep 2
+localhost:4001 get small small.out
+localhost:4001 get mid mid.out
 localhost:4002 get small small.out
