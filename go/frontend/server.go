@@ -73,67 +73,61 @@ func (server *FrontendServer) handleConnection(conn net.Conn) {
 	defer conn.Close()
 	reader := bufio.NewReader(conn)
 
-	for {
-		buffer, err := reader.ReadString('\n')
-		if err != nil {
-			return
-		}
-
-		if buffer == "\n" || len(buffer) == 0 {
-			continue
-		}
-
-		tokens := strings.Split(buffer[:len(buffer)-1], " ")
-		verb := tokens[0]
-
-		if verb == "put" {
-			if len(tokens) != 3 {
-				common.SendMessage(conn, MalformedRequestError)
-				return
-			}
-
-			if !server.uploadFileWithRetry(tokens[1], tokens[2]) {
-				log.Warn("Upload failed!")
-				common.SendMessage(conn, "UPLOAD_ERROR")
-			} else {
-				log.Debug("Upload successful!")
-				common.SendMessage(conn, "UPLOAD_OK")
-			}
-
-		} else if verb == "get" {
-			if len(tokens) != 3 {
-				common.SendMessage(conn, MalformedRequestError)
-				return
-			}
-
-			if !server.downloadFile(tokens[2], tokens[1]) {
-				log.Debug("Download failed!")
-				common.SendMessage(conn, "DOWNLOAD_ERROR")
-			} else {
-				log.Debug("Download success!")
-				common.SendMessage(conn, "DOWNLOAD_OK")
-			}
-
-		} else if verb == "delete" {
-			if len(tokens) != 2 {
-				common.SendMessage(conn, MalformedRequestError)
-				return
-			}
-
-			if !server.deleteFile(tokens[1]) {
-				log.Warn("Delete failed!")
-				common.SendMessage(conn, "DELETE_ERROR")
-			} else {
-				log.Info("Delete successful!")
-				common.SendMessage(conn, "DELETE_OK")
-			}
-
-		} else {
-			common.SendMessage(conn, UnknownRequestError)
-			return
-		}
+	buffer, err := reader.ReadString('\n')
+	if err != nil {
+		return
 	}
 
+	if buffer == "\n" || len(buffer) == 0 {
+		return
+	}
+
+	tokens := strings.Split(buffer[:len(buffer)-1], " ")
+	verb := tokens[0]
+
+	if verb == "put" {
+		if len(tokens) != 3 {
+			common.SendMessage(conn, MalformedRequestError)
+			return
+		}
+		if !server.uploadFileWithRetry(tokens[1], tokens[2]) {
+			log.Warn("Upload failed!")
+			common.SendMessage(conn, "UPLOAD_ERROR")
+		} else {
+			log.Debug("Upload successful!")
+			common.SendMessage(conn, "UPLOAD_OK")
+		}
+
+	} else if verb == "get" {
+		if len(tokens) != 3 {
+			common.SendMessage(conn, MalformedRequestError)
+			return
+		}
+		if !server.downloadFile(tokens[2], tokens[1]) {
+			log.Debug("Download failed!")
+			common.SendMessage(conn, "DOWNLOAD_ERROR")
+		} else {
+			log.Debug("Download success!")
+			common.SendMessage(conn, "DOWNLOAD_OK")
+		}
+
+	} else if verb == "delete" {
+		if len(tokens) != 2 {
+			common.SendMessage(conn, MalformedRequestError)
+			return
+		}
+		if !server.deleteFile(tokens[1]) {
+			log.Warn("Delete failed!")
+			common.SendMessage(conn, "DELETE_ERROR")
+		} else {
+			log.Info("Delete successful!")
+			common.SendMessage(conn, "DELETE_OK")
+		}
+
+	} else {
+		common.SendMessage(conn, UnknownRequestError)
+		return
+	}
 }
 
 func (server *FrontendServer) Start() {
