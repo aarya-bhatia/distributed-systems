@@ -37,6 +37,38 @@ func NewServer(info common.Node, backendServer *filesystem.Server) *FrontendServ
 	return server
 }
 
+func (server *FrontendServer) uploadFileWithRetry(localFilename string, remoteFilename string) bool {
+	backoff := 200 * time.Millisecond
+
+	for len(server.BackendServer.GetAliveNodes()) >= common.REPLICA_FACTOR {
+		if server.uploadFile(localFilename, remoteFilename) {
+			return true
+		}
+
+		time.Sleep(backoff)
+		backoff *= 2
+		log.Infof("Retrying upload after %d ms", backoff.Milliseconds())
+	}
+
+	return false
+}
+
+// TODO
+func (server *FrontendServer) downloadFileWithRetry(localFilename string, remoteFilename string) bool {
+	// backoff := 200 * time.Millisecond
+	//
+	// for len(server.BackendServer.GetAliveNodes()) >= common.REPLICA_FACTOR {
+	// 	if server.uploadFile(localFilename, remoteFilename) {
+	// 		return true
+	// 	}
+	//
+	// 	time.Sleep(backoff)
+	// 	backoff *= 2
+	// }
+	//
+	return false
+}
+
 func (server *FrontendServer) handleConnection(conn net.Conn) {
 	defer conn.Close()
 	reader := bufio.NewReader(conn)
@@ -60,7 +92,7 @@ func (server *FrontendServer) handleConnection(conn net.Conn) {
 				return
 			}
 
-			if !server.uploadFile(tokens[1], tokens[2]) {
+			if !server.uploadFileWithRetry(tokens[1], tokens[2]) {
 				log.Warn("Upload failed!")
 				common.SendMessage(conn, "UPLOAD_ERROR")
 			} else {
