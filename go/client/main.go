@@ -61,14 +61,34 @@ func runTask(task string, output chan string, done chan bool) {
 		return
 	}
 
-	buffer := make([]byte, common.MIN_BUFFER_SIZE)
-	n, err := conn.Read(buffer)
-	if err != nil {
-		log.Println(err)
-		return
+	scanner := bufio.NewReader(conn)
+
+	for {
+		reply, err := scanner.ReadString('\n')
+		if err != nil { // EOF
+			log.Println(err)
+			break
+		}
+
+		reply = reply[:len(reply)-1]
+
+		// if reply == "UPLOAD_OK" || reply == "UPLOAD_ERROR" ||
+		// 	reply == "DOWNLOAD_OK" || reply == "DOWNLOAD_ERROR" ||
+		// 	reply == "DELETE_OK" || reply == "DELETE_ERROR" {
+		// 	break
+		// }
+
+		output <- reply
 	}
 
-	output <- string(buffer[:n-1])
+	// buffer := make([]byte, common.MIN_BUFFER_SIZE)
+	// n, err := conn.Read(buffer)
+	// if err != nil {
+	// 	log.Println(err)
+	// 	return
+	// }
+
+	// output <- string(buffer[:n-1])
 }
 
 func consumer(output chan string) {
@@ -87,13 +107,18 @@ func main() {
 	go consumer(output)
 
 	done := make(chan bool)
-	scanner := bufio.NewScanner(os.Stdin)
+	scanner := bufio.NewReader(os.Stdin)
 	startTime := time.Now().UnixNano()
 	numTasks := 0
 
-	for scanner.Scan() {
-		line := scanner.Text()
+	for {
+		line, err := scanner.ReadString('\n')
+		if err != nil {
+			log.Println(err)
+			break
+		}
 
+		line = line[:len(line)-1]
 		if len(line) == 0 || line[0] == '#' {
 			continue
 		}
