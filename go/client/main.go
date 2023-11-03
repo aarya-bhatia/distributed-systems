@@ -12,6 +12,22 @@ import (
 	"time"
 )
 
+var hostnames = []string{
+	"localhost",
+	"fa23-cs425-0701.cs.illinois.edu",
+	"fa23-cs425-0702.cs.illinois.edu",
+	"fa23-cs425-0703.cs.illinois.edu",
+	"fa23-cs425-0704.cs.illinois.edu",
+	"fa23-cs425-0705.cs.illinois.edu",
+	"fa23-cs425-0706.cs.illinois.edu",
+	"fa23-cs425-0707.cs.illinois.edu",
+	"fa23-cs425-0708.cs.illinois.edu",
+	"fa23-cs425-0709.cs.illinois.edu",
+	"fa23-cs425-0710.cs.illinois.edu",
+}
+
+const port = common.DEFAULT_FRONTEND_PORT
+
 func runTask(task string, output chan string, done chan bool) {
 	defer func() {
 		done <- true
@@ -26,8 +42,7 @@ func runTask(task string, output chan string, done chan bool) {
 			log.Println(err)
 			return
 		}
-		node := common.ProdCluster[index]
-		addr = fmt.Sprintf("%s:%d", node.Hostname, node.FrontendPort)
+		addr = hostnames[index] + ":" + fmt.Sprint(port)
 	}
 
 	log.Printf("Starting task for node %s: %s\n", addr, task)
