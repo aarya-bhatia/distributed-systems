@@ -12,6 +12,7 @@ import (
 	"path"
 	"strconv"
 	"strings"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -91,70 +92,85 @@ func main() {
 	go failureDetectorServer.Start()
 	go frontend.Start()
 
-	mode := 1
-	scanner := bufio.NewScanner(os.Stdin)
+	go stdinListener(info, fileServer, failureDetectorServer)
 
-	for scanner.Scan() {
-		command := strings.TrimSpace(scanner.Text())
-		tokens := strings.Split(command, " ")
-
-		if tokens[0] == "help" {
-			fmt.Println("mode 0: change mode to failure detector")
-			fmt.Println("mode 1: change mode to file system")
-		} else if tokens[0] == "mode" {
-			if tokens[1] == "1" {
-				fmt.Println("Set mode to file system")
-				mode = 1
-			} else {
-				fmt.Println("Set mode to failure detector")
-				mode = 0
-			}
-		}
-
-		if mode == 1 {
-			handleCommand(fileServer, command)
-		} else {
-			failureDetectorServer.InputChannel <- command
-		}
-	}
-
-	// run server forever
-	<-make(chan bool)
+	<-make(chan bool) // blocks
 }
 
-// TODO
-func handleCommand(server *filesystem.Server, command string) {
-	if command == "help" {
-		fmt.Println("ls: Display metadata table")
-		fmt.Println("info: Display server info")
-		fmt.Println("files: Display list of files")
-	} else if command == "ls" {
-		server.PrintFileMetadata()
-	} else if command == "files" {
-		for _, f := range server.Files {
-			fmt.Printf("File:%s, version:%d, size:%d, numBlocks:%d\n", f.Filename, f.Version, f.FileSize, f.NumBlocks)
-		}
+func stdinListener(info common.Node, fs *filesystem.Server, fd *failuredetector.Server) {
+	scanner := bufio.NewScanner(os.Stdin)
+	for scanner.Scan() {
+		command := strings.TrimSpace(scanner.Text())
 
-		fmt.Println("storage:")
-		files, err := common.GetFilesInDirectory(server.Directory)
-		if err != nil {
-			log.Warn(err)
-			return
-		}
-		for _, f := range files {
-			tokens := strings.Split(f.Name, ":")
-			fmt.Printf("File %s, version %s, block %s, size %d\n", tokens[0], tokens[1], tokens[2], f.Size)
-		}
-	} else if command == "info" {
-		fmt.Printf("Hostname: %s, Port: %d\n", server.Hostname, server.Port)
-		server.Mutex.Lock()
+		switch strings.ToLower(command) {
 
-		fmt.Printf("Server ID: %s\nTotal files: %d\nNum alive nodes: %d\nNum disk blocks: %d\n",
-			server.ID,
-			len(server.Files),
-			len(server.Nodes),
-			common.GetFileCountInDirectory(server.Directory))
+		case "list_mem":
+			fd.PrintMembershipTable()
 
-		server.Mutex.Unlock()
+		case "list_self":
+			fmt.Println(fd.Self.ID)
+
+		case "kill":
+			log.Fatalf("Kill command received at %d milliseconds", time.Now().UnixMilli())
+
+		case "start_gossip":
+			fallthrough
+
+		case "join":
+			fd.StartGossip()
+			fmt.Println("OK")
+
+		case "stop_gossip":
+			fallthrough
+
+		case "leave":
+			fd.StopGossip()
+			fmt.Println("OK")
+
+		case "files":
+			fs.PrintFileMetadata()
+
+		case "info":
+			fmt.Println("----------------------------------------------------------")
+			fmt.Printf("Node Address: %s\n", info.Hostname)
+			fmt.Printf("Ports: Failure Dectector: (udp) %d, Backend: (tcp) %d, Frontend: (tcp) %d\n", info.UDPPort, info.TCPPort, info.FrontendPort)
+			fmt.Println("Member ID:", fd.Self.ID)
+			fmt.Println("Node ID:", fs.ID)
+			fmt.Println("Total disk blocks", common.GetFileCountInDirectory(fs.Directory))
+			fs.Mutex.Lock()
+			fmt.Println("Total files:", len(fs.Files))
+			fmt.Println("Num nodes:", len(fs.Nodes))
+			fmt.Println("----------------------------------------------------------")
+
+			for _, f := range fs.Files {
+				fmt.Printf("Filename:%s, Version:%d, Size:%d, NumBlocks:%d\n", f.Filename, f.Version, f.FileSize, f.NumBlocks)
+			}
+
+			files, err := common.GetFilesInDirectory(fs.Directory)
+			if err != nil {
+				log.Warn(err)
+				return
+			}
+
+			for _, f := range files {
+				tokens := strings.Split(f.Name, ":")
+				fmt.Printf("File %s, version %s, block %s, size %d\n", tokens[0], tokens[1], tokens[2], f.Size)
+			}
+
+			fs.Mutex.Unlock()
+
+		case "help":
+			fmt.Println("kill: crash server")
+
+			fmt.Println("list_mem: print FD membership table")
+			fmt.Println("list_self: print FD member id")
+			fmt.Println("join: start gossiping")
+			fmt.Println("leave: stop gossiping")
+			// fmt.Println("sus_on: enable suspicion protocol")
+			// fmt.Println("sus_off: disable suspicion protocol")
+
+			fmt.Println("info: Display node info")
+			fmt.Println("files: Display files")
+		}
 	}
 }

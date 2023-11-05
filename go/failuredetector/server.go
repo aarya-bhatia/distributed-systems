@@ -58,7 +58,6 @@ type Server struct {
 	TimerManager    *timer.TimerManager
 	GossipChannel   chan bool
 	ReceiverChannel chan ReceiverEvent
-	InputChannel    chan string
 	Protocol        int
 	Notifier        common.Notifier
 }
@@ -85,8 +84,6 @@ func (s *Server) Start() {
 			s.HandleTimeout(e)
 		case e := <-s.ReceiverChannel:
 			s.HandleRequest(e)
-		case e := <-s.InputChannel:
-			s.HandleCommand(e)
 		}
 	}
 }
@@ -150,7 +147,6 @@ func NewServer(Hostname string, Port int, Protocol int, Notifier common.Notifier
 	server.TotalByte = 0
 	server.GossipChannel = make(chan bool)
 	server.ReceiverChannel = make(chan ReceiverEvent)
-	server.InputChannel = make(chan string)
 	server.Protocol = Protocol
 	server.Notifier = Notifier
 
@@ -201,7 +197,6 @@ func (server *Server) Close() {
 	server.TimerManager.Close()
 	close(server.GossipChannel)
 	close(server.ReceiverChannel)
-	close(server.InputChannel)
 }
 
 // Each member is encoded as "host:port:id:counter:state"
@@ -515,7 +510,7 @@ func receiverRoutine(s *Server) {
 	}
 }
 
-func startGossip(s *Server) {
+func (s *Server) StartGossip() {
 	if IsIntroducer(s) {
 		log.Warn("Introducer is always active")
 		return
@@ -533,7 +528,7 @@ func startGossip(s *Server) {
 	sendJoinRequest(s)
 }
 
-func stopGossip(s *Server) {
+func (s *Server) StopGossip() {
 	if IsIntroducer(s) {
 		log.Warn("Introducer is always active")
 		return
@@ -594,43 +589,6 @@ func sendJoinRequest(s *Server) {
 	s.TimerManager.RestartTimer(JOIN_TIMER_ID, common.JOIN_RETRY_TIMEOUT)
 }
 
-func (s *Server) HandleCommand(command string) {
-	commands := []string{"ls: print membership table", "id: print id of node",
-		"kill: crash server", "join: start gossiping", "leave: stop gossiping", "sus (on|off): enable/disable gossip suspicion protocol",
-		"help: list all commands"}
-
-	switch strings.ToLower(command) {
-
-	case "ls":
-		s.PrintMembershipTable()
-
-	case "id":
-		fmt.Println(s.Self.ID)
-
-	case "kill":
-		log.Fatalf("Kill command received at %d milliseconds", time.Now().UnixMilli())
-
-	case "start_gossip":
-		fallthrough
-
-	case "join":
-		startGossip(s)
-		fmt.Println("OK")
-
-	case "stop_gossip":
-		fallthrough
-
-	case "leave":
-		stopGossip(s)
-		fmt.Println("OK")
-
-	case "help":
-		for i := range commands {
-			fmt.Printf("%d. %s\n", i+1, commands[i])
-		}
-	}
-}
-
 // Handles the request received by the server
 // JOIN, PING, ID, LIST, KILL, START_GOSSIP, STOP_GOSSIP, CONFIG, SUS ON, SUS OFF, LIST_SUS
 func (s *Server) HandleRequest(e ReceiverEvent) {
@@ -671,12 +629,12 @@ func (s *Server) HandleRequest(e ReceiverEvent) {
 		log.Fatalf("KILL command received at %d milliseconds", time.Now().UnixMilli())
 
 	case "start_gossip":
-		startGossip(s)
+		s.StartGossip()
 		log.Warnf("START command received at %d milliseconds", time.Now().UnixMilli())
 		s.Connection.WriteToUDP([]byte("OK\n"), e.Sender)
 
 	case "stop_gossip":
-		stopGossip(s)
+		s.StopGossip()
 		log.Warnf("STOP command received at %d milliseconds", time.Now().UnixMilli())
 		s.Connection.WriteToUDP([]byte("OK\n"), e.Sender)
 
