@@ -782,7 +782,7 @@ func HandleConfigRequest(s *Server, e ReceiverEvent) {
 // Received member list from peer
 func HandlePingRequest(s *Server, e ReceiverEvent) {
 	if !s.Active {
-		log.Debugf("PING from %s dropped as server is inactive\n", e)
+		// log.Debugf("PING from %s dropped as server is inactive\n", e)
 		return
 	}
 
@@ -803,7 +803,7 @@ func HandlePingRequest(s *Server, e ReceiverEvent) {
 	}
 
 	if tokens[2] != s.Self.ID {
-		log.Debugf("Dropped PING due to ID mismatch: %s\n", tokens[2])
+		// log.Debugf("Dropped PING due to ID mismatch: %s\n", tokens[2])
 		return
 	}
 
