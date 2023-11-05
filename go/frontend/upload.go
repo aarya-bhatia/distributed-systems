@@ -177,8 +177,7 @@ func uploadBlockSync(info *UploadInfo, connCache *ConnectionCache) bool {
 			return false
 		}
 
-		_, err := conn.Write([]byte(fmt.Sprintf("UPLOAD %s %d\n", info.blockName, info.blockSize)))
-		if err != nil {
+		if !common.SendMessage(conn, fmt.Sprintf("UPLOAD %s %d\n", info.blockName, info.blockSize)) {
 			return false
 		}
 

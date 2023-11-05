@@ -1,15 +1,7 @@
 # TODO
 - run demo tests
-- logging - files, fewer debug logs
-- handle all stdin requests - as demo
-- handle all requests on network as well - testing
-- client - retry upload/download on failures - unless not enough nodes
+- client - retry download on failures
 - client - caching on retry - if have time
 - server - persistent connections with all replicas forever
-- client:
-    - input from stdin
-    - format: `<vms> <command> <Args>...`
-    - Eg: 1,2,4 put file file
-- add unique block elements
+- replicate metadata periodically
 - finish report
-- 

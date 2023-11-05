@@ -21,7 +21,7 @@ const (
 	POLL_INTERVAL      = 1 * time.Second
 	REBALANCE_INTERVAL = 3 * time.Second
 
-	JOIN_RETRY_TIMEOUT = time.Second * 10
+	JOIN_RETRY_TIMEOUT = time.Second * 5
 
 	NODES_PER_ROUND = 4 // Number of random peers to send gossip every round
 
@@ -302,3 +302,17 @@ func AddUniqueElement(array []string, target string) []string {
 	return append(array, target)
 }
 
+func HasElement(array []string, target string) bool {
+	for _, element := range array {
+		if element == target {
+			return true
+		}
+	}
+	return false
+}
+
+func CloseAll(connections []net.Conn) {
+	for _, conn := range connections {
+		conn.Close()
+	}
+}

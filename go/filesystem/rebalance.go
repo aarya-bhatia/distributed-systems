@@ -18,8 +18,6 @@ func makeSet(values []string) map[string]bool {
 	return res
 }
 
-// TODO: rebalance metadata
-
 // To periodically redistribute file blocks to replicas to maintain equal load
 func (s *Server) startRebalanceRoutine() {
 	log.Debug("Starting rebalance routine")
@@ -36,9 +34,9 @@ func (s *Server) startRebalanceRoutine() {
 					continue
 				}
 
-				if len(nodes) >= common.REPLICA_FACTOR {
-					continue
-				}
+				// if len(nodes) >= common.REPLICA_FACTOR {
+				// 	continue
+				// }
 
 				replicas := GetReplicaNodes(aliveNodes, block, common.REPLICA_FACTOR)
 				if len(replicas) == 0 {
@@ -83,36 +81,26 @@ func (s *Server) sendRebalanceRequests(replica string, requests []string) {
 	if err != nil {
 		return
 	}
-
 	defer conn.Close()
 
-	buffer := make([]byte, common.MIN_BUFFER_SIZE)
-
 	for _, request := range requests {
-		if strings.Index(request, "ADD_BLOCK") != 0 {
-			log.Warn("Invalid request: ", request)
-			continue
-		}
-
-		n, err := conn.Write([]byte(request))
-		if err != nil {
+		if !common.SendMessage(conn, request) {
 			return
 		}
 
-		n, err = conn.Read(buffer)
-		if err != nil {
+		if !common.GetOKMessage(conn) {
 			return
 		}
 
-		if string(buffer)[:n-1] != "OK" {
-			return
-		}
-
+		var replicas []string
 		blockName := strings.Split(request, " ")[1]
-
 		s.Mutex.Lock()
-		s.BlockToNodes[blockName] = append(s.BlockToNodes[blockName], replica)
-		s.NodesToBlocks[replica] = append(s.NodesToBlocks[replica], blockName)
+		s.BlockToNodes[blockName] = common.AddUniqueElement(s.BlockToNodes[blockName], replica)
+		s.NodesToBlocks[replica] = common.AddUniqueElement(s.NodesToBlocks[replica], blockName)
+		replicas = s.BlockToNodes[blockName]
 		s.Mutex.Unlock()
+
+		conn := s.getMetadataReplicaConnections()
+		go replicateBlockMetadata(conn, blockName, replicas)
 	}
 }

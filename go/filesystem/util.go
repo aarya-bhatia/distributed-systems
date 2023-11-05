@@ -12,15 +12,7 @@ import (
 	"github.com/jedib0t/go-pretty/v6/table"
 )
 
-// var cache map[string]int = make(map[string]int)
-
 func GetNodeHash(node string) int {
-	// ret, ok := cache[node]
-	// if ok {
-	// 	return ret
-	// }
-	// cache[node] = common.GetHash(node, len(common.Cluster))
-	// return cache[node]
 	return common.GetHash(node, len(common.Cluster))
 }
 
@@ -34,7 +26,6 @@ func (server *Server) GetLeaderNode() string {
 			return ID
 		}
 	}
-
 	return server.ID
 }
 
@@ -49,8 +40,10 @@ func (s *Server) GetMetadataReplicaNodes(count int) []string {
 			res = append(res, ID)
 		}
 	}
-
-	return res
+	if len(res) < count {
+		return res
+	}
+	return res[:count]
 }
 
 func (s *Server) IsMetadataReplicaNode(count int, node string) bool {
@@ -62,15 +55,19 @@ func (s *Server) IsMetadataReplicaNode(count int, node string) bool {
 	return false
 }
 
-// get copy of replica connections
-func (server *Server) getMetadataReplicaConnections() []net.Conn {
-	server.Mutex.Lock()
-	metadataReplicaConnections := []net.Conn{}
-	for _, conn := range server.MetadataReplicaConn {
-		metadataReplicaConnections = append(metadataReplicaConnections, conn)
+func (s *Server) getMetadataReplicaConnections() []net.Conn {
+	replicas := s.GetMetadataReplicaNodes(common.REPLICA_FACTOR)
+	connections := []net.Conn{}
+
+	for _, replica := range replicas {
+		conn, err := net.Dial("tcp", replica)
+		if err != nil {
+			continue
+		}
+		connections = append(connections, conn)
 	}
-	server.Mutex.Unlock()
-	return metadataReplicaConnections
+
+	return connections
 }
 
 // Get the `count` nearest nodes to the file hash
@@ -138,32 +135,3 @@ func (server *Server) PrintFileMetadata() {
 	t.Render()
 }
 
-// Get list of replicas where any file blocks are stored
-func (server *Server) getFileReplicaUnion(file File) []string {
-	server.Mutex.Lock()
-	defer server.Mutex.Unlock()
-
-	replicaSet := make(map[string]bool)
-
-	for i := 0; i < file.NumBlocks; i++ {
-		blockName := common.GetBlockName(file.Filename, file.Version, i)
-		replicas, ok := server.BlockToNodes[blockName]
-		if !ok {
-			continue
-		}
-
-		for _, replica := range replicas {
-			replicaSet[replica] = true
-		}
-	}
-
-	delete(replicaSet, server.ID) // do not add self
-
-	// return map keys
-	res := []string{}
-	for replica := range replicaSet {
-		res = append(res, replica)
-	}
-
-	return res
-}

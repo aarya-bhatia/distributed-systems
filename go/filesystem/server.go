@@ -5,7 +5,6 @@ import (
 	"fmt"
 	log "github.com/sirupsen/logrus"
 	"net"
-	"os"
 	"sync"
 )
 
@@ -24,15 +23,14 @@ type Request struct {
 }
 
 type Server struct {
-	Hostname            string
-	Port                int
-	ID                  string          // hostname:port
-	Directory           string          // Path to save blocks on disk
-	Files               map[string]File // Files stored by system
-	Nodes               map[string]bool // Set of alive nodes
-	Mutex               sync.Mutex
-	FileQueues          map[string]*Queue   // Handle read/write operations for each file
-	MetadataReplicaConn map[string]net.Conn // connection with metadata replica nodes
+	Hostname   string
+	Port       int
+	ID         string          // hostname:port
+	Directory  string          // Path to save blocks on disk
+	Files      map[string]File // Files stored by system
+	Nodes      map[string]bool // Set of alive nodes
+	Mutex      sync.Mutex
+	FileQueues map[string]*Queue // Handle read/write operations for each file
 
 	// A block is represented as "filename:version:blocknum"
 	NodesToBlocks map[string][]string // Maps node ID to the blocks they are storing
@@ -58,7 +56,6 @@ func NewServer(info common.Node, dbDirectory string) *Server {
 	server.Nodes = make(map[string]bool)
 	server.Nodes[server.ID] = true
 	server.NodesToBlocks[server.ID] = []string{}
-	server.MetadataReplicaConn = make(map[string]net.Conn)
 
 	return server
 }
@@ -76,6 +73,7 @@ func (server *Server) Start() {
 
 	go server.pollTasks()
 	go server.startRebalanceRoutine()
+	// go server.startRebalanceMetadataRoutine()
 
 	for {
 		conn, err := listener.Accept()
@@ -107,7 +105,7 @@ func (s *Server) HandleNodeJoin(info *common.Node) {
 	s.NodesToBlocks[node] = []string{}
 	s.Mutex.Unlock()
 
-	s.addMetadataReplicaConnection(node)
+	s.replicateMetadata()
 }
 
 func (s *Server) HandleNodeLeave(info *common.Node) {
@@ -131,74 +129,22 @@ func (s *Server) HandleNodeLeave(info *common.Node) {
 	}
 
 	delete(s.NodesToBlocks, node)
-
-	if found, ok := s.MetadataReplicaConn[node]; ok {
-		found.Close()
-		delete(s.MetadataReplicaConn, node)
-	}
 	s.Mutex.Unlock()
+
+	s.replicateMetadata()
 }
 
-func (server *Server) DeleteFileAndBlocks(file File) {
-	server.Mutex.Lock()
-	defer server.Mutex.Unlock()
-
-	for i := 0; i < file.NumBlocks; i++ {
-		blockName := common.GetBlockName(file.Filename, file.Version, i)
-
-		if replicas, ok := server.BlockToNodes[blockName]; ok {
-			for _, replica := range replicas {
-				server.NodesToBlocks[replica] = common.RemoveElement(server.NodesToBlocks[replica], blockName)
-			}
-		}
-
-		if common.FileExists(server.Directory + "/" + blockName) {
-			os.Remove(server.Directory + "/" + blockName)
-		}
-
-		delete(server.BlockToNodes, blockName)
-	}
-
-	if found, ok := server.Files[file.Filename]; ok && found.Version > file.Version {
-		return
-	}
-
-	delete(server.Files, file.Filename)
-	log.Warn("File was deleted:", file.Filename)
-}
-
-func (s *Server) addMetadataReplicaConnection(node string) bool {
-	if !s.IsMetadataReplicaNode(common.REPLICA_FACTOR, node) {
-		return false
-	}
-
-	conn, err := net.Dial("tcp", node)
-	if err != nil {
-		log.Warn("Failed to connect", node)
-		return false
-	}
+func (s *Server) replicateMetadata() {
+	connections := s.getMetadataReplicaConnections()
+	defer common.CloseAll(connections)
 
 	s.Mutex.Lock()
-	defer s.Mutex.Unlock()
-
-	// close old connection if there is one
-	if found, ok := s.MetadataReplicaConn[node]; ok {
-		found.Close()
-	}
-
-	s.MetadataReplicaConn[node] = conn
-
-	// replicata all metdata
 	for _, file := range s.Files {
 		for i := 0; i < file.NumBlocks; i++ {
 			blockName := common.GetBlockName(file.Filename, file.Version, i)
-			go replicaBlockMetadata([]net.Conn{conn}, blockName, s.BlockToNodes[blockName])
+			go replicateFileMetadata(connections, file)
+			go replicateBlockMetadata(connections, blockName, s.BlockToNodes[blockName])
 		}
-		go replicateFileMetadata([]net.Conn{conn}, file)
-
 	}
-
-	// NOTE: rebalance routine will replicate data blocks
-
-	return true
+	s.Mutex.Unlock()
 }

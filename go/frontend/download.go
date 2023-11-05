@@ -138,9 +138,7 @@ func downloadBlock(file *os.File, blockName string, blockSize int, replica strin
 
 	request := fmt.Sprintf("DOWNLOAD %s\n", blockName)
 	log.Debug(request)
-	_, err := conn.Write([]byte(request))
-	if err != nil {
-		log.Warn(err)
+	if !common.SendMessage(conn, request) {
 		return false
 	}
 
@@ -162,7 +160,7 @@ func downloadBlock(file *os.File, blockName string, blockSize int, replica strin
 	}
 
 	log.Debugf("Received block %s (%d bytes) from %s\n", blockName, bufferSize, replica)
-	_, err = file.Write(buffer[:bufferSize])
+	_, err := file.Write(buffer[:bufferSize])
 	if err != nil {
 		log.Warn(err)
 		return false

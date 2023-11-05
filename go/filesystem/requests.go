@@ -13,7 +13,7 @@ import (
 
 func sendError(conn net.Conn, message string) {
 	log.Warnf("(Client %s) Error: %s", conn.RemoteAddr(), message)
-	conn.Write([]byte("ERROR\n" + message + "\n"))
+	common.SendMessage(conn, "ERROR\n"+message+"\n")
 }
 
 // Read all requests from client until an UPLOAD_FILE or DOWNLOAD_FILE request,
@@ -269,13 +269,7 @@ func (server *Server) handleAddBlock(conn net.Conn, tokens []string) bool {
 
 // Usage: GET_LEADER
 func (server *Server) handleGetLeader(conn net.Conn) bool {
-	_, err := conn.Write([]byte(server.GetLeaderNode() + "\n"))
-	if err != nil {
-		conn.Close()
-		return false
-	}
-
-	return true
+	return common.SendMessage(conn, server.GetLeaderNode()+"\n")
 }
 
 // Usage: SETFILE <filename> <version> <size> <numBlocks>
@@ -291,9 +285,13 @@ func (server *Server) handleSetFile(conn net.Conn, tokens []string) {
 	numBlocks, _ := strconv.Atoi(tokens[4])
 
 	server.Mutex.Lock()
+	if found, ok := server.Files[filename]; ok && found.Version > version {
+		server.Mutex.Unlock()
+		common.SendMessage(conn, "SETFILE_ERROR")
+		return
+	}
 	server.Files[filename] = File{Filename: filename, Version: version, FileSize: size, NumBlocks: numBlocks}
 	server.Mutex.Unlock()
-
 	common.SendMessage(conn, "SETFILE_OK")
 }
 
@@ -308,12 +306,11 @@ func (server *Server) handleSetBlock(conn net.Conn, tokens []string) {
 	replicas := strings.Split(tokens[2], ",")
 
 	server.Mutex.Lock()
-	server.BlockToNodes[blockName] = replicas
 	for _, replica := range replicas {
-		common.AddUniqueElement(server.NodesToBlocks[replica], blockName)
+		server.NodesToBlocks[replica] = common.AddUniqueElement(server.NodesToBlocks[replica], blockName)
+		server.BlockToNodes[blockName] = common.AddUniqueElement(server.BlockToNodes[blockName], replica)
 	}
 	server.Mutex.Unlock()
-
 	common.SendMessage(conn, "SETBLOCK_OK")
 }
 
@@ -328,7 +325,7 @@ func (server *Server) handleDelete(conn net.Conn, tokens []string) {
 	version, _ := strconv.Atoi(tokens[2])
 	numBlocks, _ := strconv.Atoi(tokens[3])
 
-	server.DeleteFileAndBlocks(File{Filename: filename, Version: version, NumBlocks: numBlocks})
+	server.deleteFileLocal(File{Filename: filename, Version: version, NumBlocks: numBlocks})
 	common.SendMessage(conn, "OK")
 }
 
