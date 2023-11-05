@@ -12,15 +12,16 @@ import (
 	"github.com/jedib0t/go-pretty/v6/table"
 )
 
-var cache map[string]int = make(map[string]int)
+// var cache map[string]int = make(map[string]int)
 
 func GetNodeHash(node string) int {
-	ret, ok := cache[node]
-	if ok {
-		return ret
-	}
-	cache[node] = common.GetHash(node, len(common.Cluster))
-	return cache[node]
+	// ret, ok := cache[node]
+	// if ok {
+	// 	return ret
+	// }
+	// cache[node] = common.GetHash(node, len(common.Cluster))
+	// return cache[node]
+	return common.GetHash(node, len(common.Cluster))
 }
 
 // First alive node in cluster, i.e. node with smallest ID
