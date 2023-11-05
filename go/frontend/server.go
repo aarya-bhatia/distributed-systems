@@ -6,25 +6,13 @@ import (
 	"cs425/filesystem"
 	"fmt"
 	log "github.com/sirupsen/logrus"
-	"math/rand"
 	"net"
-	"os"
-	"strconv"
 	"strings"
-	"time"
 )
 
 type FrontendServer struct {
 	Port          int
 	BackendServer *filesystem.Server
-}
-
-type UploadInfo struct {
-	server    net.Conn
-	blockSize int
-	blockData []byte
-	blockName string
-	replicas  []string
 }
 
 const MalformedRequestError = "ERROR Malformed Request"
@@ -35,38 +23,6 @@ func NewServer(info common.Node, backendServer *filesystem.Server) *FrontendServ
 	server.Port = info.FrontendPort
 	server.BackendServer = backendServer
 	return server
-}
-
-func (server *FrontendServer) uploadFileWithRetry(localFilename string, remoteFilename string) bool {
-	backoff := 200 * time.Millisecond
-
-	for len(server.BackendServer.GetAliveNodes()) >= common.REPLICA_FACTOR {
-		if server.uploadFile(localFilename, remoteFilename) {
-			return true
-		}
-
-		time.Sleep(backoff)
-		backoff *= 2
-		log.Infof("Retrying upload after %d ms", backoff.Milliseconds())
-	}
-
-	return false
-}
-
-// TODO
-func (server *FrontendServer) downloadFileWithRetry(localFilename string, remoteFilename string) bool {
-	// backoff := 200 * time.Millisecond
-	//
-	// for len(server.BackendServer.GetAliveNodes()) >= common.REPLICA_FACTOR {
-	// 	if server.uploadFile(localFilename, remoteFilename) {
-	// 		return true
-	// 	}
-	//
-	// 	time.Sleep(backoff)
-	// 	backoff *= 2
-	// }
-	//
-	return false
 }
 
 func (server *FrontendServer) handleConnection(conn net.Conn) {
@@ -85,24 +41,29 @@ func (server *FrontendServer) handleConnection(conn net.Conn) {
 	tokens := strings.Split(buffer[:len(buffer)-1], " ")
 	verb := tokens[0]
 
+	// Usage: put <local_filename> <remote_filename>
 	if verb == "put" {
 		if len(tokens) != 3 {
 			common.SendMessage(conn, MalformedRequestError)
 			return
 		}
-		if !server.uploadFileWithRetry(tokens[1], tokens[2]) {
+
+		replicas, status := server.uploadFileWithRetry(tokens[1], tokens[2])
+		if status != nil {
 			log.Warn("Upload failed!")
-			common.SendMessage(conn, "UPLOAD_ERROR")
+			common.SendMessage(conn, "UPLOAD_ERROR "+status.Error())
 		} else {
 			log.Debug("Upload successful!")
-			common.SendMessage(conn, "UPLOAD_OK")
+			common.SendMessage(conn, "UPLOAD_OK "+strings.Join(replicas, ","))
 		}
 
+		// Usage: get <remote_filename> <local_filename>
 	} else if verb == "get" {
 		if len(tokens) != 3 {
 			common.SendMessage(conn, MalformedRequestError)
 			return
 		}
+
 		if !server.downloadFile(tokens[2], tokens[1]) {
 			log.Debug("Download failed!")
 			common.SendMessage(conn, "DOWNLOAD_ERROR")
@@ -111,6 +72,7 @@ func (server *FrontendServer) handleConnection(conn net.Conn) {
 			common.SendMessage(conn, "DOWNLOAD_OK")
 		}
 
+		// Usage: delete <remote_filename>
 	} else if verb == "delete" {
 		if len(tokens) != 2 {
 			common.SendMessage(conn, MalformedRequestError)
@@ -144,7 +106,6 @@ func (server *FrontendServer) Start() {
 			continue
 		}
 
-		// log.Debugf("Accepted connection from %s\n", conn.RemoteAddr())
 		go server.handleConnection(conn)
 	}
 }
@@ -176,294 +137,4 @@ func (server *FrontendServer) deleteFile(filename string) bool {
 	}
 
 	return common.GetOKMessage(conn)
-}
-
-// Usage: get <remote_filename> <local_filename>
-func (server *FrontendServer) downloadFile(localFilename string, remoteFilename string) bool {
-	connCache := NewConnectionCache()
-	defer connCache.Close()
-
-	file, err := os.Create(localFilename)
-	if err != nil {
-		log.Warn(err)
-		return false
-	}
-	defer file.Close()
-
-	leader := server.getLeaderConnection()
-	if leader == nil {
-		return false
-	}
-	defer leader.Close()
-
-	request := fmt.Sprintf("DOWNLOAD_FILE %s\n", remoteFilename)
-	log.Debug(request)
-	if !common.SendMessage(leader, request) {
-		return false
-	}
-
-	reader := bufio.NewReader(leader)
-	fileSize := 0
-
-	var startTime int64 = 0
-	var endTime int64 = 0
-
-	// log.Debug("Reading file block list")
-	for {
-		line, err := reader.ReadString('\n')
-		if err != nil {
-			log.Warn(err)
-			break
-		}
-
-		if fileSize == 0 {
-			// log.Info("Starting download now...")
-			startTime = time.Now().UnixNano()
-		}
-
-		line = line[:len(line)-1]
-		log.Debug("Received:", line)
-		tokens := strings.Split(line, " ")
-
-		if len(tokens) == 1 {
-			if tokens[0] == "ERROR" {
-				log.Warn("ERROR")
-				line, _ = reader.ReadString('\n') // Read error message on next line
-				log.Warn(line)
-				return false
-			}
-			break
-		}
-
-		if len(tokens) != 3 {
-			log.Warn("Invalid number of tokens")
-			return false
-		}
-
-		blockName := tokens[0]
-		blockSize, err := strconv.Atoi(tokens[1])
-		if err != nil {
-			log.Warn(err)
-			return false
-		}
-
-		replicas := strings.Split(tokens[2], ",")
-		done := false
-
-		for len(replicas) > 0 {
-			i := rand.Intn(len(replicas))
-			if downloadBlock(file, blockName, blockSize, replicas[i], connCache) {
-				done = true
-				break
-			}
-
-			// Remove current replica from list.
-			// Then, retry download with another replica
-			n := len(replicas)
-			replicas[i], replicas[n-1] = replicas[n-1], replicas[i]
-			replicas = replicas[:n-1]
-		}
-
-		if !done {
-			log.Warn("Failed to download block:", blockName)
-			return false
-		}
-
-		fileSize += blockSize
-	}
-
-	endTime = time.Now().UnixNano()
-	log.Infof("Downloaded file %s (%d bytes) in %f seconds to %s\n", remoteFilename, fileSize, float64(endTime-startTime)*1e-9, localFilename)
-	return common.SendMessage(leader, "OK")
-}
-
-// Download block from given replica and append data to file
-// Returns number of bytes written to file, or -1 if failure
-func downloadBlock(file *os.File, blockName string, blockSize int, replica string, connCache *ConnectionCache) bool {
-	log.Debugf("Downloading block %s from %s\n", blockName, replica)
-	conn := connCache.GetConnection(replica)
-	if conn == nil {
-		return false
-	}
-
-	request := fmt.Sprintf("DOWNLOAD %s\n", blockName)
-	log.Debug(request)
-	_, err := conn.Write([]byte(request))
-	if err != nil {
-		log.Warn(err)
-		return false
-	}
-
-	buffer := make([]byte, blockSize)
-	bufferSize := 0
-
-	for bufferSize < blockSize {
-		n, err := conn.Read(buffer[bufferSize:])
-		if err != nil {
-			log.Warn(err)
-			return false
-		}
-		bufferSize += n
-	}
-
-	if bufferSize < blockSize {
-		log.Warn("Insufficient bytes:", blockName)
-		return false
-	}
-
-	log.Debugf("Received block %s (%d bytes) from %s\n", blockName, bufferSize, replica)
-	_, err = file.Write(buffer[:bufferSize])
-	if err != nil {
-		log.Warn(err)
-		return false
-	}
-
-	return true
-}
-
-// Usage: put <local_filename> <remote_filename>
-// TODO: handle upload confirmation from master node
-func (server *FrontendServer) uploadFile(localFilename string, remoteFilename string) bool {
-	connCache := NewConnectionCache()
-	defer connCache.Close()
-
-	var blockName string
-	var blockSize int
-	var blockData []byte = make([]byte, common.BLOCK_SIZE)
-
-	result := make(map[string][]string)
-
-	info, err := os.Stat(localFilename)
-	if err != nil {
-		log.Warn(err)
-		return false
-	}
-
-	fileSize := info.Size()
-	file, err := os.Open(localFilename)
-	if err != nil {
-		log.Warn(err)
-		return false
-	}
-
-	log.Debugf("To upload file %s with %d bytes (%d blocks)", localFilename, fileSize, common.GetNumFileBlocks(int64(fileSize)))
-	defer file.Close()
-
-	leader := server.getLeaderConnection()
-	if leader == nil {
-		return false
-	}
-	defer leader.Close()
-
-	request := fmt.Sprintf("UPLOAD_FILE %s %d\n", remoteFilename, fileSize)
-	log.Debug(request)
-	if !common.SendMessage(leader, request) {
-		return false
-	}
-
-	reader := bufio.NewReader(leader)
-
-	line, err := reader.ReadString('\n')
-	if err != nil {
-		return false
-	}
-
-	if line[:len(line)-1] == "ERROR" {
-		line, _ = reader.ReadString('\n') // Read error message on next line
-		log.Warn("ERROR:", line)
-		return false
-	}
-
-	var startTime int64 = time.Now().UnixNano()
-	var endTime int64 = 0
-
-	for {
-		line, err := reader.ReadString('\n')
-		if err != nil {
-			return false
-		}
-
-		line = line[:len(line)-1]
-		log.Debug("Received:", line)
-
-		tokens := strings.Split(line, " ")
-		if tokens[0] == "END" {
-			break
-		}
-
-		if len(tokens) < 2 {
-			log.Warn("Illegal response")
-			return false
-		}
-
-		replicas := strings.Split(tokens[1], ",")
-
-		blockName = tokens[0]
-		blockSize, err = file.Read(blockData)
-		if err != nil {
-			log.Warn(err)
-			return false
-		}
-
-		info := &UploadInfo{server: leader, blockName: blockName, blockData: blockData, blockSize: blockSize, replicas: replicas}
-
-		if !UploadBlockSync(info, connCache, result) {
-			return false
-		}
-
-	}
-
-	for block, replicas := range result {
-		log.Info(block, replicas)
-		if !common.SendMessage(leader, fmt.Sprintf("%s %s\n", block, strings.Join(replicas, ","))) {
-			return false
-		}
-	}
-
-	if !common.SendMessage(leader, "END") {
-		return false
-	}
-
-	buffer := make([]byte, common.MIN_BUFFER_SIZE)
-	n, err := leader.Read(buffer)
-	if err != nil {
-		return false
-	}
-
-	endTime = time.Now().UnixNano()
-	fmt.Printf("Uploaded in %f seconds\n", float64(endTime-startTime)*1e-9)
-
-	return string(buffer[:n-1]) == "UPLOAD_OK"
-}
-
-func UploadBlockSync(info *UploadInfo, connCache *ConnectionCache, result map[string][]string) bool {
-	for _, replica := range info.replicas {
-		log.Debugf("Uploading block %s (%d bytes) to %s\n", info.blockName, info.blockSize, replica)
-
-		conn := connCache.GetConnection(replica)
-		if conn == nil {
-			return false
-		}
-
-		_, err := conn.Write([]byte(fmt.Sprintf("UPLOAD %s %d\n", info.blockName, info.blockSize)))
-		if err != nil {
-			return false
-		}
-
-		if !common.GetOKMessage(conn) {
-			return false
-		}
-
-		if common.SendAll(conn, info.blockData[:info.blockSize], info.blockSize) < 0 {
-			return false
-		}
-
-		if !common.GetOKMessage(conn) {
-			return false
-		}
-
-		result[info.blockName] = append(result[info.blockName], replica)
-	}
-
-	return true
 }
