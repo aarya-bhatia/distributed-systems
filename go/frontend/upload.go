@@ -14,6 +14,7 @@ import (
 )
 
 const MAX_RETRIES = 3
+const INITIAL_BACKOFF_TIME = 400 * time.Millisecond
 
 type UploadInfo struct {
 	server    net.Conn
@@ -23,9 +24,8 @@ type UploadInfo struct {
 	replicas  []string
 }
 
+// Upload with retry upto MAX_RETRIES times and return file replica list on success
 func (server *FrontendServer) uploadFileWithRetry(localFilename string, remoteFilename string) ([]string, error) {
-	backoff := 200 * time.Millisecond
-
 	stat, err := os.Stat(localFilename)
 	if err != nil {
 		return nil, err
@@ -35,47 +35,68 @@ func (server *FrontendServer) uploadFileWithRetry(localFilename string, remoteFi
 
 	log.Debugf("To upload file %s with %d bytes (%d blocks)", localFilename, fileSize, common.GetNumFileBlocks(int64(fileSize)))
 
-	count := 0
+	for count, backoff := 0, INITIAL_BACKOFF_TIME; count < MAX_RETRIES; count, backoff = count+1, backoff*2 {
 
-	// must have minimum number of replicas to upload
-	for count < MAX_RETRIES && len(server.BackendServer.GetAliveNodes()) >= common.REPLICA_FACTOR {
-		file, err := os.Open(localFilename) // reopen file each time
+		// must have minimum number of replicas to upload
+		if len(server.BackendServer.GetAliveNodes()) < common.REPLICA_FACTOR {
+			return nil, errors.New("Replica nodes are offline")
+		}
+
+		file, err := os.Open(localFilename) // reopen file each try
 		if err != nil {
 			return nil, err
 		}
+
 		defer file.Close()
 
-		result, err := server.uploadFile(file, fileSize, remoteFilename)
-		if err == nil {
-			return result, nil
+		leader := server.getLeaderConnection()
+		if leader == nil {
+			log.Warn("Leader offline!")
+			log.Infof("Retrying upload after %d ms", backoff.Milliseconds())
+			time.Sleep(backoff)
+			continue
 		}
 
-		log.Warn(err.Error())
+		defer leader.Close()
 
-		time.Sleep(backoff)
-		backoff *= 2
-		log.Infof("Retrying upload after %d ms", backoff.Milliseconds())
-		count++
+		result, err := server.uploadFile(file, fileSize, remoteFilename, leader)
+
+		if err != nil {
+			common.SendMessage(leader, "ERROR")
+			log.Warn(err.Error())
+			log.Infof("Retrying upload after %d ms", backoff.Milliseconds())
+			time.Sleep(backoff)
+			continue
+		}
+
+		if !common.SendMessage(leader, "OK") {
+			log.Warn("Failed to send OK to leader")
+			log.Infof("Retrying upload after %d ms", backoff.Milliseconds())
+			time.Sleep(backoff)
+			continue
+		}
+
+		if !common.CheckMessage(leader, "UPLOAD_OK") {
+			log.Warn("Failed to receive UPLOAD_OK from leader")
+			log.Infof("Retrying upload after %d ms", backoff.Milliseconds())
+			time.Sleep(backoff)
+			continue
+		}
+
+		return result, nil // success!
 	}
 
-	if count >= MAX_RETRIES {
-		return nil, errors.New("Max retires were exceeded")
-	}
-
-	return nil, errors.New("Replica nodes are offline")
+	return nil, errors.New("Max retires were exceeded")
 }
 
-func (server *FrontendServer) uploadFile(localFile *os.File, fileSize int64, remoteFilename string) ([]string, error) {
+// Reads replica list from leader and uploads the block to each replica
+// On success, returns the replicas that received the blocks
+func (server *FrontendServer) uploadFile(localFile *os.File, fileSize int64, remoteFilename string, leader net.Conn) ([]string, error) {
 	connCache := NewConnectionCache()
 	defer connCache.Close()
 
+	blockData := make([]byte, common.BLOCK_SIZE)
 	replicaSet := make(map[string]bool)
-
-	leader := server.getLeaderConnection()
-	if leader == nil {
-		return nil, errors.New("Leader is offline")
-	}
-	defer leader.Close()
 
 	request := fmt.Sprintf("UPLOAD_FILE %s %d\n", remoteFilename, fileSize)
 	log.Debug(request)
@@ -95,10 +116,7 @@ func (server *FrontendServer) uploadFile(localFile *os.File, fileSize int64, rem
 		return nil, errors.New(line)
 	}
 
-	startTime := time.Now().UnixNano()
-
-	blockData := make([]byte, common.BLOCK_SIZE)
-
+	// Read replica list from leader for each block until an 'END' message is read
 	for {
 		line, err := reader.ReadString('\n')
 		if err != nil {
@@ -123,7 +141,13 @@ func (server *FrontendServer) uploadFile(localFile *os.File, fileSize int64, rem
 			return nil, err
 		}
 
-		info := &UploadInfo{server: leader, blockName: blockName, blockData: blockData, blockSize: blockSize, replicas: replicas}
+		info := &UploadInfo{
+			server:    leader,
+			blockName: blockName,
+			blockData: blockData,
+			blockSize: blockSize,
+			replicas:  replicas,
+		}
 
 		if !uploadBlockSync(info, connCache) {
 			return nil, errors.New("Failed to upload block")
@@ -134,18 +158,8 @@ func (server *FrontendServer) uploadFile(localFile *os.File, fileSize int64, rem
 		}
 	}
 
-	if !common.SendMessage(leader, "OK") {
-		return nil, errors.New("Failed to send OK to leader")
-	}
-
-	if !common.CheckMessage(leader, "UPLOAD_OK") {
-		return nil, errors.New("Failed to receive UPLOAD_OK from leader")
-	}
-
-	endTime := time.Now().UnixNano()
-	fmt.Printf("Uploaded in %f seconds\n", float64(endTime-startTime)*1e-9)
-
 	replicas := []string{}
+
 	for replica := range replicaSet {
 		replicas = append(replicas, replica)
 	}
@@ -153,6 +167,7 @@ func (server *FrontendServer) uploadFile(localFile *os.File, fileSize int64, rem
 	return replicas, nil
 }
 
+// Upload a single block to each replica
 func uploadBlockSync(info *UploadInfo, connCache *ConnectionCache) bool {
 	for _, replica := range info.replicas {
 		log.Debugf("Uploading block %s (%d bytes) to %s\n", info.blockName, info.blockSize, replica)
