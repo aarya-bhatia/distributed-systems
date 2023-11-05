@@ -13,7 +13,7 @@ import (
 )
 
 var hostnames = []string{
-	"localhost",
+	"", // An empty string is used so that node IDs match their indices in list
 	"fa23-cs425-0701.cs.illinois.edu",
 	"fa23-cs425-0702.cs.illinois.edu",
 	"fa23-cs425-0703.cs.illinois.edu",
@@ -29,6 +29,8 @@ var hostnames = []string{
 const port = common.DEFAULT_FRONTEND_PORT
 
 func runTask(task string, output chan string, done chan bool) {
+	log.Println("Starting task:", task)
+
 	defer func() {
 		done <- true
 	}()
@@ -45,8 +47,6 @@ func runTask(task string, output chan string, done chan bool) {
 		addr = hostnames[index] + ":" + fmt.Sprint(port)
 	}
 
-	log.Printf("Starting task for node %s: %s\n", addr, task)
-
 	conn, err := net.Dial("tcp", addr)
 	if err != nil {
 		log.Println(err)
@@ -55,9 +55,7 @@ func runTask(task string, output chan string, done chan bool) {
 
 	defer conn.Close()
 
-	request := strings.Join(tokens[1:], " ")
-	log.Println(addr, request)
-	if !common.SendMessage(conn, request) {
+	if !common.SendMessage(conn, strings.Join(tokens[1:], " ")) {
 		return
 	}
 
@@ -65,60 +63,36 @@ func runTask(task string, output chan string, done chan bool) {
 
 	for {
 		reply, err := scanner.ReadString('\n')
-		if err != nil { // EOF
-			log.Println(err)
-			break
+		if err != nil {
+			break // EOF
 		}
-
-		reply = reply[:len(reply)-1]
-
-		// if reply == "UPLOAD_OK" || reply == "UPLOAD_ERROR" ||
-		// 	reply == "DOWNLOAD_OK" || reply == "DOWNLOAD_ERROR" ||
-		// 	reply == "DELETE_OK" || reply == "DELETE_ERROR" {
-		// 	break
-		// }
-
-		output <- reply
+		output <- reply[:len(reply)-1]
 	}
-
-	// buffer := make([]byte, common.MIN_BUFFER_SIZE)
-	// n, err := conn.Read(buffer)
-	// if err != nil {
-	// 	log.Println(err)
-	// 	return
-	// }
-
-	// output <- string(buffer[:n-1])
 }
 
+// to synchronise messages on stdout
 func consumer(output chan string) {
 	for {
-		message, ok := <-output
-		if !ok {
+		message := <-output
+		if message == "END" {
 			break
 		}
-
 		fmt.Println(message)
 	}
 }
 
-func main() {
-	output := make(chan string)
-	go consumer(output)
-
-	done := make(chan bool)
-	scanner := bufio.NewReader(os.Stdin)
-	startTime := time.Now().UnixNano()
+func startTasks(output chan string, done chan bool) int {
 	numTasks := 0
+	scanner := bufio.NewReader(os.Stdin)
 
 	for {
 		line, err := scanner.ReadString('\n')
 		if err != nil {
-			log.Println(err)
-			break
+			break // EOF
 		}
 
 		line = line[:len(line)-1]
+
 		if len(line) == 0 || line[0] == '#' {
 			continue
 		}
@@ -136,18 +110,25 @@ func main() {
 		}
 	}
 
-	c := 0
+	return numTasks
+}
 
-	for c < numTasks {
+func main() {
+	output := make(chan string)
+	done := make(chan bool)
+	startTime := time.Now().UnixNano()
+
+	go consumer(output)
+
+	numTasks := startTasks(output, done)
+
+	for i := 0; i < numTasks; i++ {
 		<-done
-		c++
 	}
 
-	close(output)
-	close(done)
+	output <- "END"
 
 	endTime := time.Now().UnixNano()
 	elapsedTime := float64(endTime-startTime) * 1e-9
-
 	fmt.Printf("All tasks were finished in %.2f sec\n", elapsedTime)
 }
