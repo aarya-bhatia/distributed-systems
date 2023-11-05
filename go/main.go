@@ -7,6 +7,7 @@ import (
 	"cs425/filesystem"
 	"cs425/frontend"
 	"fmt"
+	"github.com/jedib0t/go-pretty/v6/table"
 	"os"
 	"os/exec"
 	"path"
@@ -127,50 +128,52 @@ func stdinListener(info common.Node, fs *filesystem.Server, fd *failuredetector.
 			fd.StopGossip()
 			fmt.Println("OK")
 
-		case "files":
-			fs.PrintFileMetadata()
-
-		case "info":
-			fmt.Println("----------------------------------------------------------")
-			fmt.Printf("Node Address: %s\n", info.Hostname)
-			fmt.Printf("Ports: Failure Dectector: (udp) %d, Backend: (tcp) %d, Frontend: (tcp) %d\n", info.UDPPort, info.TCPPort, info.FrontendPort)
-			fmt.Println("Member ID:", fd.Self.ID)
-			fmt.Println("Node ID:", fs.ID)
-			fmt.Println("Total disk blocks", common.GetFileCountInDirectory(fs.Directory))
-			fs.Mutex.Lock()
-			fmt.Println("Total files:", len(fs.Files))
-			fmt.Println("Num nodes:", len(fs.Nodes))
-			fmt.Println("----------------------------------------------------------")
-
-			for _, f := range fs.Files {
-				fmt.Printf("Filename:%s, Version:%d, Size:%d, NumBlocks:%d\n", f.Filename, f.Version, f.FileSize, f.NumBlocks)
-			}
-
+		case "store":
 			files, err := common.GetFilesInDirectory(fs.Directory)
 			if err != nil {
 				log.Warn(err)
 				return
 			}
 
+			t := table.NewWriter()
+			t.SetOutputMirror(os.Stdout)
+			t.AppendHeader(table.Row{"Filename", "Version", "Block", "Size"})
+
 			for _, f := range files {
 				tokens := strings.Split(f.Name, ":")
-				fmt.Printf("File %s, version %s, block %s, size %d\n", tokens[0], tokens[1], tokens[2], f.Size)
+				t.AppendRow(table.Row{
+					tokens[0],
+					tokens[1],
+					tokens[2],
+					f.Size,
+				})
 			}
 
-			fs.Mutex.Unlock()
+			t.AppendSeparator()
+			t.SetStyle(table.StyleLight)
+			t.Render()
+
+		case "info":
+			fmt.Println("----------------------------------------------------------")
+			fmt.Printf("Node Address: %s\n", info.Hostname)
+			fmt.Println("Failure Dectector: udp ", info.UDPPort)
+			fmt.Println("Backend: tcp ", info.TCPPort)
+			fmt.Println("Frontend: tcp ", info.FrontendPort)
+			fmt.Println("Member ID:", fd.Self.ID)
+			fmt.Println("Node ID:", fs.ID)
+			fmt.Println("Total disk blocks", common.GetFileCountInDirectory(fs.Directory))
+			fmt.Println("----------------------------------------------------------")
 
 		case "help":
 			fmt.Println("kill: crash server")
-
 			fmt.Println("list_mem: print FD membership table")
 			fmt.Println("list_self: print FD member id")
 			fmt.Println("join: start gossiping")
 			fmt.Println("leave: stop gossiping")
 			// fmt.Println("sus_on: enable suspicion protocol")
 			// fmt.Println("sus_off: disable suspicion protocol")
-
 			fmt.Println("info: Display node info")
-			fmt.Println("files: Display files")
+			fmt.Println("store: Display local files blocks")
 		}
 	}
 }
