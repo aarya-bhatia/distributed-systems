@@ -128,7 +128,6 @@ func GetOKMessage(server net.Conn) bool {
 	buffer := make([]byte, MIN_BUFFER_SIZE)
 	n, err := server.Read(buffer)
 	if err != nil {
-		log.Warn(err)
 		return false
 	}
 
@@ -140,6 +139,17 @@ func GetOKMessage(server net.Conn) bool {
 	}
 
 	return true
+}
+
+// Returns true if the next message is as expected
+func CheckMessage(server net.Conn, expected string) bool {
+	buffer := make([]byte, MIN_BUFFER_SIZE)
+	n, err := server.Read(buffer)
+	if err != nil {
+		return false
+	}
+
+	return string(buffer[:n-1]) == expected
 }
 
 // Returns true if all bytes are uploaded to network
@@ -291,3 +301,4 @@ func AddUniqueElement(array []string, target string) []string {
 
 	return append(array, target)
 }
+
