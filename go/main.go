@@ -128,6 +128,25 @@ func stdinListener(info common.Node, fs *filesystem.Server, fd *failuredetector.
 			fd.StopGossip()
 			fmt.Println("OK")
 
+		case "files":
+			fs.PrintFileMetadata()
+
+		case "queue":
+			fs.Mutex.Lock()
+			for filename, q := range fs.FileQueues {
+				fmt.Printf("File %s: %d read tasks, %d write tasks, %d count, %d mode\n",
+					filename,
+					len(q.Reads),
+					len(q.Writes),
+					q.Count,
+					q.Mode,
+				)
+			}
+			fs.Mutex.Unlock()
+
+		case "leader":
+			fmt.Println(fs.GetLeaderNode())
+
 		case "store":
 			files, err := common.GetFilesInDirectory(fs.Directory)
 			if err != nil {
@@ -174,6 +193,9 @@ func stdinListener(info common.Node, fs *filesystem.Server, fd *failuredetector.
 			// fmt.Println("sus_off: disable suspicion protocol")
 			fmt.Println("info: Display node info")
 			fmt.Println("store: Display local files blocks")
+			fmt.Println("leader: Print leader node")
+			fmt.Println("files: Print file metadata")
+			fmt.Println("queue: Print file queues status")
 		}
 	}
 }

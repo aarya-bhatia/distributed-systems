@@ -52,10 +52,10 @@ func (server *FrontendServer) handleConnection(conn net.Conn) {
 		replicas, status := server.uploadFileWithRetry(tokens[1], tokens[2])
 		if status != nil {
 			log.Warn("Upload failed!")
-			common.SendMessage(conn, "UPLOAD_ERROR "+status.Error())
+			common.SendMessage(conn, fmt.Sprintf("UPLOAD_ERROR %s %s", tokens[2], status.Error()))
 		} else {
 			log.Debug("Upload successful!")
-			common.SendMessage(conn, "UPLOAD_OK "+strings.Join(replicas, ","))
+			common.SendMessage(conn, fmt.Sprintf("UPLOAD_OK %s %s", tokens[2], strings.Join(replicas, ",")))
 		}
 
 		// Usage: get <remote_filename> <local_filename>
