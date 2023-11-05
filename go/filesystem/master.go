@@ -1,7 +1,6 @@
 package filesystem
 
 import (
-	"bufio"
 	"cs425/common"
 	"fmt"
 	log "github.com/sirupsen/logrus"
@@ -168,12 +167,14 @@ func uploadFile(client net.Conn, newFile File, aliveNodes []string) (map[string]
 		return nil, false
 	}
 
+	// store the required replicas for each block
 	blocks := make(map[string][]string)
 
-	// send client replica list for all blocks to upload
+	// send client replica list for each block
 	for i := 0; i < newFile.NumBlocks; i++ {
 		blockName := fmt.Sprintf("%s:%d:%d", newFile.Filename, newFile.Version, i)
 		replicas := GetReplicaNodes(aliveNodes, blockName, common.REPLICA_FACTOR)
+		blocks[blockName] = replicas
 		replicaEncoding := strings.Join(replicas, ",")
 		line := fmt.Sprintf("%s %s\n", blockName, replicaEncoding)
 		if common.SendAll(client, []byte(line), len(line)) < 0 {
@@ -185,43 +186,12 @@ func uploadFile(client net.Conn, newFile File, aliveNodes []string) (map[string]
 		return nil, false
 	}
 
-	reader := bufio.NewReader(client)
-
-	// receive confirmation from client for each uploaded block
-	for {
-		line, err := reader.ReadString('\n')
-		if err != nil {
-			log.Warn(err)
-			return nil, false
-		}
-
-		line = line[:len(line)-1]
-		log.Debug("Received:", line)
-		tokens := strings.Split(line, " ")
-
-		if tokens[0] == "END" {
-			break
-		}
-
-		if len(tokens) != 2 {
-			log.Warn("illegal response")
-			return nil, false
-		}
-
-		blockName := tokens[0]
-		replicas := tokens[1]
-
-		for _, replica := range strings.Split(replicas, ",") {
-			blocks[blockName] = append(blocks[blockName], replica)
-		}
-	}
-
-	if len(blocks) != newFile.NumBlocks {
-		log.Warnf("insufficient blocks confirmed: %d out of %d", len(blocks), newFile.NumBlocks)
+	if !common.GetOKMessage(client) {
 		return nil, false
 	}
 
-	log.Infof("%s: Uploaded file %s\n", client.RemoteAddr(), newFile.Filename)
+	log.Info("File uploaded:", newFile)
+
 	return blocks, true
 }
 
