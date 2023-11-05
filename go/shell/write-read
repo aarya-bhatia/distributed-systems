@@ -1,0 +1,334 @@
+nohup: ignoring input
+BEGIN
+TRIAL 1 for 2 WRITERS
+2023/11/04 10:50:17 EOF
+2023/11/04 10:50:17 Starting task for node fa23-cs425-0702.cs.illinois.edu:4000: 2 put /home/aaryab2/file file
+2023/11/04 10:50:17 Starting task for node fa23-cs425-0703.cs.illinois.edu:4000: 3 get file /home/aaryab2/file
+2023/11/04 10:50:17 Starting task for node fa23-cs425-0704.cs.illinois.edu:4000: 4 put /home/aaryab2/file file
+2023/11/04 10:50:17 fa23-cs425-0703.cs.illinois.edu:4000 get file /home/aaryab2/file
+2023/11/04 10:50:17 fa23-cs425-0702.cs.illinois.edu:4000 put /home/aaryab2/file file
+2023/11/04 10:50:17 fa23-cs425-0704.cs.illinois.edu:4000 put /home/aaryab2/file file
+2023/11/04 10:50:58 EOF
+DOWNLOAD_OK
+2023/11/04 10:52:19 EOF
+UPLOAD_OK
+2023/11/04 10:53:34 EOF
+All tasks were finished in 197.04 sec
+TRIAL 2 for 2 WRITERS
+2023/11/04 10:53:34 EOF
+2023/11/04 10:53:34 Starting task for node fa23-cs425-0704.cs.illinois.edu:4000: 4 put /home/aaryab2/file file
+2023/11/04 10:53:34 Starting task for node fa23-cs425-0702.cs.illinois.edu:4000: 2 put /home/aaryab2/file file
+2023/11/04 10:53:34 Starting task for node fa23-cs425-0703.cs.illinois.edu:4000: 3 get file /home/aaryab2/file
+2023/11/04 10:53:34 fa23-cs425-0704.cs.illinois.edu:4000 put /home/aaryab2/file file
+2023/11/04 10:53:34 fa23-cs425-0703.cs.illinois.edu:4000 get file /home/aaryab2/file
+2023/11/04 10:53:34 fa23-cs425-0702.cs.illinois.edu:4000 put /home/aaryab2/file file
+2023/11/04 10:54:13 EOF
+DOWNLOAD_OK
+2023/11/04 10:55:30 EOF
+UPLOAD_OK
+2023/11/04 10:56:51 EOF
+All tasks were finished in 196.83 sec
+TRIAL 3 for 2 WRITERS
+2023/11/04 10:56:51 EOF
+2023/11/04 10:56:51 Starting task for node fa23-cs425-0703.cs.illinois.edu:4000: 3 get file /home/aaryab2/file
+2023/11/04 10:56:51 Starting task for node fa23-cs425-0704.cs.illinois.edu:4000: 4 put /home/aaryab2/file file
+2023/11/04 10:56:51 Starting task for node fa23-cs425-0702.cs.illinois.edu:4000: 2 put /home/aaryab2/file file
+2023/11/04 10:56:51 fa23-cs425-0704.cs.illinois.edu:4000 put /home/aaryab2/file file
+2023/11/04 10:56:51 fa23-cs425-0702.cs.illinois.edu:4000 put /home/aaryab2/file file
+2023/11/04 10:56:51 fa23-cs425-0703.cs.illinois.edu:4000 get file /home/aaryab2/file
+2023/11/04 10:57:28 EOF
+DOWNLOAD_OK
+2023/11/04 10:58:40 EOF
+UPLOAD_OK
+2023/11/04 10:59:59 EOF
+All tasks were finished in 188.34 sec
+TRIAL 1 for 3 WRITERS
+2023/11/04 11:00:00 EOF
+2023/11/04 11:00:00 Starting task for node fa23-cs425-0703.cs.illinois.edu:4000: 3 get file /home/aaryab2/file
+2023/11/04 11:00:00 Starting task for node fa23-cs425-0705.cs.illinois.edu:4000: 5 put /home/aaryab2/file file
+2023/11/04 11:00:00 Starting task for node fa23-cs425-0702.cs.illinois.edu:4000: 2 put /home/aaryab2/file file
+2023/11/04 11:00:00 Starting task for node fa23-cs425-0704.cs.illinois.edu:4000: 4 put /home/aaryab2/file file
+2023/11/04 11:00:00 fa23-cs425-0703.cs.illinois.edu:4000 get file /home/aaryab2/file
+2023/11/04 11:00:00 fa23-cs425-0704.cs.illinois.edu:4000 put /home/aaryab2/file file
+2023/11/04 11:00:00 fa23-cs425-0705.cs.illinois.edu:4000 put /home/aaryab2/file file
+2023/11/04 11:00:00 fa23-cs425-0702.cs.illinois.edu:4000 put /home/aaryab2/file file
+2023/11/04 11:01:14 EOF
+UPLOAD_OK
+2023/11/04 11:01:54 EOF
+DOWNLOAD_OK
+2023/11/04 11:03:19 EOF
+UPLOAD_OK
+2023/11/04 11:04:44 EOF
+All tasks were finished in 284.11 sec
+TRIAL 2 for 3 WRITERS
+2023/11/04 11:04:44 EOF
+2023/11/04 11:04:44 Starting task for node fa23-cs425-0705.cs.illinois.edu:4000: 5 put /home/aaryab2/file file
+2023/11/04 11:04:44 Starting task for node fa23-cs425-0702.cs.illinois.edu:4000: 2 put /home/aaryab2/file file
+2023/11/04 11:04:44 Starting task for node fa23-cs425-0703.cs.illinois.edu:4000: 3 get file /home/aaryab2/file
+2023/11/04 11:04:44 Starting task for node fa23-cs425-0704.cs.illinois.edu:4000: 4 put /home/aaryab2/file file
+2023/11/04 11:04:44 fa23-cs425-0705.cs.illinois.edu:4000 put /home/aaryab2/file file
+2023/11/04 11:04:44 fa23-cs425-0702.cs.illinois.edu:4000 put /home/aaryab2/file file
+2023/11/04 11:04:44 fa23-cs425-0703.cs.illinois.edu:4000 get file /home/aaryab2/file
+2023/11/04 11:04:44 fa23-cs425-0704.cs.illinois.edu:4000 put /home/aaryab2/file file
+2023/11/04 11:06:13 EOF
+UPLOAD_OK
+2023/11/04 11:06:52 EOF
+DOWNLOAD_OK
+2023/11/04 11:08:18 EOF
+UPLOAD_OK
+2023/11/04 11:09:28 EOF
+All tasks were finished in 283.99 sec
+TRIAL 3 for 3 WRITERS
+2023/11/04 11:09:28 EOF
+2023/11/04 11:09:28 Starting task for node fa23-cs425-0702.cs.illinois.edu:4000: 2 put /home/aaryab2/file file
+2023/11/04 11:09:28 Starting task for node fa23-cs425-0705.cs.illinois.edu:4000: 5 put /home/aaryab2/file file
+2023/11/04 11:09:28 Starting task for node fa23-cs425-0703.cs.illinois.edu:4000: 3 get file /home/aaryab2/file
+2023/11/04 11:09:28 Starting task for node fa23-cs425-0704.cs.illinois.edu:4000: 4 put /home/aaryab2/file file
+2023/11/04 11:09:28 fa23-cs425-0703.cs.illinois.edu:4000 get file /home/aaryab2/file
+2023/11/04 11:09:28 fa23-cs425-0705.cs.illinois.edu:4000 put /home/aaryab2/file file
+2023/11/04 11:09:28 fa23-cs425-0702.cs.illinois.edu:4000 put /home/aaryab2/file file
+2023/11/04 11:09:28 fa23-cs425-0704.cs.illinois.edu:4000 put /home/aaryab2/file file
+2023/11/04 11:10:44 EOF
+UPLOAD_OK
+2023/11/04 11:11:22 EOF
+DOWNLOAD_OK
+2023/11/04 11:12:53 EOF
+UPLOAD_OK
+2023/11/04 11:14:26 EOF
+All tasks were finished in 297.54 sec
+TRIAL 1 for 4 WRITERS
+2023/11/04 11:14:26 EOF
+2023/11/04 11:14:26 Starting task for node fa23-cs425-0703.cs.illinois.edu:4000: 3 get file /home/aaryab2/file
+2023/11/04 11:14:26 Starting task for node fa23-cs425-0706.cs.illinois.edu:4000: 6 put /home/aaryab2/file file
+2023/11/04 11:14:26 Starting task for node fa23-cs425-0702.cs.illinois.edu:4000: 2 put /home/aaryab2/file file
+2023/11/04 11:14:26 Starting task for node fa23-cs425-0704.cs.illinois.edu:4000: 4 put /home/aaryab2/file file
+2023/11/04 11:14:26 Starting task for node fa23-cs425-0705.cs.illinois.edu:4000: 5 put /home/aaryab2/file file
+2023/11/04 11:14:26 fa23-cs425-0706.cs.illinois.edu:4000 put /home/aaryab2/file file
+2023/11/04 11:14:26 fa23-cs425-0704.cs.illinois.edu:4000 put /home/aaryab2/file file
+2023/11/04 11:14:26 fa23-cs425-0702.cs.illinois.edu:4000 put /home/aaryab2/file file
+2023/11/04 11:14:26 fa23-cs425-0705.cs.illinois.edu:4000 put /home/aaryab2/file file
+2023/11/04 11:14:26 fa23-cs425-0703.cs.illinois.edu:4000 get file /home/aaryab2/file
+2023/11/04 11:15:46 EOF
+UPLOAD_OK
+2023/11/04 11:16:21 EOF
+DOWNLOAD_OK
+2023/11/04 11:17:46 EOF
+UPLOAD_OK
+2023/11/04 11:19:09 EOF
+UPLOAD_OK
+2023/11/04 11:20:29 EOF
+All tasks were finished in 363.10 sec
+TRIAL 2 for 4 WRITERS
+2023/11/04 11:20:30 EOF
+2023/11/04 11:20:30 Starting task for node fa23-cs425-0703.cs.illinois.edu:4000: 3 get file /home/aaryab2/file
+2023/11/04 11:20:30 Starting task for node fa23-cs425-0706.cs.illinois.edu:4000: 6 put /home/aaryab2/file file
+2023/11/04 11:20:30 Starting task for node fa23-cs425-0702.cs.illinois.edu:4000: 2 put /home/aaryab2/file file
+2023/11/04 11:20:30 Starting task for node fa23-cs425-0704.cs.illinois.edu:4000: 4 put /home/aaryab2/file file
+2023/11/04 11:20:30 Starting task for node fa23-cs425-0705.cs.illinois.edu:4000: 5 put /home/aaryab2/file file
+2023/11/04 11:20:30 fa23-cs425-0704.cs.illinois.edu:4000 put /home/aaryab2/file file
+2023/11/04 11:20:30 fa23-cs425-0703.cs.illinois.edu:4000 get file /home/aaryab2/file
+2023/11/04 11:20:30 fa23-cs425-0706.cs.illinois.edu:4000 put /home/aaryab2/file file
+2023/11/04 11:20:30 fa23-cs425-0705.cs.illinois.edu:4000 put /home/aaryab2/file file
+2023/11/04 11:20:30 fa23-cs425-0702.cs.illinois.edu:4000 put /home/aaryab2/file file
+2023/11/04 11:21:04 EOF
+DOWNLOAD_OK
+2023/11/04 11:22:22 EOF
+UPLOAD_OK
+2023/11/04 11:23:35 EOF
+UPLOAD_OK
+2023/11/04 11:24:53 EOF
+UPLOAD_OK
+2023/11/04 11:26:22 EOF
+All tasks were finished in 352.03 sec
+TRIAL 3 for 4 WRITERS
+2023/11/04 11:26:22 EOF
+2023/11/04 11:26:22 Starting task for node fa23-cs425-0706.cs.illinois.edu:4000: 6 put /home/aaryab2/file file
+2023/11/04 11:26:22 Starting task for node fa23-cs425-0703.cs.illinois.edu:4000: 3 get file /home/aaryab2/file
+2023/11/04 11:26:22 Starting task for node fa23-cs425-0704.cs.illinois.edu:4000: 4 put /home/aaryab2/file file
+2023/11/04 11:26:22 Starting task for node fa23-cs425-0702.cs.illinois.edu:4000: 2 put /home/aaryab2/file file
+2023/11/04 11:26:22 Starting task for node fa23-cs425-0705.cs.illinois.edu:4000: 5 put /home/aaryab2/file file
+2023/11/04 11:26:22 fa23-cs425-0703.cs.illinois.edu:4000 get file /home/aaryab2/file
+2023/11/04 11:26:22 fa23-cs425-0705.cs.illinois.edu:4000 put /home/aaryab2/file file
+2023/11/04 11:26:22 fa23-cs425-0706.cs.illinois.edu:4000 put /home/aaryab2/file file
+2023/11/04 11:26:22 fa23-cs425-0704.cs.illinois.edu:4000 put /home/aaryab2/file file
+2023/11/04 11:26:22 fa23-cs425-0702.cs.illinois.edu:4000 put /home/aaryab2/file file
+2023/11/04 11:27:00 EOF
+DOWNLOAD_OK
+2023/11/04 11:28:28 EOF
+UPLOAD_OK
+2023/11/04 11:29:50 EOF
+UPLOAD_OK
+2023/11/04 11:31:22 EOF
+UPLOAD_OK
+2023/11/04 11:32:42 EOF
+All tasks were finished in 379.96 sec
+TRIAL 1 for 5 WRITERS
+2023/11/04 11:32:42 EOF
+2023/11/04 11:32:42 Starting task for node fa23-cs425-0707.cs.illinois.edu:4000: 7 put /home/aaryab2/file file
+2023/11/04 11:32:42 Starting task for node fa23-cs425-0702.cs.illinois.edu:4000: 2 put /home/aaryab2/file file
+2023/11/04 11:32:42 Starting task for node fa23-cs425-0703.cs.illinois.edu:4000: 3 get file /home/aaryab2/file
+2023/11/04 11:32:42 Starting task for node fa23-cs425-0704.cs.illinois.edu:4000: 4 put /home/aaryab2/file file
+2023/11/04 11:32:42 Starting task for node fa23-cs425-0705.cs.illinois.edu:4000: 5 put /home/aaryab2/file file
+2023/11/04 11:32:42 Starting task for node fa23-cs425-0706.cs.illinois.edu:4000: 6 put /home/aaryab2/file file
+2023/11/04 11:32:42 fa23-cs425-0704.cs.illinois.edu:4000 put /home/aaryab2/file file
+2023/11/04 11:32:42 fa23-cs425-0702.cs.illinois.edu:4000 put /home/aaryab2/file file
+2023/11/04 11:32:42 fa23-cs425-0705.cs.illinois.edu:4000 put /home/aaryab2/file file
+2023/11/04 11:32:42 fa23-cs425-0703.cs.illinois.edu:4000 get file /home/aaryab2/file
+2023/11/04 11:32:42 fa23-cs425-0707.cs.illinois.edu:4000 put /home/aaryab2/file file
+2023/11/04 11:32:42 fa23-cs425-0706.cs.illinois.edu:4000 put /home/aaryab2/file file
+2023/11/04 11:33:21 EOF
+DOWNLOAD_OK
+2023/11/04 11:34:51 EOF
+UPLOAD_OK
+2023/11/04 11:36:08 EOF
+UPLOAD_OK
+UPLOAD_OK
+2023/11/04 11:37:33 EOF
+2023/11/04 11:39:02 EOF
+UPLOAD_OK
+2023/11/04 11:40:30 EOF
+All tasks were finished in 467.77 sec
+TRIAL 2 for 5 WRITERS
+2023/11/04 11:40:31 EOF
+2023/11/04 11:40:31 Starting task for node fa23-cs425-0704.cs.illinois.edu:4000: 4 put /home/aaryab2/file file
+2023/11/04 11:40:31 Starting task for node fa23-cs425-0707.cs.illinois.edu:4000: 7 put /home/aaryab2/file file
+2023/11/04 11:40:31 Starting task for node fa23-cs425-0702.cs.illinois.edu:4000: 2 put /home/aaryab2/file file
+2023/11/04 11:40:31 Starting task for node fa23-cs425-0703.cs.illinois.edu:4000: 3 get file /home/aaryab2/file
+2023/11/04 11:40:31 Starting task for node fa23-cs425-0705.cs.illinois.edu:4000: 5 put /home/aaryab2/file file
+2023/11/04 11:40:31 Starting task for node fa23-cs425-0706.cs.illinois.edu:4000: 6 put /home/aaryab2/file file
+2023/11/04 11:40:31 fa23-cs425-0703.cs.illinois.edu:4000 get file /home/aaryab2/file
+2023/11/04 11:40:31 fa23-cs425-0702.cs.illinois.edu:4000 put /home/aaryab2/file file
+2023/11/04 11:40:31 fa23-cs425-0704.cs.illinois.edu:4000 put /home/aaryab2/file file
+2023/11/04 11:40:31 fa23-cs425-0707.cs.illinois.edu:4000 put /home/aaryab2/file file
+2023/11/04 11:40:31 fa23-cs425-0705.cs.illinois.edu:4000 put /home/aaryab2/file file
+2023/11/04 11:40:31 fa23-cs425-0706.cs.illinois.edu:4000 put /home/aaryab2/file file
+2023/11/04 11:41:54 EOF
+UPLOAD_OK
+2023/11/04 11:43:09 EOF
+UPLOAD_OK
+2023/11/04 11:43:48 EOF
+DOWNLOAD_OK
+2023/11/04 11:45:18 EOF
+UPLOAD_OK
+UPLOAD_OK
+2023/11/04 11:46:43 EOF
+2023/11/04 11:48:08 EOF
+All tasks were finished in 457.88 sec
+TRIAL 3 for 5 WRITERS
+2023/11/04 11:48:09 EOF
+2023/11/04 11:48:09 Starting task for node fa23-cs425-0707.cs.illinois.edu:4000: 7 put /home/aaryab2/file file
+2023/11/04 11:48:09 Starting task for node fa23-cs425-0702.cs.illinois.edu:4000: 2 put /home/aaryab2/file file
+2023/11/04 11:48:09 Starting task for node fa23-cs425-0703.cs.illinois.edu:4000: 3 get file /home/aaryab2/file
+2023/11/04 11:48:09 Starting task for node fa23-cs425-0704.cs.illinois.edu:4000: 4 put /home/aaryab2/file file
+2023/11/04 11:48:09 Starting task for node fa23-cs425-0705.cs.illinois.edu:4000: 5 put /home/aaryab2/file file
+2023/11/04 11:48:09 Starting task for node fa23-cs425-0706.cs.illinois.edu:4000: 6 put /home/aaryab2/file file
+2023/11/04 11:48:09 fa23-cs425-0707.cs.illinois.edu:4000 put /home/aaryab2/file file
+2023/11/04 11:48:09 fa23-cs425-0703.cs.illinois.edu:4000 get file /home/aaryab2/file
+2023/11/04 11:48:09 fa23-cs425-0704.cs.illinois.edu:4000 put /home/aaryab2/file file
+2023/11/04 11:48:09 fa23-cs425-0702.cs.illinois.edu:4000 put /home/aaryab2/file file
+2023/11/04 11:48:09 fa23-cs425-0706.cs.illinois.edu:4000 put /home/aaryab2/file file
+2023/11/04 11:48:09 fa23-cs425-0705.cs.illinois.edu:4000 put /home/aaryab2/file file
+2023/11/04 11:48:47 EOF
+DOWNLOAD_OK
+2023/11/04 11:50:02 EOF
+UPLOAD_OK
+2023/11/04 11:51:21 EOF
+UPLOAD_OK
+2023/11/04 11:52:52 EOF
+UPLOAD_OK
+2023/11/04 11:54:16 EOF
+UPLOAD_OK
+UPLOAD_OK
+2023/11/04 11:55:41 EOF
+All tasks were finished in 452.32 sec
+TRIAL 1 for 6 WRITERS
+2023/11/04 11:55:42 EOF
+2023/11/04 11:55:42 Starting task for node fa23-cs425-0702.cs.illinois.edu:4000: 2 put /home/aaryab2/file file
+2023/11/04 11:55:42 Starting task for node fa23-cs425-0705.cs.illinois.edu:4000: 5 put /home/aaryab2/file file
+2023/11/04 11:55:42 Starting task for node fa23-cs425-0703.cs.illinois.edu:4000: 3 get file /home/aaryab2/file
+2023/11/04 11:55:42 Starting task for node fa23-cs425-0704.cs.illinois.edu:4000: 4 put /home/aaryab2/file file
+2023/11/04 11:55:42 Starting task for node fa23-cs425-0706.cs.illinois.edu:4000: 6 put /home/aaryab2/file file
+2023/11/04 11:55:42 Starting task for node fa23-cs425-0707.cs.illinois.edu:4000: 7 put /home/aaryab2/file file
+2023/11/04 11:55:42 Starting task for node fa23-cs425-0708.cs.illinois.edu:4000: 8 put /home/aaryab2/file file
+2023/11/04 11:55:42 fa23-cs425-0704.cs.illinois.edu:4000 put /home/aaryab2/file file
+2023/11/04 11:55:42 fa23-cs425-0703.cs.illinois.edu:4000 get file /home/aaryab2/file
+2023/11/04 11:55:42 fa23-cs425-0705.cs.illinois.edu:4000 put /home/aaryab2/file file
+2023/11/04 11:55:42 fa23-cs425-0707.cs.illinois.edu:4000 put /home/aaryab2/file file
+2023/11/04 11:55:42 fa23-cs425-0706.cs.illinois.edu:4000 put /home/aaryab2/file file
+2023/11/04 11:55:42 fa23-cs425-0702.cs.illinois.edu:4000 put /home/aaryab2/file file
+2023/11/04 11:55:42 fa23-cs425-0708.cs.illinois.edu:4000 put /home/aaryab2/file file
+2023/11/04 11:56:20 EOF
+DOWNLOAD_OK
+UPLOAD_OK
+2023/11/04 11:57:40 EOF
+2023/11/04 11:58:56 EOF
+UPLOAD_OK
+2023/11/04 12:00:34 EOF
+UPLOAD_OK
+2023/11/04 12:02:01 EOF
+UPLOAD_OK
+2023/11/04 12:03:31 EOF
+UPLOAD_OK
+2023/11/04 12:04:50 EOF
+All tasks were finished in 548.54 sec
+TRIAL 2 for 6 WRITERS
+2023/11/04 12:04:51 EOF
+2023/11/04 12:04:51 Starting task for node fa23-cs425-0708.cs.illinois.edu:4000: 8 put /home/aaryab2/file file
+2023/11/04 12:04:51 Starting task for node fa23-cs425-0702.cs.illinois.edu:4000: 2 put /home/aaryab2/file file
+2023/11/04 12:04:51 Starting task for node fa23-cs425-0703.cs.illinois.edu:4000: 3 get file /home/aaryab2/file
+2023/11/04 12:04:51 Starting task for node fa23-cs425-0704.cs.illinois.edu:4000: 4 put /home/aaryab2/file file
+2023/11/04 12:04:51 Starting task for node fa23-cs425-0705.cs.illinois.edu:4000: 5 put /home/aaryab2/file file
+2023/11/04 12:04:51 Starting task for node fa23-cs425-0706.cs.illinois.edu:4000: 6 put /home/aaryab2/file file
+2023/11/04 12:04:51 Starting task for node fa23-cs425-0707.cs.illinois.edu:4000: 7 put /home/aaryab2/file file
+2023/11/04 12:04:51 fa23-cs425-0708.cs.illinois.edu:4000 put /home/aaryab2/file file
+2023/11/04 12:04:51 fa23-cs425-0703.cs.illinois.edu:4000 get file /home/aaryab2/file
+2023/11/04 12:04:51 fa23-cs425-0705.cs.illinois.edu:4000 put /home/aaryab2/file file
+2023/11/04 12:04:51 fa23-cs425-0702.cs.illinois.edu:4000 put /home/aaryab2/file file
+2023/11/04 12:04:51 fa23-cs425-0704.cs.illinois.edu:4000 put /home/aaryab2/file file
+2023/11/04 12:04:51 fa23-cs425-0707.cs.illinois.edu:4000 put /home/aaryab2/file file
+2023/11/04 12:04:51 fa23-cs425-0706.cs.illinois.edu:4000 put /home/aaryab2/file file
+2023/11/04 12:06:17 EOF
+UPLOAD_OK
+2023/11/04 12:06:57 EOF
+DOWNLOAD_OK
+2023/11/04 12:08:15 EOF
+UPLOAD_OK
+2023/11/04 12:09:51 EOF
+UPLOAD_OK
+2023/11/04 12:11:14 EOF
+UPLOAD_OK
+2023/11/04 12:12:55 EOF
+UPLOAD_OK
+2023/11/04 12:14:35 EOF
+All tasks were finished in 584.91 sec
+TRIAL 3 for 6 WRITERS
+2023/11/04 12:14:36 EOF
+2023/11/04 12:14:36 Starting task for node fa23-cs425-0704.cs.illinois.edu:4000: 4 put /home/aaryab2/file file
+2023/11/04 12:14:36 Starting task for node fa23-cs425-0702.cs.illinois.edu:4000: 2 put /home/aaryab2/file file
+2023/11/04 12:14:36 Starting task for node fa23-cs425-0703.cs.illinois.edu:4000: 3 get file /home/aaryab2/file
+2023/11/04 12:14:36 Starting task for node fa23-cs425-0706.cs.illinois.edu:4000: 6 put /home/aaryab2/file file
+2023/11/04 12:14:36 Starting task for node fa23-cs425-0705.cs.illinois.edu:4000: 5 put /home/aaryab2/file file
+2023/11/04 12:14:36 Starting task for node fa23-cs425-0707.cs.illinois.edu:4000: 7 put /home/aaryab2/file file
+2023/11/04 12:14:36 Starting task for node fa23-cs425-0708.cs.illinois.edu:4000: 8 put /home/aaryab2/file file
+2023/11/04 12:14:36 fa23-cs425-0708.cs.illinois.edu:4000 put /home/aaryab2/file file
+2023/11/04 12:14:36 fa23-cs425-0706.cs.illinois.edu:4000 put /home/aaryab2/file file
+2023/11/04 12:14:36 fa23-cs425-0702.cs.illinois.edu:4000 put /home/aaryab2/file file
+2023/11/04 12:14:36 fa23-cs425-0705.cs.illinois.edu:4000 put /home/aaryab2/file file
+2023/11/04 12:14:36 fa23-cs425-0703.cs.illinois.edu:4000 get file /home/aaryab2/file
+2023/11/04 12:14:36 fa23-cs425-0704.cs.illinois.edu:4000 put /home/aaryab2/file file
+2023/11/04 12:14:36 fa23-cs425-0707.cs.illinois.edu:4000 put /home/aaryab2/file file
+2023/11/04 12:16:14 EOF
+UPLOAD_OK
+UPLOAD_OK
+2023/11/04 12:17:46 EOF
+2023/11/04 12:18:25 EOF
+DOWNLOAD_OK
+2023/11/04 12:19:56 EOF
+UPLOAD_OK
+2023/11/04 12:21:32 EOF
+UPLOAD_OK
+2023/11/04 12:22:56 EOF
+UPLOAD_OK
+2023/11/04 12:24:17 EOF
+All tasks were finished in 581.05 sec
+END

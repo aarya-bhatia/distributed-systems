@@ -1,2 +1,2 @@
 #!/bin/sh
-./all "tail -f ~/*log"
+./all "tail -f ~/log"

@@ -16,12 +16,10 @@ if pgrep -f cs425 >/dev/null; then
 	echo KILL | nc localhost 3000
 fi
 
-pkill -f cs425
-
-sleep 5
 nohup go run . >$HOME/log 2>&1 &
 
 cd shell/server
 nohup go run . >$HOME/mp1.log 2>&1 &
 
 echo node $(hostname) is online
+
