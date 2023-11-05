@@ -5,9 +5,10 @@ import (
 	"cs425/common"
 	"cs425/filesystem"
 	"fmt"
-	log "github.com/sirupsen/logrus"
 	"net"
 	"strings"
+
+	log "github.com/sirupsen/logrus"
 )
 
 type FrontendServer struct {
@@ -86,6 +87,14 @@ func (server *FrontendServer) handleConnection(conn net.Conn) {
 			common.SendMessage(conn, "DELETE_OK")
 		}
 
+	} else if verb == "ls" {
+		if len(tokens) != 2 {
+			common.SendMessage(conn, MalformedRequestError)
+			return
+		}
+
+		server.listFile(conn, tokens[1])
+
 	} else {
 		common.SendMessage(conn, UnknownRequestError)
 		return
@@ -137,4 +146,50 @@ func (server *FrontendServer) deleteFile(filename string) bool {
 	}
 
 	return common.GetOKMessage(conn)
+}
+
+func (server *FrontendServer) listFile(client net.Conn, filename string) bool {
+	conn := server.getLeaderConnection()
+	if conn == nil {
+		common.SendMessage(client, "ERROR")
+		return false
+	}
+	defer conn.Close()
+
+	if !common.SendMessage(conn, "LIST_FILE "+filename) {
+		common.SendMessage(client, "ERROR")
+		return false
+	}
+
+	reader := bufio.NewReader(conn)
+	reply, err := reader.ReadString('\n')
+	if err != nil {
+		common.SendMessage(client, err.Error())
+		return false
+	}
+
+	reply = reply[:len(reply)-1]
+	if reply != "LIST_START" {
+		common.SendMessage(client, reply)
+		return false
+	}
+
+	for {
+		reply, err := reader.ReadString('\n')
+		if err != nil {
+			common.SendMessage(client, err.Error())
+			return false
+		}
+
+		reply = reply[:len(reply)-1]
+		if reply == "LIST_END" {
+			break
+		}
+
+		if !common.SendMessage(client, reply) {
+			return false
+		}
+	}
+
+	return true
 }

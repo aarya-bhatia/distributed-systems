@@ -71,6 +71,12 @@ func (server *Server) handleConnection(conn net.Conn) {
 			isQueued = true
 			return
 
+		// To list file replicas
+		case verb == "LIST_FILE":
+			if !server.handleListFile(conn, tokens) {
+				return
+			}
+
 		// To upload block at replica
 		case verb == "UPLOAD":
 			if !server.handleUploadBlock(conn, tokens) {
@@ -324,4 +330,36 @@ func (server *Server) handleDelete(conn net.Conn, tokens []string) {
 
 	server.DeleteFileAndBlocks(File{Filename: filename, Version: version, NumBlocks: numBlocks})
 	common.SendMessage(conn, "OK")
+}
+
+// Usage: LIST_FILE <filename>
+func (server *Server) handleListFile(conn net.Conn, tokens []string) bool {
+	if len(tokens) != 2 {
+		return common.SendMessage(conn, "ERROR Malformed Request")
+	}
+
+	server.Mutex.Lock()
+	defer server.Mutex.Unlock()
+
+	filename := tokens[1]
+	file, ok := server.Files[filename]
+	if !ok {
+		return common.SendMessage(conn, "ERROR File not found")
+	}
+
+	if !common.SendMessage(conn, "LIST_START") {
+		return false
+	}
+
+	for i := 0; i < file.NumBlocks; i++ {
+		blockName := common.GetBlockName(filename, file.Version, i)
+		replicas := server.BlockToNodes[blockName]
+		reply := fmt.Sprintf("%s %s", blockName, strings.Join(replicas, ","))
+		log.Println(reply, replicas)
+		if !common.SendMessage(conn, reply) {
+			return false
+		}
+	}
+
+	return common.SendMessage(conn, "LIST_END")
 }
