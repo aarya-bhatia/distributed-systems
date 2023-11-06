@@ -2,8 +2,9 @@ package priqueue
 
 // Item represents an item in the priority queue.
 type Item struct {
-	Key   int
-	Value interface{}
+	Key    int
+	TieKey string
+	Value  interface{}
 }
 
 // PriorityQueue implements a min-heap for Item.
@@ -12,6 +13,10 @@ type PriorityQueue []*Item
 func (pq PriorityQueue) Len() int { return len(pq) }
 
 func (pq PriorityQueue) Less(i, j int) bool {
+	if pq[i].Key == pq[j].Key {
+		return pq[i].TieKey < pq[j].TieKey
+	}
+
 	return pq[i].Key < pq[j].Key
 }
 

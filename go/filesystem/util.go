@@ -50,12 +50,11 @@ func (s *Server) IsMetadataReplicaNode(count int, node string) bool {
 	return common.HasElement(s.GetMetadataReplicaNodes(count), node)
 }
 
-func (s *Server) getMetadataReplicaConnections() []net.Conn {
-	replicas := s.GetMetadataReplicaNodes(common.REPLICA_FACTOR)
+func ConnectAll(nodes []string) []net.Conn {
 	connections := []net.Conn{}
 
-	for _, replica := range replicas {
-		conn, err := net.Dial("tcp", replica)
+	for _, addr := range nodes {
+		conn, err := net.Dial("tcp", addr)
 		if err != nil {
 			continue
 		}
@@ -63,6 +62,10 @@ func (s *Server) getMetadataReplicaConnections() []net.Conn {
 	}
 
 	return connections
+}
+
+func (s *Server) getMetadataReplicaConnections() []net.Conn {
+	return ConnectAll(s.GetMetadataReplicaNodes(common.REPLICA_FACTOR))
 }
 
 // Get the `count` nearest nodes to the file hash
@@ -76,7 +79,7 @@ func GetReplicaNodes(nodes []string, filename string, count int) []string {
 		if distance < 0 {
 			distance = -distance // abs value
 		}
-		heap.Push(&pq, &priqueue.Item{Key: distance, Value: node})
+		heap.Push(&pq, &priqueue.Item{Key: distance, Value: node, TieKey: node})
 	}
 
 	res := []string{}

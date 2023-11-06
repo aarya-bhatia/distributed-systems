@@ -45,7 +45,8 @@ func (server *Server) uploadFileWrapper(task *Request) {
 
 	aliveNodes := server.GetAliveNodes()
 
-	metadataReplicaConnections := server.getMetadataReplicaConnections()
+	// connect to all metadata nodes except self
+	metadataReplicaConnections := ConnectAll(common.RemoveElement(server.GetMetadataReplicaNodes(common.REPLICA_FACTOR), server.ID))
 	defer common.CloseAll(metadataReplicaConnections)
 
 	server.Mutex.Lock()

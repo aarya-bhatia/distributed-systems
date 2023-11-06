@@ -36,6 +36,8 @@ func (s *Server) startRebalanceRoutine() {
 					continue
 				}
 
+				// log.Debugf("Replicas for block %s: %v", block, replicas)
+
 				required := common.MakeSet(replicas)
 				current := common.MakeSet(nodes)
 
@@ -56,12 +58,16 @@ func (s *Server) startRebalanceRoutine() {
 
 		delete(replicaTasks, s.ID)
 
+		if len(replicaTasks) > 0 {
+			log.Debug("Rebalance tasks:", replicaTasks)
+		}
+
 		s.Mutex.Unlock()
 
-		for replica, tasks := range replicaTasks {
-			log.Infof("Sending %d replication tasks to node %s", len(tasks), replica)
-			go s.sendRebalanceRequests(replica, tasks)
-		}
+		// for replica, tasks := range replicaTasks {
+		// 	log.Infof("Sending %d replication tasks to node %s:%v", len(tasks), replica, tasks)
+		// 	go s.sendRebalanceRequests(replica, tasks)
+		// }
 
 		time.Sleep(common.REBALANCE_INTERVAL)
 	}
