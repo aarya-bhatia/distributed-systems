@@ -47,12 +47,7 @@ func (s *Server) GetMetadataReplicaNodes(count int) []string {
 }
 
 func (s *Server) IsMetadataReplicaNode(count int, node string) bool {
-	for _, replica := range s.GetMetadataReplicaNodes(count) {
-		if replica == node {
-			return true
-		}
-	}
-	return false
+	return common.HasElement(s.GetMetadataReplicaNodes(count), node)
 }
 
 func (s *Server) getMetadataReplicaConnections() []net.Conn {
@@ -134,4 +129,3 @@ func (server *Server) PrintFileMetadata() {
 	t.SetStyle(table.StyleLight)
 	t.Render()
 }
-

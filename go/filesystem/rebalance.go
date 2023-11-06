@@ -10,14 +10,6 @@ import (
 	"time"
 )
 
-func makeSet(values []string) map[string]bool {
-	res := make(map[string]bool)
-	for _, value := range values {
-		res[value] = true
-	}
-	return res
-}
-
 // To periodically redistribute file blocks to replicas to maintain equal load
 func (s *Server) startRebalanceRoutine() {
 	log.Debug("Starting rebalance routine")
@@ -34,6 +26,7 @@ func (s *Server) startRebalanceRoutine() {
 					continue
 				}
 
+				// TODO: Delete extra replicas
 				// if len(nodes) >= common.REPLICA_FACTOR {
 				// 	continue
 				// }
@@ -43,8 +36,8 @@ func (s *Server) startRebalanceRoutine() {
 					continue
 				}
 
-				required := makeSet(replicas)
-				current := makeSet(nodes)
+				required := common.MakeSet(replicas)
+				current := common.MakeSet(nodes)
 
 				blockSize := common.BLOCK_SIZE
 				if i == file.NumBlocks-1 && file.FileSize%common.BLOCK_SIZE != 0 {

@@ -3,12 +3,11 @@ package filesystem
 import (
 	"cs425/common"
 	"fmt"
+	log "github.com/sirupsen/logrus"
 	"net"
 	"os"
 	"strings"
 	"time"
-
-	log "github.com/sirupsen/logrus"
 )
 
 // Periodically check for available tasks and launch thread for each task
@@ -45,6 +44,7 @@ func (server *Server) uploadFileWrapper(task *Request) {
 	defer server.getQueue(task.Name).WriteDone() // signal write complete
 
 	aliveNodes := server.GetAliveNodes()
+
 	metadataReplicaConnections := server.getMetadataReplicaConnections()
 	defer common.CloseAll(metadataReplicaConnections)
 
@@ -110,9 +110,8 @@ func (server *Server) deleteFile(file File) {
 	message := fmt.Sprintf("DELETE %s %d %d\n", file.Filename, file.Version, file.NumBlocks)
 
 	// Send delete message to all nodes
-	for _, node := range common.Cluster {
-		nodeAddr := node.Hostname + fmt.Sprint(node.TCPPort)
-
+	nodes := server.GetAliveNodes()
+	for _, node := range nodes {
 		go func(addr string) {
 			conn, err := net.Dial("tcp", addr)
 			if err != nil {
@@ -123,7 +122,7 @@ func (server *Server) deleteFile(file File) {
 					log.Debugf("File %s deleted from node %s", file.Filename, addr)
 				}
 			}
-		}(nodeAddr)
+		}(node)
 	}
 
 	server.deleteFileLocal(file)
@@ -133,15 +132,11 @@ func (server *Server) deleteFileLocal(file File) {
 	server.Mutex.Lock()
 	defer server.Mutex.Unlock()
 
-	log.Debug("Deleting file:", file)
-
 	for i := 0; i < file.NumBlocks; i++ {
 		blockName := common.GetBlockName(file.Filename, file.Version, i)
 
-		if replicas, ok := server.BlockToNodes[blockName]; ok {
-			for _, replica := range replicas {
-				server.NodesToBlocks[replica] = common.RemoveElement(server.NodesToBlocks[replica], blockName)
-			}
+		for _, replica := range server.BlockToNodes[blockName] {
+			server.NodesToBlocks[replica] = common.RemoveElement(server.NodesToBlocks[replica], blockName)
 		}
 
 		if common.FileExists(server.Directory + "/" + blockName) {
@@ -156,7 +151,7 @@ func (server *Server) deleteFileLocal(file File) {
 	}
 
 	delete(server.Files, file.Filename)
-	log.Warn("File was deleted:", file.Filename)
+	log.Warn("File deleted:", file.Filename)
 }
 
 func (server *Server) deleteFileWrapper(task *Request) {
@@ -188,12 +183,11 @@ func uploadFile(client net.Conn, newFile File, aliveNodes []string) (map[string]
 
 	// send client replica list for each block
 	for i := 0; i < newFile.NumBlocks; i++ {
-		blockName := fmt.Sprintf("%s:%d:%d", newFile.Filename, newFile.Version, i)
+		blockName := common.GetBlockName(newFile.Filename, newFile.Version, i)
 		replicas := GetReplicaNodes(aliveNodes, blockName, common.REPLICA_FACTOR)
-		blocks[blockName] = replicas
 		replicaEncoding := strings.Join(replicas, ",")
-		line := fmt.Sprintf("%s %s\n", blockName, replicaEncoding)
-		if common.SendAll(client, []byte(line), len(line)) < 0 {
+		blocks[blockName] = replicas
+		if !common.SendMessage(client, blockName+" "+replicaEncoding) {
 			return nil, false
 		}
 	}
@@ -210,6 +204,9 @@ func uploadFile(client net.Conn, newFile File, aliveNodes []string) (map[string]
 }
 
 func (server *Server) downloadFileWrapper(task *Request) {
+	defer server.handleConnection(task.Client) // continue reading requests
+	defer server.getQueue(task.Name).ReadDone()
+
 	server.Mutex.Lock()
 	file, ok := server.Files[task.Name]
 	server.Mutex.Unlock()
@@ -229,12 +226,9 @@ func (server *Server) downloadFileWrapper(task *Request) {
 	}
 	server.Mutex.Unlock()
 
-	log.Debug("Starting download for file:", task.Name)
+	log.Debug("Starting download:", task.Name)
 	downloadFile(task.Client, file, blocks)
-	// log.Debug("Download finished for file:", task.Name)
-
-	server.getQueue(task.Name).ReadDone()
-	server.handleConnection(task.Client) // continue reading requests
+	log.Debug("Download finished:", task.Name)
 }
 
 // Send replica list to client, wait for client to finish download
@@ -244,47 +238,17 @@ func downloadFile(client net.Conn, file File, blocks map[string][]string) bool {
 		if i == file.NumBlocks-1 {
 			blockSize = file.FileSize - (file.NumBlocks-1)*common.BLOCK_SIZE
 		}
-		blockName := fmt.Sprintf("%s:%d:%d", file.Filename, file.Version, i)
+		blockName := common.GetBlockName(file.Filename, file.Version, i)
 		replicas := strings.Join(blocks[blockName], ",")
 		line := fmt.Sprintf("%s %d %s\n", blockName, blockSize, replicas)
 		log.Debug(line)
-		if common.SendAll(client, []byte(line), len(line)) < 0 {
+		if !common.SendMessage(client, line) {
 			log.Warn("Download failed")
 			return false
 		}
 	}
 
 	client.Write([]byte("END\n"))
-	log.Debugf("Waiting for client %s to download %s\n", client.RemoteAddr(), file.Filename)
-	client.Read(make([]byte, common.MIN_BUFFER_SIZE))
-	log.Infof("Client %s finished download for file %s\n", client.RemoteAddr(), file.Filename)
-	return true
-}
-
-func replicateFileMetadata(connections []net.Conn, newFile File) bool {
-	log.Debugf("To replicate file %s metadata to %d nodes", newFile.Filename, len(connections))
-	message := fmt.Sprintf("SETFILE %s %d %d %d\n", newFile.Filename, newFile.Version, newFile.FileSize, newFile.NumBlocks)
-	for _, conn := range connections {
-		if !common.SendMessage(conn, message) || !common.CheckMessage(conn, "SETFILE_OK") {
-			log.Debug("Failed to replicate file metadata to node ", conn.RemoteAddr())
-			return false
-		}
-	}
-	return true
-}
-
-func replicateBlockMetadata(connections []net.Conn, blockName string, replicas []string) bool {
-	if len(replicas) == 0 {
-		return true
-	}
-
-	log.Debugf("To replicate block %s metadata to %d nodes", blockName, len(connections))
-	message := fmt.Sprintf("SETBLOCK %s %s\n", blockName, strings.Join(replicas, ","))
-	for _, conn := range connections {
-		if !common.SendMessage(conn, message) || !common.CheckMessage(conn, "SETBLOCK_OK") {
-			log.Debug("Failed to replicate block metadata to node ", conn.RemoteAddr())
-			return false
-		}
-	}
+	client.Read(make([]byte, common.MIN_BUFFER_SIZE)) // wait for client to finish download
 	return true
 }

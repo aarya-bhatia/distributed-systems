@@ -316,3 +316,11 @@ func CloseAll(connections []net.Conn) {
 		conn.Close()
 	}
 }
+
+func MakeSet(values []string) map[string]bool {
+	res := make(map[string]bool)
+	for _, value := range values {
+		res[value] = true
+	}
+	return res
+}

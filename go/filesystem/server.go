@@ -73,7 +73,6 @@ func (server *Server) Start() {
 
 	go server.pollTasks()
 	go server.startRebalanceRoutine()
-	// go server.startRebalanceMetadataRoutine()
 
 	for {
 		conn, err := listener.Accept()
@@ -112,39 +111,13 @@ func (s *Server) HandleNodeLeave(info *common.Node) {
 	s.Mutex.Lock()
 	node := fmt.Sprintf("%s:%d", info.Hostname, info.TCPPort)
 	log.Debug("node left: ", node)
-
-	delete(s.Nodes, node)
-
 	for _, block := range s.NodesToBlocks[node] {
-		arr := s.BlockToNodes[block]
-		for i := 0; i < len(arr); i++ {
-			if arr[i] == node {
-				// Remove element at index i
-				arr[i], arr[len(arr)-1] = arr[len(arr)-1], arr[i]
-				s.BlockToNodes[block] = arr[:len(arr)-1]
-				log.Debugf("block %s has %d replicas", block, len(s.BlockToNodes[block]))
-				break
-			}
-		}
+		s.BlockToNodes[block] = common.RemoveElement(s.BlockToNodes[block], node)
 	}
-
 	delete(s.NodesToBlocks, node)
+	delete(s.Nodes, node)
 	s.Mutex.Unlock()
 
 	s.replicateMetadata()
 }
 
-func (s *Server) replicateMetadata() {
-	connections := s.getMetadataReplicaConnections()
-	defer common.CloseAll(connections)
-
-	s.Mutex.Lock()
-	for _, file := range s.Files {
-		for i := 0; i < file.NumBlocks; i++ {
-			blockName := common.GetBlockName(file.Filename, file.Version, i)
-			go replicateFileMetadata(connections, file)
-			go replicateBlockMetadata(connections, blockName, s.BlockToNodes[blockName])
-		}
-	}
-	s.Mutex.Unlock()
-}

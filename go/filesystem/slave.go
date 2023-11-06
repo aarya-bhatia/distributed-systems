@@ -3,15 +3,14 @@ package filesystem
 import (
 	"cs425/common"
 	"fmt"
-	"net"
 	log "github.com/sirupsen/logrus"
+	"net"
 )
 
 // Read a file block from disk and send it to client
 func downloadBlock(directory string, client net.Conn, blockName string) bool {
 	log.Debugf("Sending block %s to client %s", blockName, client.RemoteAddr())
 	if buffer := common.ReadFile(directory, blockName); buffer != nil {
-		// log.Debug("block size:", len(buffer))
 		if common.SendAll(client, buffer, len(buffer)) > 0 {
 			return true
 		}
@@ -53,7 +52,6 @@ func uploadBlock(directory string, client net.Conn, blockName string, blockSize 
 		return false
 	}
 
-	// log.Infof("Added block %s to disk\n", blockName)
 	return true
 }
 
