@@ -2,10 +2,9 @@
 GIT_BRANCH=main
 
 cd $HOME
-rm -rf log *.log *.out data
+rm -rf log *.log *.out *.dat data/
 
 cd $HOME/cs425/go
-
 git reset HEAD
 git checkout $GIT_BRANCH || git checkout -b $GIT_BRANCH
 git pull origin $GIT_BRANCH
