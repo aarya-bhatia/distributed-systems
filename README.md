@@ -2,7 +2,7 @@
 
 ## Introduction
 
-1. Author: Aarya Bhatia (aaryab2@illinois.edu)
+1. Authors: Aarya Bhatia (aaryab2@illinois.edu), William Zheng
 2. [MP3 Report](./MP3_Report.pdf)
 3. [VM addresses](./hosts)
 
@@ -77,3 +77,16 @@ Examples:
 ## Config
 
 Config parameters can be changed in [here](./go/common/common.go)
+
+## Commands
+
+- `kill`: crash server
+- `list_mem`: print FD membership table
+- `list_self`: print FD member id
+- `join`: start gossiping
+- `leave`: stop gossiping
+- `info`: Display node info
+- `store`: Display local files blocks
+- `leader`: Print leader node
+- `files`: Print file metadata
+- `queue`: Print file queues status
