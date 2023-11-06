@@ -3,8 +3,8 @@
 ## Introduction
 
 1. Author: Aarya Bhatia (aaryab2@illinois.edu)
-2. MP3 Report: ./MP3_Report.pdf
-3. VM addresses: ./hosts
+2. [MP3 Report](./MP3_Report.pdf)
+3. [VM addresses](./hosts)
 
 ## Build Instructions
 
@@ -14,6 +14,19 @@
 
 - Power on all vms from https://vc.cs.illinois.edu
 - Run `./deploy.sh`
+
+Note:
+
+- The (MP1) distributed shell daemon runs on port 3000 on each VM
+- Each server runs a UDP failure detector server on port 6000 (MP2), a frontend TCP server on port 4000 and a backend TCP server on port 5000 (MP3).
+- Node address is set by the system hostname
+
+To start each server manually on VMs:
+
+```
+cd go
+go run .
+```
 
 ## Stop all VMs
 
@@ -61,3 +74,6 @@ Examples:
 - You can add a "sleep x" command to space out the commands by 'x' seconds.
 - Any blank line or lines starting with '#' are ignored.
 
+## Config
+
+Config parameters can be changed in [here](./go/common/common.go)
