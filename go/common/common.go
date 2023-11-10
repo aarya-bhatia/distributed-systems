@@ -82,16 +82,16 @@ var LocalCluster = []Node{
 }
 
 var LocalMapReduceCluster = []Node{
-	{1, "localhost", 9001, 8001, 0},
-	{2, "localhost", 9002, 8002, 0},
-	{3, "localhost", 9003, 8003, 0},
-	{4, "localhost", 9004, 8004, 0},
-	{5, "localhost", 9005, 8005, 0},
-	{6, "localhost", 9006, 8006, 0},
-	{7, "localhost", 9007, 8007, 0},
-	{8, "localhost", 9008, 8008, 0},
-	{9, "localhost", 9009, 8009, 0},
-	{10, "localhost", 9010, 8010, 0},
+	{1, "localhost", 9001, 8001, 4001},
+	{2, "localhost", 9002, 8002, 4002},
+	{3, "localhost", 9003, 8003, 4003},
+	{4, "localhost", 9004, 8004, 4004},
+	{5, "localhost", 9005, 8005, 4005},
+	{6, "localhost", 9006, 8006, 4006},
+	{7, "localhost", 9007, 8007, 4007},
+	{8, "localhost", 9008, 8008, 4008},
+	{9, "localhost", 9009, 8009, 4009},
+	{10, "localhost", 9010, 8010, 4010},
 }
 
 var Cluster []Node = LocalCluster
