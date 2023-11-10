@@ -81,6 +81,19 @@ var LocalCluster = []Node{
 	{10, "localhost", 6010, 5010, 4010},
 }
 
+var LocalMapReduceCluster = []Node{
+	{1, "localhost", 9001, 8001, 0},
+	{2, "localhost", 9002, 8002, 0},
+	{3, "localhost", 9003, 8003, 0},
+	{4, "localhost", 9004, 8004, 0},
+	{5, "localhost", 9005, 8005, 0},
+	{6, "localhost", 9006, 8006, 0},
+	{7, "localhost", 9007, 8007, 0},
+	{8, "localhost", 9008, 8008, 0},
+	{9, "localhost", 9009, 8009, 0},
+	{10, "localhost", 9010, 8010, 0},
+}
+
 var Cluster []Node = LocalCluster
 
 func GetNodeByAddress(hostname string, udpPort int) *Node {
@@ -324,3 +337,4 @@ func MakeSet(values []string) map[string]bool {
 	}
 	return res
 }
+

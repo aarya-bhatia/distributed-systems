@@ -176,7 +176,9 @@ func (server *Server) AddHost(Hostname string, Port int, ID string) (*Host, erro
 	server.PrintMembershipTable()
 	server.MemberLock.Lock()
 
-	server.Notifier.HandleNodeJoin(common.GetNodeByAddress(Hostname, Port))
+	if server.Notifier != nil {
+		server.Notifier.HandleNodeJoin(common.GetNodeByAddress(Hostname, Port))
+	}
 
 	return server.Members[ID], nil
 }
@@ -451,7 +453,9 @@ func (s *Server) HandleTimeout(e timer.TimerEvent) {
 		if s.Protocol == common.GOSSIP_PROTOCOL {
 			log.Warnf("FAILURE DETECTED: (%d) Node %s is considered failed\n", timestamp, host.Signature)
 			host.State = common.NODE_FAILED
-			s.Notifier.HandleNodeLeave(common.GetNodeByAddress(host.Hostname, host.Port))
+			if s.Notifier != nil {
+				s.Notifier.HandleNodeLeave(common.GetNodeByAddress(host.Hostname, host.Port))
+			}
 		} else {
 			log.Warnf("FAILURE SUSPECTED: (%d) Node %s is suspected of failure\n", timestamp, host.Signature)
 			host.State = common.NODE_SUSPECTED
@@ -461,7 +465,9 @@ func (s *Server) HandleTimeout(e timer.TimerEvent) {
 		log.Warnf("FAILURE DETECTED: (%d) Node %s is considered failed\n", timestamp, host.Signature)
 		host.State = common.NODE_FAILED
 		s.RestartTimer(e.ID, host.State)
-		s.Notifier.HandleNodeLeave(common.GetNodeByAddress(host.Hostname, host.Port))
+		if s.Notifier != nil {
+			s.Notifier.HandleNodeLeave(common.GetNodeByAddress(host.Hostname, host.Port))
+		}
 	} else if host.State == common.NODE_FAILED {
 		log.Warn("Deleting node from membership list...", host.Signature)
 		delete(s.Members, e.ID)
