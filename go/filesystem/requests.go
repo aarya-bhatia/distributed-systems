@@ -77,6 +77,12 @@ func (server *Server) handleConnection(conn net.Conn) {
 				return
 			}
 
+		// To list files matching directory prefix
+		case verb == "LIST_DIRECTORY":
+			if !server.handleListDirectory(conn, tokens) {
+				return
+			}
+
 		// To upload block at replica
 		case verb == "UPLOAD":
 			if !server.handleUploadBlock(conn, tokens) {
@@ -355,6 +361,28 @@ func (server *Server) handleListFile(conn net.Conn, tokens []string) bool {
 		log.Println(reply, replicas)
 		if !common.SendMessage(conn, reply) {
 			return false
+		}
+	}
+
+	return common.SendMessage(conn, "LIST_END")
+}
+
+// Usage: LIST_DIRECTORY <name>
+func (server *Server) handleListDirectory(conn net.Conn, tokens []string) bool {
+	if len(tokens) != 2 {
+		return common.SendMessage(conn, "ERROR Malformed Request")
+	}
+
+	server.Mutex.Lock()
+	defer server.Mutex.Unlock()
+
+	if !common.SendMessage(conn, "LIST_START") {
+		return false
+	}
+
+	for file := range server.Files {
+		if strings.Index(file, tokens[1]) == 0 {
+			common.SendMessage(conn, file)
 		}
 	}
 

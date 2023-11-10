@@ -95,6 +95,14 @@ func (server *FrontendServer) handleConnection(conn net.Conn) {
 
 		server.listFile(conn, tokens[1])
 
+	} else if verb == "lsdir" {
+		if len(tokens) != 2 {
+			common.SendMessage(conn, MalformedRequestError)
+			return
+		}
+
+		server.listDirectory(conn, tokens[1])
+
 	} else {
 		common.SendMessage(conn, UnknownRequestError)
 		return
@@ -192,4 +200,52 @@ func (server *FrontendServer) listFile(client net.Conn, filename string) bool {
 	}
 
 	return true
+}
+
+func (server *FrontendServer) listDirectory(client net.Conn, name string) bool {
+	conn := server.getLeaderConnection()
+	if conn == nil {
+		common.SendMessage(client, "ERROR")
+		return false
+	}
+	common.SendMessage(client, "OK")
+	defer conn.Close()
+
+	if !common.SendMessage(conn, "LIST_DIRECTORY "+name) {
+		common.SendMessage(client, "ERROR")
+		return false
+	}
+
+	reader := bufio.NewReader(conn)
+	reply, err := reader.ReadString('\n')
+	if err != nil {
+		common.SendMessage(client, err.Error())
+		return false
+	}
+
+	reply = reply[:len(reply)-1]
+	if reply != "LIST_START" {
+		common.SendMessage(client, reply)
+		return false
+	}
+
+	for {
+		reply, err := reader.ReadString('\n')
+		if err != nil {
+			common.SendMessage(client, err.Error())
+			return false
+		}
+
+		reply = reply[:len(reply)-1]
+		if reply == "LIST_END" {
+			break
+		}
+
+		if !common.SendMessage(client, reply) {
+			return false
+		}
+	}
+
+	return true
+
 }
