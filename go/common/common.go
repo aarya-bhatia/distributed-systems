@@ -338,3 +338,6 @@ func MakeSet(values []string) map[string]bool {
 	return res
 }
 
+func GetAddress(hostname string, port int) string {
+	return fmt.Sprintf("%s:%d", hostname, port)
+}
