@@ -341,3 +341,12 @@ func MakeSet(values []string) map[string]bool {
 func GetAddress(hostname string, port int) string {
 	return fmt.Sprintf("%s:%d", hostname, port)
 }
+
+func EncodeFilename(name string) string {
+	return strings.ReplaceAll(name, "/", "%2F")
+}
+
+func DecodeFilename(name string) string {
+	return strings.ReplaceAll(name, "%2F", "/")
+}
+

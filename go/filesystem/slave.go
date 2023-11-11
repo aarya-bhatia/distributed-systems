@@ -3,24 +3,14 @@ package filesystem
 import (
 	"cs425/common"
 	"fmt"
-	"net"
-	"strings"
-
 	log "github.com/sirupsen/logrus"
+	"net"
 )
-
-func Encode(name string) string {
-	return strings.ReplaceAll(name, "/", "%2F")
-}
-
-func Decode(name string) string {
-	return strings.ReplaceAll(name, "%2F", "/")
-}
 
 // Read a file block from disk and send it to client
 func downloadBlock(directory string, client net.Conn, blockName string) bool {
 	log.Debugf("Sending block %s to client %s", blockName, client.RemoteAddr())
-	filename := Decode(blockName)
+	filename := common.DecodeFilename(blockName)
 	if buffer := common.ReadFile(directory, filename); buffer != nil {
 		if common.SendAll(client, buffer, len(buffer)) > 0 {
 			return true
@@ -58,7 +48,7 @@ func uploadBlock(directory string, client net.Conn, blockName string, blockSize 
 
 	log.Debugf("Received block %s (%d bytes) from client %s", blockName, blockSize, client.RemoteAddr())
 
-	filename := Encode(blockName)
+	filename := common.EncodeFilename(blockName)
 	if !common.WriteFile(directory, filename, buffer, blockSize) {
 		log.Warnf("Failed to write block %s to disk\n", blockName)
 		return false
