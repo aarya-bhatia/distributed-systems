@@ -1,24 +1,22 @@
-package leader
+package maplejuice
 
 import (
 	"bufio"
 	"cs425/common"
-	"cs425/queue"
 	"fmt"
+	log "github.com/sirupsen/logrus"
 	"net"
+	"net/rpc"
 	"os"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
-
-	log "github.com/sirupsen/logrus"
 )
 
 const (
-	WORKER_IDLE = 0
-	WORKER_WAIT = 1
-	WORKER_BUSY = 2
+	IDLE = 0
+	BUSY = 1
 )
 
 const (
@@ -38,34 +36,55 @@ type Job struct {
 	NumReducer int
 	FilePrefix string
 	InputFiles []string
-	Type       int
 	Keys       []string
+
+	// Pending    []Task
+
+	MapTasks   []MapTask
+	ReduceTask []ReduceTask
+}
+
+type MapTask struct {
+	InputFile    string
+	OutputPrefix string
+	MapperExe    string
+	Status       int
+	Worker       *Worker
+}
+
+type ReduceTask struct {
+	InputFile  string
+	OutputFile string
+	ReducerExe string
+	Status     int
+	Worker     *Worker
 }
 
 type Worker struct {
 	Info   common.Node
 	Status int // idle, wait, busy
-	Mode   int // map, reduce
-	Conn   net.Conn
+	JobID  int64
+	Input  string
 }
 
 type Leader struct {
 	Info     common.Node
-	Jobs     *queue.Queue
+	Jobs     []*Job
 	Workers  map[string]*Worker
 	Mutex    sync.Mutex
 	Listener net.Conn
 }
 
-func (server *Leader) Enqueuejob(job *Job) {
-	server.Jobs.Push(job)
+func (server *Leader) enqueuejob(job *Job) {
+	// server.Jobs.Push(job)
 	log.Info("Job enqueued:", *job)
 }
 
-func (server *Leader) DequeueJob() *Job {
-	job := server.Jobs.Pop().(*Job)
-	log.Info("Job dequeued:", *job)
-	return job
+func (server *Leader) dequeueJob() *Job {
+	// job := server.Jobs.Pop().(*Job)
+	// log.Info("Job dequeued:", *job)
+	// return job
+	return nil
 }
 
 func (server *Leader) HandleNodeJoin(node *common.Node) {
@@ -75,7 +94,7 @@ func (server *Leader) HandleNodeJoin(node *common.Node) {
 	log.Println("node joined:", *node)
 	worker := new(Worker)
 	worker.Info = *node
-	worker.Status = WORKER_IDLE
+	// worker.Status = WORKER_IDLE
 	server.Workers[common.GetAddress(node.Hostname, node.TCPPort)] = worker
 }
 
@@ -100,10 +119,10 @@ func (server *Leader) listDirectory(name string) []string {
 	if err != nil {
 		return res
 	}
+	defer conn.Close()
 	if !common.SendMessage(conn, "lsdir "+name) {
 		return res
 	}
-	defer conn.Close()
 
 	reader := bufio.NewReader(conn)
 
@@ -133,11 +152,13 @@ func NewLeader(info common.Node) *Leader {
 	leader := new(Leader)
 	leader.Info = info
 	leader.Workers = make(map[string]*Worker, 0)
-	leader.Jobs = queue.NewQueue()
+	// leader.Jobs = queue.NewQueue()
 	return leader
 }
 
 func (server *Leader) Start() {
+	rpc.Register(server)
+
 	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", server.Info.TCPPort))
 	if err != nil {
 		log.Fatal("Error starting server: ", err)
@@ -169,8 +190,13 @@ func (server *Leader) handleConnection(conn net.Conn) {
 	tokens := strings.Split(request, " ")
 	verb := tokens[0]
 
-	if verb == "maple" {
+	switch verb {
+	case "maple":
 		server.handleMapleRequest(conn, tokens)
+	case "juice":
+		server.handleJuiceRequest(conn, tokens)
+	default:
+		rpc.ServeConn(conn)
 	}
 }
 
@@ -199,7 +225,7 @@ func (server *Leader) handleMapleRequest(conn net.Conn, tokens []string) bool {
 		return false
 	}
 
-	// TODO: check if maple_exe exists in sdfs / upload it to sdfs
+	// TODO: client should upload exe file to sdfs
 
 	log.Println(maple_exe, num_maples, sdfs_prefix, sdfs_src_dir)
 
@@ -210,16 +236,61 @@ func (server *Leader) handleMapleRequest(conn net.Conn, tokens []string) bool {
 	job.FilePrefix = sdfs_prefix
 	job.ID = time.Now().UnixNano()
 	job.MapperExe = maple_exe
-	job.Type = MAPLE
+	// job.Type = MAPLE
 	job.Keys = make([]string, 0)
 	job.ReducerExe = ""
 	job.NumMapper = num_maples
 	job.NumReducer = 0
 
-	server.Enqueuejob(job)
+	server.enqueuejob(job)
 
 	return common.SendMessage(conn, "OK")
 }
 
 func (server *Leader) handleJuiceRequest(conn net.Conn, tokens []string) {
+}
+
+func (server *Leader) scheduleTasks() bool {
+	return false
+
+	// server.Mutex.Lock()
+	// defer server.Mutex.Unlock()
+	//
+	// for _, worker := range server.Workers {
+	//
+	// 	if worker.Status == IDLE {
+	//
+	// 		for len(server.Jobs) > 0 {
+	// 			job := server.Jobs[0]
+	//
+	// 			if len(job.MapTasks) == 0 && len(job.ReduceTask) == 0 {
+	// 				log.Info("All tasks finished for job ", job.ID)
+	// 				server.Jobs = server.Jobs[1:]
+	// 				continue
+	// 			}
+	//
+	// 			if len(job.MapTasks) > 0 {
+	// 				for _, task := range job.MapTasks {
+	// 					if task.Status == IDLE {
+	// 						// server.scheduleMapTask(worker, &task)
+	// 						// return
+	// 					}
+	// 				}
+	// 			} else {
+	// 			}
+	// 		}
+	// 	}
+	// }
+}
+
+func (server *Leader) SendTask(worker *Worker, job *Job) {
+	// rpc.Dial("tcp", )
+	// worker.Status = WORKER_BUSY
+	// worker.JobID = job.ID
+	// worker.Input = job
+	// return
+}
+
+func (server *Leader) FinishTask(worker *Worker, reply *string) error {
+	return nil
 }
