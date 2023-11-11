@@ -5,15 +5,9 @@ import (
 	"fmt"
 	"net"
 	"time"
+
+	log "github.com/sirupsen/logrus"
 )
-
-type TaskData interface {
-}
-
-type Task interface {
-	Start(worker string, data TaskData) bool
-	Restart(worker string) bool
-}
 
 type MapTask struct {
 	Filename    string
@@ -22,7 +16,8 @@ type MapTask struct {
 }
 
 func (task MapTask) Start(worker string, data TaskData) bool {
-	// lines := data.([]string)
+	lines := data.([]string)
+	log.Println("Started map task:", len(lines), "lines")
 	conn, err := net.Dial("tcp", worker)
 	if err != nil {
 		return false

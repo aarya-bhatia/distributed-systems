@@ -4,26 +4,38 @@ import (
 	"bufio"
 	"cs425/common"
 	"fmt"
-	log "github.com/sirupsen/logrus"
 	"net"
-	"net/rpc"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	log "github.com/sirupsen/logrus"
 )
 
-const (
-	MalformedRequest = "ERROR Malformed Request"
-)
+const MalformedRequest = "ERROR Malformed Request"
+const MAPLE_CHUNK_LINE_COUNT = 100
 
 type Leader struct {
 	Info      common.Node
 	Mutex     sync.Mutex
 	CV        sync.Cond
 	Scheduler *Scheduler
-	Jobs      []*Job
+	Jobs      []Job
 	Status    int
+}
+
+type Job interface {
+	Name() string
+	Run(server *Leader) bool
+}
+
+type TaskData interface {
+}
+
+type Task interface {
+	Start(worker string, data TaskData) bool
+	Restart(worker string) bool
 }
 
 func (server *Leader) HandleNodeJoin(node *common.Node) {
@@ -38,15 +50,13 @@ func NewLeader(info common.Node) *Leader {
 	leader := new(Leader)
 	leader.Info = info
 	leader.Scheduler = NewScheduler()
-	leader.Jobs = make([]*Job, 0)
+	leader.Jobs = make([]Job, 0)
 	leader.CV = *sync.NewCond(&leader.Mutex)
 
 	return leader
 }
 
 func (server *Leader) Start() {
-	rpc.Register(server)
-
 	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", server.Info.TCPPort))
 	if err != nil {
 		log.Fatal("Error starting server: ", err)
@@ -63,6 +73,31 @@ func (server *Leader) Start() {
 		}
 
 		go server.handleConnection(conn)
+	}
+}
+
+func (server *Leader) addJob(job Job) {
+	server.Mutex.Lock()
+	defer server.Mutex.Unlock()
+	server.Jobs = append(server.Jobs, job)
+	log.Info("job added:", job.Name())
+	server.CV.Broadcast()
+}
+
+func (server *Leader) runJobs() {
+	for {
+		log.Println("waiting for jobs...")
+		server.Mutex.Lock()
+		for len(server.Jobs) == 0 {
+			server.CV.Wait()
+		}
+		job := server.Jobs[0]
+		server.Jobs = server.Jobs[1:]
+		server.Mutex.Unlock()
+
+		log.Println("job started:", job.Name())
+		job.Run(server)
+		log.Println("job finished:", job.Name())
 	}
 }
 
@@ -119,14 +154,13 @@ func (server *Leader) handleMapleRequest(conn net.Conn, tokens []string) bool {
 	// inputFiles := server.listDirectory(sdfs_src_dir)
 	inputFiles := []string{} // TODO
 
-	job := new(Job)
+	job := new(MapJob)
+	job.ID = time.Now().UnixNano()
+	job.Client = conn
 	job.InputFiles = inputFiles
 	job.OutputPrefix = sdfs_prefix
-	job.ID = time.Now().UnixNano()
 	job.MapperExe = maple_exe
-	job.Type = MAPLE
 	job.NumMapper = num_maples
-	job.Client = conn
 
 	server.addJob(job)
 
