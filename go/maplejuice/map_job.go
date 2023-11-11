@@ -27,7 +27,7 @@ func (job *MapJob) Run(server *Leader) bool {
 		job.Client.Close()
 	}()
 
-	inputFile := "data/story" // TODO
+	inputFile := "data/dataset/vm1" // TODO
 	log.Println("input file:", inputFile)
 	fs := NewFileSplitter(inputFile)
 	if fs == nil {

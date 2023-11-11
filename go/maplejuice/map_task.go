@@ -26,7 +26,7 @@ func (task MapTask) Start(worker string, data TaskData) bool {
 	if !common.SendMessage(conn, request) {
 		return false
 	}
-	time.Sleep(1 * time.Second)
+	// time.Sleep(1 * time.Second)
 	if !common.CheckMessage(conn, "OK") {
 		return false
 	}
