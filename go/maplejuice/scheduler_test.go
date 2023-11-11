@@ -2,8 +2,24 @@ package maplejuice
 
 import (
 	"testing"
+	"time"
+
 	log "github.com/sirupsen/logrus"
 )
+
+type Example struct{}
+
+func (e Example) Start(w string, data TaskData) bool {
+	log.Println("running example task")
+	time.Sleep(3 * time.Second)
+	return true
+}
+
+func (e Example) Restart(w string) bool {
+	log.Println("running example task")
+	time.Sleep(3 * time.Second)
+	return true
+}
 
 func TestScheduler(t *testing.T) {
 	log.Println("Begin")
@@ -13,10 +29,12 @@ func TestScheduler(t *testing.T) {
 	s.AddWorker("a")
 	s.AddWorker("b")
 
-	s.PutTask(Task{})
-	s.PutTask(Task{})
-	s.PutTask(Task{})
-	s.PutTask(Task{})
+	e := Example{}
+
+	s.PutTask(e, nil)
+	s.PutTask(e, nil)
+	s.PutTask(e, nil)
+	s.PutTask(e, nil)
 
 	s.Wait()
 

@@ -7,17 +7,27 @@ import (
 	"time"
 )
 
-type Task struct {
-	Filename    string
-	OffsetLines int
-	CountLines  int
-}
-
 type Scheduler struct {
 	BusyWorkers map[string]Task
 	IdleWorkers []string
 	Mutex       sync.Mutex
 	Tasks       []Task
+}
+
+func (s *Scheduler) StartTask(worker string, task Task, data TaskData) {
+	if task.Start(worker, data) {
+		s.TaskDone(worker)
+	} else {
+		s.TaskFail(worker)
+	}
+}
+
+func (s *Scheduler) RestartTask(worker string, task Task) {
+	if task.Restart(worker) {
+		s.TaskDone(worker)
+	} else {
+		s.TaskFail(worker)
+	}
 }
 
 func NewScheduler() *Scheduler {
@@ -28,18 +38,11 @@ func NewScheduler() *Scheduler {
 	return s
 }
 
-func StartTask(s *Scheduler, worker string, task Task) {
-	defer s.TaskDone(worker)
-	log.Println("Task started for worker", worker)
-	time.Sleep(3 * time.Second)
-}
-
 func (s *Scheduler) AddWorker(worker string) {
 	s.Mutex.Lock()
 	defer s.Mutex.Unlock()
-	delete(s.BusyWorkers, worker)
 	s.IdleWorkers = append(s.IdleWorkers, worker)
-	log.Println("Added worker", worker)
+	log.Debug("Added worker", worker)
 }
 
 func (s *Scheduler) RemoveWorker(worker string) {
@@ -50,25 +53,28 @@ func (s *Scheduler) RemoveWorker(worker string) {
 		delete(s.BusyWorkers, worker)
 	}
 	s.IdleWorkers = common.RemoveElement(s.IdleWorkers, worker)
-	log.Println("Removed worker", worker)
+	log.Debug("Removed worker", worker)
 }
 
 func (s *Scheduler) TaskDone(worker string) {
 	s.Mutex.Lock()
 	defer s.Mutex.Unlock()
 	delete(s.BusyWorkers, worker)
-	s.IdleWorkers = append(s.IdleWorkers, worker)
-	log.Println("Task done by worker", worker)
+	s.IdleWorkers = common.AddUniqueElement(s.IdleWorkers, worker)
+	log.Debug("Task done by worker", worker)
 }
 
 func (s *Scheduler) TaskFail(worker string) {
 	s.Mutex.Lock()
 	defer s.Mutex.Unlock()
-	delete(s.BusyWorkers, worker)
-	log.Println("Task failed by worker", worker)
+	if t, ok := s.BusyWorkers[worker]; ok {
+		s.Tasks = append(s.Tasks, t)
+		delete(s.BusyWorkers, worker)
+		log.Debug("Task failed by worker", worker)
+	}
 }
 
-func (s *Scheduler) PutTask(task Task) {
+func (s *Scheduler) PutTask(task Task, data TaskData) {
 	for {
 		s.Mutex.Lock()
 		if len(s.IdleWorkers) > 0 {
@@ -76,11 +82,11 @@ func (s *Scheduler) PutTask(task Task) {
 			s.IdleWorkers = s.IdleWorkers[1:]
 			s.BusyWorkers[worker] = task
 			s.Mutex.Unlock()
-			go StartTask(s, worker, task)
+			go s.StartTask(worker, task, data)
 			return
 		}
 		s.Mutex.Unlock()
-		log.Println("No idle workers.. waiting")
+		log.Debug("No idle workers.. waiting")
 		time.Sleep(time.Second)
 	}
 }
@@ -93,16 +99,16 @@ func (s *Scheduler) Wait() {
 			return
 		}
 		if len(s.Tasks) > 0 && len(s.IdleWorkers) > 0 {
-			log.Println("rescheduling task")
+			log.Debug("rescheduling task")
 			task := s.Tasks[0]
 			s.Tasks = s.Tasks[1:]
 			worker := s.IdleWorkers[0]
 			s.IdleWorkers = s.IdleWorkers[1:]
 			s.BusyWorkers[worker] = task
-			go StartTask(s, worker, task)
+			go s.RestartTask(worker, task)
 		}
 		s.Mutex.Unlock()
-		log.Println("waiting for tasks to finish...")
+		log.Debug("waiting for tasks to finish...")
 		time.Sleep(time.Second)
 	}
 }
