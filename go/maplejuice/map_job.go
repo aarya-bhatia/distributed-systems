@@ -45,9 +45,13 @@ func (job *MapJob) Run(server *Leader) bool {
 		log.Println("Read", len(lines), "lines from file")
 
 		mapTask := new(MapTask)
+
 		mapTask.Filename = inputFile
 		mapTask.OffsetLines = offset
 		mapTask.CountLines = len(lines)
+		mapTask.OutputPrefix = job.OutputPrefix
+		mapTask.MapperExe = job.MapperExe
+
 		offset += len(lines)
 
 		server.Scheduler.PutTask(mapTask, lines)

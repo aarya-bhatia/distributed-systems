@@ -2,31 +2,25 @@ package maplejuice
 
 import (
 	"cs425/common"
-	"net"
-
 	log "github.com/sirupsen/logrus"
+	"net"
+	"net/rpc"
 )
 
-type Worker struct {
-	Hostname string
-	Port     int
+type Service struct {
+	Address string
 }
 
-func (worker *Worker) handleConnection(conn net.Conn) {
-	defer conn.Close()
-	buffer := make([]byte, common.MIN_BUFFER_SIZE)
-	n, err := conn.Read(buffer)
-	if err != nil {
-		return
-	}
-	log.Println("Received:", string(buffer[:n-1]))
-	if string(buffer[:n-1]) == "TEST" {
-		common.SendMessage(conn, "OK")
-	}
-}
+func StartRPCServer(Hostname string, Port int) {
+	addr := common.GetAddress(Hostname, Port)
 
-func (worker *Worker) Start() {
-	addr := common.GetAddress(worker.Hostname, worker.Port)
+	service := new(Service)
+	service.Address = addr
+
+	if err := rpc.Register(service); err != nil {
+		log.Fatal(err)
+	}
+
 	listener, err := net.Listen("tcp", addr)
 	if err != nil {
 		log.Fatal(err)
@@ -35,11 +29,13 @@ func (worker *Worker) Start() {
 	log.Info("MapleJuice worker is running at ", addr)
 
 	for {
-		conn, err := listener.Accept()
-		if err != nil {
-			continue
-		}
-
-		go worker.handleConnection(conn)
+		rpc.Accept(listener)
 	}
+}
+
+func (service *Service) MapTask(args *MapArgs, reply *bool) error {
+	log.Println("Recevied map task:", args.Task)
+	log.Println("Data:", len(args.Data), "lines")
+	*reply = true
+	return nil
 }

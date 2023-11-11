@@ -1,36 +1,47 @@
 package maplejuice
 
 import (
-	"cs425/common"
-	"fmt"
-	"net"
-	"time"
-
 	log "github.com/sirupsen/logrus"
+	"net/rpc"
+	"time"
 )
 
 type MapTask struct {
-	Filename    string
-	OffsetLines int
-	CountLines  int
+	Filename     string
+	OffsetLines  int
+	CountLines   int
+	MapperExe    string
+	OutputPrefix string
+}
+
+type MapArgs struct {
+	Task MapTask
+	Data []string
 }
 
 func (task MapTask) Start(worker string, data TaskData) bool {
 	lines := data.([]string)
 	log.Println("Started map task:", len(lines), "lines")
-	conn, err := net.Dial("tcp", worker)
+
+	client, err := rpc.Dial("tcp", worker)
 	if err != nil {
+		log.Println(err)
 		return false
 	}
-	request := fmt.Sprintf("TEST")
-	if !common.SendMessage(conn, request) {
+	defer client.Close()
+
+	args := new(MapArgs)
+	args.Task = task
+	args.Data = data.([]string)
+
+	reply := new(bool)
+
+	if err = client.Call("Service.MapTask", args, reply); err != nil {
+		log.Println(err)
 		return false
 	}
-	// time.Sleep(1 * time.Second)
-	if !common.CheckMessage(conn, "OK") {
-		return false
-	}
-	return true
+
+	return *reply
 }
 
 func (task MapTask) Restart(worker string) bool {
