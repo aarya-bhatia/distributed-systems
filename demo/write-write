@@ -1,0 +1,6 @@
+1 put /home/aaryab2/file file
+sleep 10
+10 put /home/aaryab2/hello file
+sleep 5
+3 get file /home/aaryab2/file.out
+
