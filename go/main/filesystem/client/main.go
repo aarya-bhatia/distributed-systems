@@ -4,10 +4,10 @@ import (
 	"cs425/common"
 	"cs425/filesystem/client"
 	"fmt"
+	"github.com/jedib0t/go-pretty/table"
+	"github.com/sirupsen/logrus"
 	"os"
 	"strconv"
-
-	"github.com/sirupsen/logrus"
 )
 
 func printUsage() {
@@ -22,7 +22,7 @@ func printUsage() {
 }
 
 func main() {
-	if len(os.Args) < 2 {
+	if len(os.Args) < 3 {
 		printUsage()
 		return
 	}
@@ -78,14 +78,18 @@ func main() {
 			logrus.Fatal(err)
 		}
 
-		fmt.Println("Filename:", file.File.Filename)
-		fmt.Println("Version:", file.File.Version)
+		fmt.Println("File:", file.File.Filename)
 		fmt.Println("Size:", file.File.FileSize)
+		fmt.Println("Version:", file.File.Version)
 
-		for _, block := range file.Blocks {
-			fmt.Printf("Block %s,\tSize %d,\tReplicas:%v\n", block.Block, block.Size, block.Replicas)
+		t := table.NewWriter()
+		t.SetOutputMirror(os.Stdout)
+		t.AppendHeader(table.Row{"NO.", "BLOCK", "SIZE", "REPLICAS"})
+
+		for i, block := range file.Blocks {
+			t.AppendRow(table.Row{i, block.Block, block.Size, block.Replicas})
 		}
 
-		fmt.Println()
+		t.Render()
 	}
 }
