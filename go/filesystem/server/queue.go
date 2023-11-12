@@ -1,8 +1,8 @@
-package filesystem
+package server
 
 import (
-	"sync"
 	log "github.com/sirupsen/logrus"
+	"sync"
 )
 
 const (
@@ -15,8 +15,8 @@ const (
 // 2. At most two readers at a time per file
 // 3. There can be maximum 4 reads or 4 writes consecutively per file
 type Queue struct {
-	Reads     []*Request
-	Writes    []*Request
+	Reads     []chan bool
+	Writes    []chan bool
 	Mode      int
 	Count     int
 	NumReader int
@@ -25,28 +25,26 @@ type Queue struct {
 }
 
 // Enqueue a read task for file
-func (q *Queue) PushRead(request *Request) {
+func (q *Queue) PushRead(c chan bool) {
 	q.Mutex.Lock()
 	defer q.Mutex.Unlock()
-	q.Reads = append(q.Reads, request)
-	// log.Debug("Read task added")
+	q.Reads = append(q.Reads, c)
 }
 
 // Enqueue a write task for file
-func (q *Queue) PushWrite(request *Request) {
+func (q *Queue) PushWrite(c chan bool) {
 	q.Mutex.Lock()
 	defer q.Mutex.Unlock()
-	q.Writes = append(q.Writes, request)
-	// log.Debug("Write task added")
+	q.Writes = append(q.Writes, c)
 }
 
 // Get the next task if available, otherwise returns nil
-func (q *Queue) TryPop() *Request {
+func (q *Queue) TryPop() bool {
 	q.Mutex.Lock()
 	defer q.Mutex.Unlock()
 
 	if q.NumReader == 2 || q.NumWriter == 1 {
-		return nil
+		return false
 	}
 
 	if q.Mode == READING {
@@ -58,8 +56,8 @@ func (q *Queue) TryPop() *Request {
 			q.Reads = q.Reads[1:]
 			q.NumReader++
 			log.Debug("A read task was dequeued!")
-			// log.Debug("Num readers: ", q.NumReader)
-			return res
+			res <- true
+			return true
 		}
 	}
 
@@ -72,12 +70,12 @@ func (q *Queue) TryPop() *Request {
 			q.Writes = q.Writes[1:]
 			q.NumWriter++
 			log.Debug("A write task was dequeued!")
-			// log.Debug("Num writers: ", q.NumWriter)
-			return res
+			res <- true
+			return true
 		}
 	}
 
-	return nil
+	return false
 }
 
 // Must call this after reader is done

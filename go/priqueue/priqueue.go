@@ -3,7 +3,7 @@ package priqueue
 // Item represents an item in the priority queue.
 type Item struct {
 	Key    int
-	TieKey string
+	TieKey int
 	Value  interface{}
 }
 

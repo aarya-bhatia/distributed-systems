@@ -1,4 +1,5 @@
-package frontend
+package client
+/* package client
 
 import (
 	"container/heap"
@@ -239,4 +240,4 @@ func connectAllReplica(replicas []string) []*Node {
 // 	if node.UploadingTo != nil {
 // 		pendingNodes = append(pendingNodes, node.UploadingTo)
 // 	}
-// }
+// } */

@@ -2,23 +2,25 @@ package common
 
 import (
 	"fmt"
-	log "github.com/sirupsen/logrus"
 	"hash"
 	"hash/fnv"
 	"io"
+	"math/rand"
 	"net"
 	"os"
 	"strings"
 	"time"
+
+	log "github.com/sirupsen/logrus"
 )
 
 const (
 	MAX_NODES       = 10
 	BLOCK_SIZE      = 16 * 1024 * 1024 // 16 MB
 	MIN_BUFFER_SIZE = 1024
-	REPLICA_FACTOR  = 4
+	REPLICA_FACTOR  = 2
 
-	POLL_INTERVAL      = 1 * time.Second
+	POLL_INTERVAL      = 200 * time.Millisecond
 	REBALANCE_INTERVAL = 3 * time.Second
 
 	JOIN_RETRY_TIMEOUT = time.Second * 5
@@ -32,17 +34,21 @@ const (
 	NODE_SUSPECTED = 1
 	NODE_FAILED    = 2
 
-	DEFAULT_FRONTEND_PORT = 4000
-	DEFAULT_BACKEND_PORT  = 5000
-	DEFAULT_UDP_PORT      = 6000
+	SDFS_FD_PORT  = 3000
+	SDFS_RPC_PORT = 4000
+	SDFS_TCP_PORT = 5000
+
+	MAPLEJUICE_FD_PORT  = 9000
+	MAPLEJUICE_RPC_PORT = 7000
+	MAPLEJUICE_TCP_PORT = 8000
 )
 
 type Node struct {
-	ID           int
-	Hostname     string
-	UDPPort      int
-	TCPPort      int
-	FrontendPort int
+	ID       int
+	Hostname string
+	UDPPort  int
+	TCPPort  int
+	RPCPort  int
 }
 
 type FileEntry struct {
@@ -55,46 +61,68 @@ type Notifier interface {
 	HandleNodeLeave(node *Node)
 }
 
-var ProdCluster = []Node{
-	{1, "fa23-cs425-0701.cs.illinois.edu", DEFAULT_UDP_PORT, DEFAULT_BACKEND_PORT, DEFAULT_FRONTEND_PORT},
-	{2, "fa23-cs425-0702.cs.illinois.edu", DEFAULT_UDP_PORT, DEFAULT_BACKEND_PORT, DEFAULT_FRONTEND_PORT},
-	{3, "fa23-cs425-0703.cs.illinois.edu", DEFAULT_UDP_PORT, DEFAULT_BACKEND_PORT, DEFAULT_FRONTEND_PORT},
-	{4, "fa23-cs425-0704.cs.illinois.edu", DEFAULT_UDP_PORT, DEFAULT_BACKEND_PORT, DEFAULT_FRONTEND_PORT},
-	{5, "fa23-cs425-0705.cs.illinois.edu", DEFAULT_UDP_PORT, DEFAULT_BACKEND_PORT, DEFAULT_FRONTEND_PORT},
-	{6, "fa23-cs425-0706.cs.illinois.edu", DEFAULT_UDP_PORT, DEFAULT_BACKEND_PORT, DEFAULT_FRONTEND_PORT},
-	{7, "fa23-cs425-0707.cs.illinois.edu", DEFAULT_UDP_PORT, DEFAULT_BACKEND_PORT, DEFAULT_FRONTEND_PORT},
-	{8, "fa23-cs425-0708.cs.illinois.edu", DEFAULT_UDP_PORT, DEFAULT_BACKEND_PORT, DEFAULT_FRONTEND_PORT},
-	{9, "fa23-cs425-0709.cs.illinois.edu", DEFAULT_UDP_PORT, DEFAULT_BACKEND_PORT, DEFAULT_FRONTEND_PORT},
-	{10, "fa23-cs425-0710.cs.illinois.edu", DEFAULT_UDP_PORT, DEFAULT_BACKEND_PORT, DEFAULT_FRONTEND_PORT},
+var SDFSProdCluster = []Node{
+	{1, "fa23-cs425-0701.cs.illinois.edu", SDFS_FD_PORT, SDFS_RPC_PORT, SDFS_TCP_PORT},
+	{2, "fa23-cs425-0702.cs.illinois.edu", SDFS_FD_PORT, SDFS_RPC_PORT, SDFS_TCP_PORT},
+	{3, "fa23-cs425-0703.cs.illinois.edu", SDFS_FD_PORT, SDFS_RPC_PORT, SDFS_TCP_PORT},
+	{4, "fa23-cs425-0704.cs.illinois.edu", SDFS_FD_PORT, SDFS_RPC_PORT, SDFS_TCP_PORT},
+	{5, "fa23-cs425-0705.cs.illinois.edu", SDFS_FD_PORT, SDFS_RPC_PORT, SDFS_TCP_PORT},
+	{6, "fa23-cs425-0706.cs.illinois.edu", SDFS_FD_PORT, SDFS_RPC_PORT, SDFS_TCP_PORT},
+	{7, "fa23-cs425-0707.cs.illinois.edu", SDFS_FD_PORT, SDFS_RPC_PORT, SDFS_TCP_PORT},
+	{8, "fa23-cs425-0708.cs.illinois.edu", SDFS_FD_PORT, SDFS_RPC_PORT, SDFS_TCP_PORT},
+	{9, "fa23-cs425-0709.cs.illinois.edu", SDFS_FD_PORT, SDFS_RPC_PORT, SDFS_TCP_PORT},
+	{10, "fa23-cs425-0710.cs.illinois.edu", SDFS_FD_PORT, SDFS_RPC_PORT, SDFS_TCP_PORT},
 }
 
-var LocalCluster = []Node{
-	{1, "localhost", 6001, 5001, 4001},
-	{2, "localhost", 6002, 5002, 4002},
-	{3, "localhost", 6003, 5003, 4003},
-	{4, "localhost", 6004, 5004, 4004},
-	{5, "localhost", 6005, 5005, 4005},
-	{6, "localhost", 6006, 5006, 4006},
-	{7, "localhost", 6007, 5007, 4007},
-	{8, "localhost", 6008, 5008, 4008},
-	{9, "localhost", 6009, 5009, 4009},
-	{10, "localhost", 6010, 5010, 4010},
+var SDFSLocalCluster = []Node{
+	{1, "localhost", SDFS_FD_PORT + 1, SDFS_RPC_PORT + 1, SDFS_TCP_PORT + 1},
+	{2, "localhost", SDFS_FD_PORT + 2, SDFS_RPC_PORT + 2, SDFS_TCP_PORT + 2},
+	{3, "localhost", SDFS_FD_PORT + 3, SDFS_RPC_PORT + 3, SDFS_TCP_PORT + 3},
+	{4, "localhost", SDFS_FD_PORT + 4, SDFS_RPC_PORT + 4, SDFS_TCP_PORT + 4},
+	{5, "localhost", SDFS_FD_PORT + 5, SDFS_RPC_PORT + 5, SDFS_TCP_PORT + 5},
+	{6, "localhost", SDFS_FD_PORT + 6, SDFS_RPC_PORT + 6, SDFS_TCP_PORT + 6},
+	{7, "localhost", SDFS_FD_PORT + 7, SDFS_RPC_PORT + 7, SDFS_TCP_PORT + 7},
+	{8, "localhost", SDFS_FD_PORT + 8, SDFS_RPC_PORT + 8, SDFS_TCP_PORT + 8},
+	{9, "localhost", SDFS_FD_PORT + 9, SDFS_RPC_PORT + 9, SDFS_TCP_PORT + 9},
+	{10, "localhost", SDFS_FD_PORT + 10, SDFS_RPC_PORT + 10, SDFS_TCP_PORT + 10},
 }
 
-var LocalMapReduceCluster = []Node{
-	{1, "localhost", 9001, 8001, 4001},
-	{2, "localhost", 9002, 8002, 4002},
-	{3, "localhost", 9003, 8003, 4003},
-	{4, "localhost", 9004, 8004, 4004},
-	{5, "localhost", 9005, 8005, 4005},
-	{6, "localhost", 9006, 8006, 4006},
-	{7, "localhost", 9007, 8007, 4007},
-	{8, "localhost", 9008, 8008, 4008},
-	{9, "localhost", 9009, 8009, 4009},
-	{10, "localhost", 9010, 8010, 4010},
+var ProdMapleJuiceCluster = []Node{
+	{1, "fa23-cs425-0701.cs.illinois.edu", MAPLEJUICE_FD_PORT, MAPLEJUICE_RPC_PORT, MAPLEJUICE_TCP_PORT},
+	{2, "fa23-cs425-0702.cs.illinois.edu", MAPLEJUICE_FD_PORT, MAPLEJUICE_RPC_PORT, MAPLEJUICE_TCP_PORT},
+	{3, "fa23-cs425-0703.cs.illinois.edu", MAPLEJUICE_FD_PORT, MAPLEJUICE_RPC_PORT, MAPLEJUICE_TCP_PORT},
+	{4, "fa23-cs425-0704.cs.illinois.edu", MAPLEJUICE_FD_PORT, MAPLEJUICE_RPC_PORT, MAPLEJUICE_TCP_PORT},
+	{5, "fa23-cs425-0705.cs.illinois.edu", MAPLEJUICE_FD_PORT, MAPLEJUICE_RPC_PORT, MAPLEJUICE_TCP_PORT},
+	{6, "fa23-cs425-0706.cs.illinois.edu", MAPLEJUICE_FD_PORT, MAPLEJUICE_RPC_PORT, MAPLEJUICE_TCP_PORT},
+	{7, "fa23-cs425-0707.cs.illinois.edu", MAPLEJUICE_FD_PORT, MAPLEJUICE_RPC_PORT, MAPLEJUICE_TCP_PORT},
+	{8, "fa23-cs425-0708.cs.illinois.edu", MAPLEJUICE_FD_PORT, MAPLEJUICE_RPC_PORT, MAPLEJUICE_TCP_PORT},
+	{9, "fa23-cs425-0709.cs.illinois.edu", MAPLEJUICE_FD_PORT, MAPLEJUICE_RPC_PORT, MAPLEJUICE_TCP_PORT},
+	{10, "fa23-cs425-0710.cs.illinois.edu", MAPLEJUICE_FD_PORT, MAPLEJUICE_RPC_PORT, MAPLEJUICE_TCP_PORT},
 }
 
-var Cluster []Node = LocalCluster
+var LocalMapleJuiceCluster = []Node{
+	{1, "localhost", MAPLEJUICE_FD_PORT + 1, MAPLEJUICE_RPC_PORT + 1, MAPLEJUICE_TCP_PORT + 1},
+	{2, "localhost", MAPLEJUICE_FD_PORT + 2, MAPLEJUICE_RPC_PORT + 2, MAPLEJUICE_TCP_PORT + 2},
+	{3, "localhost", MAPLEJUICE_FD_PORT + 3, MAPLEJUICE_RPC_PORT + 3, MAPLEJUICE_TCP_PORT + 3},
+	{4, "localhost", MAPLEJUICE_FD_PORT + 4, MAPLEJUICE_RPC_PORT + 4, MAPLEJUICE_TCP_PORT + 4},
+	{5, "localhost", MAPLEJUICE_FD_PORT + 5, MAPLEJUICE_RPC_PORT + 5, MAPLEJUICE_TCP_PORT + 5},
+	{6, "localhost", MAPLEJUICE_FD_PORT + 6, MAPLEJUICE_RPC_PORT + 6, MAPLEJUICE_TCP_PORT + 6},
+	{7, "localhost", MAPLEJUICE_FD_PORT + 7, MAPLEJUICE_RPC_PORT + 7, MAPLEJUICE_TCP_PORT + 7},
+	{8, "localhost", MAPLEJUICE_FD_PORT + 8, MAPLEJUICE_RPC_PORT + 8, MAPLEJUICE_TCP_PORT + 8},
+	{9, "localhost", MAPLEJUICE_FD_PORT + 9, MAPLEJUICE_RPC_PORT + 9, MAPLEJUICE_TCP_PORT + 9},
+	{10, "localhost", MAPLEJUICE_FD_PORT + 10, MAPLEJUICE_RPC_PORT + 10, MAPLEJUICE_TCP_PORT + 10},
+}
+
+var Cluster []Node = SDFSLocalCluster
+
+func GetNodeByID(ID int) *Node {
+	for _, node := range Cluster {
+		if node.ID == ID {
+			return &node
+		}
+	}
+	return nil
+}
 
 func GetNodeByAddress(hostname string, udpPort int) *Node {
 	for _, node := range Cluster {
@@ -138,20 +166,7 @@ func SendMessage(conn net.Conn, message string) bool {
 
 // Returns true if the next message from connection is an OK
 func GetOKMessage(server net.Conn) bool {
-	buffer := make([]byte, MIN_BUFFER_SIZE)
-	n, err := server.Read(buffer)
-	if err != nil {
-		return false
-	}
-
-	message := string(buffer[:n])
-
-	if strings.Index(message, "OK") != 0 {
-		log.Warn(message)
-		return false
-	}
-
-	return true
+	return CheckMessage(server, "OK")
 }
 
 // Returns true if the next message is as expected
@@ -183,7 +198,7 @@ func SendAll(conn net.Conn, buffer []byte, count int) int {
 }
 
 // Remove element at index i from slice and return new slice
-func RemoveIndex(arr []int, i int) []int {
+func RemoveIndex[T comparable](arr []T, i int) []T {
 	if i < 0 || i >= len(arr) {
 		return arr
 	}
@@ -292,7 +307,7 @@ func FileExists(path string) bool {
 }
 
 // Remove element if exists and return new slice
-func RemoveElement(array []string, target string) []string {
+func RemoveElement[T comparable](array []T, target T) []T {
 	for i, element := range array {
 		if element == target {
 			n := len(array)
@@ -305,7 +320,7 @@ func RemoveElement(array []string, target string) []string {
 }
 
 // Add element if not exists and return new slice
-func AddUniqueElement(array []string, target string) []string {
+func AddUniqueElement[T comparable](array []T, target T) []T {
 	for _, element := range array {
 		if element == target {
 			return array
@@ -315,7 +330,7 @@ func AddUniqueElement(array []string, target string) []string {
 	return append(array, target)
 }
 
-func HasElement(array []string, target string) bool {
+func HasElement[T comparable](array []T, target T) bool {
 	for _, element := range array {
 		if element == target {
 			return true
@@ -324,14 +339,28 @@ func HasElement(array []string, target string) bool {
 	return false
 }
 
+func ConnectAll(nodes []string) []net.Conn {
+	connections := []net.Conn{}
+
+	for _, addr := range nodes {
+		conn, err := net.Dial("tcp", addr)
+		if err != nil {
+			continue
+		}
+		connections = append(connections, conn)
+	}
+
+	return connections
+}
+
 func CloseAll(connections []net.Conn) {
 	for _, conn := range connections {
 		conn.Close()
 	}
 }
 
-func MakeSet(values []string) map[string]bool {
-	res := make(map[string]bool)
+func MakeSet[T comparable](values []T) map[T]bool {
+	res := make(map[T]bool)
 	for _, value := range values {
 		res[value] = true
 	}
@@ -350,3 +379,20 @@ func DecodeFilename(name string) string {
 	return strings.ReplaceAll(name, "%2F", "/")
 }
 
+func RandomChoice[T comparable](arr []T) T {
+	return arr[rand.Intn(len(arr))]
+}
+
+func Abs(x int) int {
+	if x < 0 {
+		return -x
+	}
+	return x
+}
+
+func Shuffle[T comparable](slice []T) []T {
+	rand.Shuffle(len(slice), func(i, j int) {
+		slice[i], slice[j] = slice[j], slice[i]
+	})
+	return slice
+}
