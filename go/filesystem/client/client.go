@@ -93,8 +93,8 @@ func (client *SDFSClient) DownloadFile(localFilename string, remoteFilename stri
 			return nil
 		}
 		log.Println(err)
-		log.Println("Retrying download in 1s...")
-		time.Sleep(time.Second)
+		log.Println("Retrying download in", common.DOWNLOAD_RETRY_TIME)
+		time.Sleep(common.DOWNLOAD_RETRY_TIME)
 	}
 	return errors.New("Max retries exceeded")
 }
@@ -197,8 +197,8 @@ func (client *SDFSClient) UploadFile(localFilename string, remoteFilename string
 			return nil
 		}
 		log.Println(err)
-		log.Println("Retrying upload in 1s...")
-		time.Sleep(time.Second)
+		log.Println("Retrying upload in", common.UPLOAD_RETRY_TIME)
+		time.Sleep(common.UPLOAD_RETRY_TIME)
 	}
 
 	return errors.New("Max retries were exceeded")
