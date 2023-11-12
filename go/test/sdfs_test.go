@@ -44,15 +44,16 @@ func TestClient(t *testing.T) {
 	sdfsClient := client.NewSDFSClient(server)
 
 	inputFiles := []string{"data/small", "data/mid", "data/large"}
-	outputFiles := []string{"small", "mid","large"}
+	remoteFiles := []string{"small", "mid", "large"}
+	outputFiles := []string{"small.out", "mid.out", "large.out"}
 
 	for i := range inputFiles {
-		if err := sdfsClient.UploadFile(inputFiles[i], outputFiles[i]); err != nil {
+		if err := sdfsClient.UploadFile(inputFiles[i], remoteFiles[i]); err != nil {
 			log.Println(err)
 			t.Fail()
 		}
 
-		if err := sdfsClient.DownloadFile(outputFiles[i], outputFiles[i]); err != nil {
+		if err := sdfsClient.DownloadFile(outputFiles[i], remoteFiles[i]); err != nil {
 			log.Println(err)
 			t.Fail()
 		}
