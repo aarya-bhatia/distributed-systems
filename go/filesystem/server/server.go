@@ -55,12 +55,14 @@ func (server *Server) Start() {
 	if err := rpc.Register(server); err != nil {
 		log.Fatal(err)
 	}
+
 	log.Info("SDFS master server is listening at", listener.Addr())
 
 	go server.ResourceManager.StartTaskPolling()
 	go server.ResourceManager.StartHeartbeatRoutine()
 
-	// go server.startRebalanceRoutine() // TODO
+	go server.startRebalanceRoutine()
+	go server.startMetadataRebalanceRoutine()
 
 	for {
 		conn, err := listener.Accept()
@@ -69,9 +71,24 @@ func (server *Server) Start() {
 			continue
 		}
 
-		log.Debug("Connected:", conn.RemoteAddr())
+		// log.Debug("Connected:", conn.RemoteAddr())
 		go rpc.ServeConn(conn)
 	}
+}
+
+func GetAddressByID(id int) string {
+	node := common.GetNodeByID(id)
+	return common.GetAddress(node.Hostname, node.RPCPort)
+}
+
+func (s *Server) GetFiles() []filesystem.File {
+	s.Mutex.Lock()
+	defer s.Mutex.Unlock()
+	files := []filesystem.File{}
+	for _, file := range s.Files {
+		files = append(files, file)
+	}
+	return files
 }
 
 func GetNodeHash(node int) int {
@@ -169,8 +186,6 @@ func (s *Server) HandleNodeJoin(info *common.Node) {
 	log.Debug("node join: ", *info)
 	s.Nodes[info.ID] = *info
 	s.NodesToBlocks[info.ID] = []string{}
-
-	go s.replicateAllMetadata()
 }
 
 func (s *Server) HandleNodeLeave(info *common.Node) {
@@ -184,129 +199,4 @@ func (s *Server) HandleNodeLeave(info *common.Node) {
 
 	delete(s.NodesToBlocks, info.ID)
 	delete(s.Nodes, info.ID)
-
-	go s.replicateAllMetadata()
 }
-
-func (s *Server) replicateAllMetadata() {
-	s.Mutex.Lock()
-	defer s.Mutex.Unlock()
-
-	for _, file := range s.Files {
-		s.Mutex.Unlock()
-		fileMetadata := new(filesystem.FileMetadata)
-		if err := s.GetFileMetadata(&file.Filename, fileMetadata); err == nil {
-			go s.replicateMetadata(*fileMetadata)
-		}
-		s.Mutex.Lock()
-	}
-}
-
-func GetAddressByID(id int) string {
-	node := common.GetNodeByID(id)
-	return common.GetAddress(node.Hostname, node.RPCPort)
-}
-
-func (s *Server) replicateMetadata(fileMetadata filesystem.FileMetadata) {
-	for _, replica := range s.GetMetadataReplicaNodes(common.REPLICA_FACTOR - 1) {
-		if client, err := rpc.Dial("tcp", GetAddressByID(replica)); err == nil {
-			defer client.Close()
-			client.Call("Server.SetFileMetadata", &fileMetadata, new(bool))
-		}
-	}
-}
-
-// // To periodically redistribute file blocks to replicas to maintain equal load
-// func (s *Server) startRebalanceRoutine() {
-// 	log.Debug("Starting rebalance routine")
-// 	for {
-// 		aliveNodes := s.GetAliveNodes()
-// 		s.Mutex.Lock()
-// 		replicaTasks := make(map[string][]string) // maps replica to list of requests to be sent
-//
-// 		for _, file := range s.Files {
-// 			for i := 0; i < file.NumBlocks; i++ {
-// 				block := common.GetBlockName(file.Filename, file.Version, i)
-// 				nodes, ok := s.BlockToNodes[block]
-// 				if !ok {
-// 					continue
-// 				}
-//
-// 				// TODO: Delete extra replicas
-// 				// if len(nodes) >= common.REPLICA_FACTOR {
-// 				// 	continue
-// 				// }
-//
-// 				replicas := GetReplicaNodes(aliveNodes, block, common.REPLICA_FACTOR)
-// 				if len(replicas) == 0 {
-// 					continue
-// 				}
-//
-// 				// log.Debugf("Replicas for block %s: %v", block, replicas)
-//
-// 				required := common.MakeSet(replicas)
-// 				current := common.MakeSet(nodes)
-//
-// 				blockSize := common.BLOCK_SIZE
-// 				if i == file.NumBlocks-1 && file.FileSize%common.BLOCK_SIZE != 0 {
-// 					blockSize = file.FileSize % common.BLOCK_SIZE
-// 				}
-//
-// 				for replica := range required {
-// 					if _, ok := current[replica]; !ok {
-// 						source := nodes[rand.Intn(len(nodes))]
-// 						request := fmt.Sprintf("ADD_BLOCK %s %d %s\n", block, blockSize, source)
-// 						replicaTasks[replica] = append(replicaTasks[replica], request)
-// 					}
-// 				}
-// 			}
-// 		}
-//
-// 		delete(replicaTasks, s.ID)
-//
-// 		// if len(replicaTasks) > 0 {
-// 		// 	log.Debug("Rebalance tasks:", replicaTasks)
-// 		// }
-//
-// 		s.Mutex.Unlock()
-//
-// 		for replica, tasks := range replicaTasks {
-// 			// log.Infof("Sending %d replication tasks to node %s:%v", len(tasks), replica, tasks)
-// 			log.Debugf("Sending %d replication tasks to node %s", len(tasks), replica)
-// 			go s.sendRebalanceRequests(replica, tasks)
-// 		}
-//
-// 		time.Sleep(common.REBALANCE_INTERVAL)
-// 	}
-// }
-//
-// // Send all ADD_BLOCK requests to given replica over single tcp connection
-// // Update server block metadata on success
-// func (s *Server) sendRebalanceRequests(replica string, requests []string) {
-// 	conn, err := net.Dial("tcp", replica)
-// 	if err != nil {
-// 		return
-// 	}
-// 	defer conn.Close()
-//
-// 	for _, request := range requests {
-// 		if !common.SendMessage(conn, request) {
-// 			return
-// 		}
-//
-// 		if !common.GetOKMessage(conn) {
-// 			return
-// 		}
-//
-// 		var replicas []string
-// 		blockName := strings.Split(request, " ")[1]
-// 		s.Mutex.Lock()
-// 		s.BlockToNodes[blockName] = common.AddUniqueElement(s.BlockToNodes[blockName], replica)
-// 		s.NodesToBlocks[replica] = common.AddUniqueElement(s.NodesToBlocks[replica], blockName)
-// 		replicas = s.BlockToNodes[blockName]
-// 		s.Mutex.Unlock()
-//
-// 		conn := s.getMetadataReplicaConnections()
-// 		go replicateBlockMetadata(conn, blockName, replicas)
-// 	}
-// }

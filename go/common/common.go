@@ -21,7 +21,7 @@ const (
 	REPLICA_FACTOR  = 2
 
 	POLL_INTERVAL      = 200 * time.Millisecond
-	REBALANCE_INTERVAL = 3 * time.Second
+	REBALANCE_INTERVAL = 5 * time.Second
 
 	CLIENT_HEARTBEAT_INTERVAL = time.Second
 

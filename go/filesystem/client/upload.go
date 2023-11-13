@@ -17,7 +17,7 @@ func (client *SDFSClient) UploadFile(localFilename string, remoteFilename string
 
 	var err error
 	for i := 0; i < 3; i++ {
-		if err = client.RequestUpload(localFilename, remoteFilename); err == nil {
+		if err = client.TryUploadFile(localFilename, remoteFilename); err == nil {
 			return nil
 		}
 		log.Println(err)
@@ -28,48 +28,29 @@ func (client *SDFSClient) UploadFile(localFilename string, remoteFilename string
 	return errors.New("Max retries were exceeded")
 }
 
-func (client *SDFSClient) TryUploadFile(localFilename string, uploadReply server.UploadReply) error {
-	connCache := filesystem.NewConnectionCache()
-	defer connCache.Close()
+func (client *SDFSClient) TryUploadFile(localFilename string, remoteFilename string) error {
+	stat, err := os.Stat(localFilename)
+	if err != nil {
+		return err
+	}
+	fileSize := int(stat.Size())
 
 	localFile, err := os.Open(localFilename)
 	if err != nil {
 		return nil
 	}
-
-	data := make([]byte, common.BLOCK_SIZE)
-
-	for _, block := range uploadReply.Blocks {
-		n, err := localFile.Read(data)
-		if err != nil {
-			return err
-		}
-
-		if !filesystem.UploadBlock(block, data[:n], connCache) {
-			return errors.New("failed to upload block")
-		}
-	}
-
-	return nil
-}
-
-func (client *SDFSClient) RequestUpload(localFilename string, remoteFilename string) error {
-	stat, err := os.Stat(localFilename)
-	if err != nil {
-		return err
-	}
-
-	fileSize := int(stat.Size())
+	defer localFile.Close()
 
 	leader, err := client.GetLeader()
 	if err != nil {
 		return err
 	}
-
 	defer leader.Close()
 
-	clientID := GetClientID()
+	connCache := filesystem.NewConnectionCache()
+	defer connCache.Close()
 
+	clientID := GetClientID()
 	uploadArgs := server.UploadArgs{ClientID: clientID, Filename: remoteFilename, FileSize: fileSize}
 	uploadReply := server.UploadReply{}
 	if err = leader.Call("Server.StartUploadFile", &uploadArgs, &uploadReply); err != nil {
@@ -86,8 +67,19 @@ func (client *SDFSClient) RequestUpload(localFilename string, remoteFilename str
 
 	log.Println("To upload:", uploadReply.File)
 
-	if err = client.TryUploadFile(localFilename, uploadReply); err != nil {
-		return err
+	data := make([]byte, common.BLOCK_SIZE)
+
+	for _, block := range uploadReply.Blocks {
+		n, err := localFile.Read(data)
+		if err != nil {
+			return err
+		}
+
+		if !filesystem.UploadBlock(block, data[:n], connCache) {
+			return errors.New("failed to upload block")
+		}
+
+		log.Printf("Upload block %s (%d bytes) to %d replicas: %v", block.Block, block.Size, len(block.Replicas), block.Replicas)
 	}
 
 	uploadStatus.Success = true

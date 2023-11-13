@@ -124,24 +124,27 @@ func (s *Server) SetFileMetadata(args *filesystem.FileMetadata, reply *bool) err
 	s.Files[args.File.Filename] = args.File
 
 	for i := 0; i < len(args.Blocks); i++ {
-		block := args.Blocks[i].Block
-		for _, replica := range args.Blocks[i].Replicas {
-			s.BlockToNodes[block] = common.AddUniqueElement(s.BlockToNodes[block], replica)
-			s.NodesToBlocks[replica] = common.AddUniqueElement(s.NodesToBlocks[replica], block)
+		block := args.Blocks[i]
+		for _, replica := range block.Replicas {
+			s.BlockToNodes[block.Block] = common.AddUniqueElement(s.BlockToNodes[block.Block], replica)
+			s.NodesToBlocks[replica] = common.AddUniqueElement(s.NodesToBlocks[replica], block.Block)
 		}
+		log.Debug("block metadata was updated:", block)
 	}
 
 	log.Println("file metadata was updated:", args.File)
-
 	return nil
 }
 
-func (s *Server) ReplicateBlocks(blocks *[]filesystem.BlockMetadata, reply *bool) error {
+func (s *Server) ReplicateBlocks(blocks *[]filesystem.BlockMetadata, reply *[]filesystem.BlockMetadata) error {
 	connCache := filesystem.NewConnectionCache()
 	defer connCache.Close()
 
+	*reply = make([]filesystem.BlockMetadata, 0)
+
 	for _, block := range *blocks {
 		if common.FileExists(s.Directory + "/" + common.EncodeFilename(block.Block)) {
+			*reply = append(*reply, block)
 			continue
 		}
 
@@ -155,10 +158,12 @@ func (s *Server) ReplicateBlocks(blocks *[]filesystem.BlockMetadata, reply *bool
 			s.BlockToNodes[block.Block] = common.AddUniqueElement(s.BlockToNodes[block.Block], s.ID)
 			s.NodesToBlocks[s.ID] = common.AddUniqueElement(s.NodesToBlocks[s.ID], block.Block)
 			s.Mutex.Unlock()
+			*reply = append(*reply, block)
 		}
 	}
 
-	*reply = true
+	log.Println("blocks replicated:", *reply)
+
 	return nil
 }
 
