@@ -91,5 +91,20 @@ func main() {
 		}
 
 		t.Render()
+
+	case "lsdir":
+		if len(tokens) != 2 {
+			printUsage()
+			return
+		}
+
+		files, err := sdfsClient.ListDirectory(tokens[1])
+		if err != nil {
+			logrus.Fatal(err)
+		}
+
+		for _, file := range *files {
+			fmt.Println(file)
+		}
 	}
 }

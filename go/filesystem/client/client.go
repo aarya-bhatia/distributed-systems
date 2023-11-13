@@ -89,7 +89,7 @@ func (client *SDFSClient) ListDirectory(dirname string) (*[]string, error) {
 
 	reply := []string{}
 
-	if err = leader.Call("Server.GetFileMetadata", &dirname, &reply); err != nil {
+	if err = leader.Call("Server.ListDirectory", &dirname, &reply); err != nil {
 		return nil, err
 	}
 
