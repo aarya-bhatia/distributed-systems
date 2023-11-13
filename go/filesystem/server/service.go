@@ -89,6 +89,8 @@ func (s *Server) SetFileMetadata(args *FileMetadata, reply *bool) error {
 	if old, ok := s.Files[args.File.Filename]; ok {
 		if old.Version > args.File.Version {
 			return nil
+		} else if old.Version < args.File.Version {
+			go s.DeleteFile(&old, new(bool)) // delete old file
 		}
 	}
 
@@ -101,6 +103,8 @@ func (s *Server) SetFileMetadata(args *FileMetadata, reply *bool) error {
 			s.NodesToBlocks[replica] = common.AddUniqueElement(s.NodesToBlocks[replica], block)
 		}
 	}
+
+	log.Println("file metadata was updated:", args.File)
 
 	return nil
 }
@@ -144,17 +148,33 @@ func (s *Server) StartDownloadFile(filename *string, reply *FileMetadata) error 
 	return nil
 }
 
-func (server *Server) DeleteFile(file *File, reply *bool) error {
+func (server *Server) RequestDeleteFile(file *File, reply *bool) error {
 	server.getWriteLock(file.Filename)
 	defer server.getQueue(file.Filename).WriteDone()
 
 	server.Mutex.Lock()
 	defer server.Mutex.Unlock()
 
-	// file not exists or newer version available
-	if found, ok := server.Files[file.Filename]; ok && found.Version > file.Version {
-		return nil
+	// broadcast delete request to all nodes
+	for node := range server.Nodes {
+		go func(node int) {
+			client, err := rpc.Dial("tcp", GetAddressByID(node))
+			if err != nil {
+				return
+			}
+			defer client.Close()
+			if err := client.Call("Server.DeleteFile", file, new(bool)); err != nil {
+				log.Println(err)
+			}
+		}(node)
 	}
+
+	return server.DeleteFile(file, reply)
+}
+
+func (server *Server) DeleteFile(file *File, reply *bool) error {
+	server.Mutex.Lock()
+	defer server.Mutex.Unlock()
 
 	// delete disk blocks and metadata
 	for i := 0; i < file.NumBlocks; i++ {
@@ -169,18 +189,9 @@ func (server *Server) DeleteFile(file *File, reply *bool) error {
 		delete(server.BlockToNodes, blockName)
 	}
 
-	delete(server.Files, file.Filename)
-
-	// broadcast delete request to all nodes
-	for node := range server.Nodes {
-		go func(node int) {
-			client, err := rpc.Dial("tcp", GetAddressByID(node))
-			if err != nil {
-				return
-			}
-			defer client.Close()
-			client.Call("Server.DeleteFile", file, new(bool))
-		}(node)
+	// delete file metadata unless newer version file exists
+	if found, ok := server.Files[file.Filename]; ok && found.Version <= file.Version {
+		delete(server.Files, file.Filename)
 	}
 
 	log.Warn("Deleted file:", file)

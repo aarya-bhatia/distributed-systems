@@ -49,7 +49,7 @@ func (client *SDFSClient) DeleteFile(filename string) error {
 	}
 	defer leader.Close()
 	var reply bool
-	return leader.Call("Server.DeleteFile", &filename, &reply)
+	return leader.Call("Server.RequestDeleteFile", &filename, &reply)
 }
 
 func (client *SDFSClient) GetFile(filename string) (*server.FileMetadata, error) {

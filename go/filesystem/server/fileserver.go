@@ -42,7 +42,7 @@ func (s *FileServer) handleConnection(conn net.Conn) {
 	for {
 		line, err := reader.ReadString('\n')
 		if err != nil {
-			log.Println(err)
+			// log.Println(err)
 			return
 		}
 

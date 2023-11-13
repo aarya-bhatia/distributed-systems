@@ -196,7 +196,7 @@ func (s *Server) HandleNodeJoin(info *common.Node) {
 	s.Nodes[info.ID] = *info
 	s.NodesToBlocks[info.ID] = []string{}
 
-	go s.replicateAllMetadata()
+	// go s.replicateAllMetadata()
 }
 
 func (s *Server) HandleNodeLeave(info *common.Node) {
@@ -211,7 +211,7 @@ func (s *Server) HandleNodeLeave(info *common.Node) {
 	delete(s.NodesToBlocks, info.ID)
 	delete(s.Nodes, info.ID)
 
-	go s.replicateAllMetadata()
+	// go s.replicateAllMetadata()
 }
 
 // Periodically check for available tasks and launch thread for each task

@@ -35,7 +35,7 @@ func (s *Server) FinishUploadFile(args *UploadStatus, reply *bool) error {
 		Blocks: args.Blocks,
 	}
 
-	// update metadata at replicas
+	// update metadata at replicas synchronously
 	for _, addr := range s.GetMetadataReplicaNodes(common.REPLICA_FACTOR - 1) {
 		client, err := rpc.Dial("tcp", GetAddressByID(addr))
 		if err != nil {
@@ -48,11 +48,6 @@ func (s *Server) FinishUploadFile(args *UploadStatus, reply *bool) error {
 			log.Println(err)
 			return err
 		}
-	}
-
-	// delete old file
-	if old, ok := s.Files[args.File.Filename]; ok && old.Version < args.File.Version {
-		go s.DeleteFile(&old, new(bool))
 	}
 
 	log.Println("Upload finished:", args.File)
@@ -98,5 +93,6 @@ func (s *Server) StartUploadFile(args *UploadArgs, reply *UploadReply) error {
 
 	reply.Blocks = blocks
 	reply.File = newFile
+	log.Println("Upload started:", *args)
 	return nil
 }
