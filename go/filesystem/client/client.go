@@ -22,20 +22,6 @@ func GetClientID() string {
 	return fmt.Sprintf("%s.%d", hostname, time.Now().Unix())
 }
 
-func (client *SDFSClient) startHeartbeat(conn *rpc.Client, args server.HeartbeatArgs, stop chan bool) {
-	reply := true
-	for {
-		select {
-		case <-stop:
-			return
-		case <-time.After(time.Second):
-			if err := conn.Call("Server.Heartbeat", &args, &reply); err != nil {
-				log.Warn(err)
-			}
-		}
-	}
-}
-
 func (client *SDFSClient) GetLeader() (*rpc.Client, error) {
 	conn, err := rpc.Dial("tcp", client.SDFSServer)
 	if err != nil {

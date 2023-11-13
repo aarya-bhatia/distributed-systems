@@ -57,13 +57,12 @@ func (client *SDFSClient) TryDownloadFile(localFilename string, remoteFilename s
 		return err
 	}
 
-	stop := make(chan bool)
-	go client.startHeartbeat(leader, server.HeartbeatArgs{ClientID: clientID, Resource: remoteFilename}, stop)
-	defer func() {
-		stop <- true
-		reply := true
-		leader.Call("Server.FinishDownloadFile", &downloadArgs, &reply)
-	}()
+	reply := true
+	defer leader.Call("Server.FinishDownloadFile", &downloadArgs, &reply)
+
+	h := NewHeartbeat(leader, clientID, remoteFilename, common.CLIENT_HEARTBEAT_INTERVAL)
+	go h.Start()
+	defer h.Stop()
 
 	log.Println("To download:", fileMetadata.File)
 

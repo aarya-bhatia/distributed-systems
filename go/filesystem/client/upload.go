@@ -76,15 +76,13 @@ func (client *SDFSClient) RequestUpload(localFilename string, remoteFilename str
 		return err
 	}
 
+	reply := true
 	uploadStatus := server.UploadStatus{ClientID: clientID, File: uploadReply.File, Blocks: uploadReply.Blocks, Success: false}
+	defer leader.Call("Server.FinishUploadFile", &uploadStatus, &reply)
 
-	stop := make(chan bool)
-	go client.startHeartbeat(leader, server.HeartbeatArgs{ClientID: clientID, Resource: remoteFilename}, stop)
-	defer func() {
-		stop <- true
-		reply := true
-		leader.Call("Server.FinishUploadFile", &uploadStatus, &reply)
-	}()
+	h := NewHeartbeat(leader, clientID, remoteFilename, common.CLIENT_HEARTBEAT_INTERVAL)
+	go h.Start()
+	defer h.Stop()
 
 	log.Println("To upload:", uploadReply.File)
 

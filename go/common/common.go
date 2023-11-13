@@ -23,6 +23,8 @@ const (
 	POLL_INTERVAL      = 200 * time.Millisecond
 	REBALANCE_INTERVAL = 3 * time.Second
 
+	CLIENT_HEARTBEAT_INTERVAL = time.Second
+
 	JOIN_RETRY_TIMEOUT = time.Second * 5
 
 	UPLOAD_RETRY_TIME   = 2 * time.Second
