@@ -1,4 +1,4 @@
-package client
+package filesystem
 
 import (
 	log "github.com/sirupsen/logrus"

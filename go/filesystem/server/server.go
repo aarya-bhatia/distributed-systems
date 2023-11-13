@@ -3,6 +3,7 @@ package server
 import (
 	"container/heap"
 	"cs425/common"
+	"cs425/filesystem"
 	"cs425/priqueue"
 	"fmt"
 	"github.com/jedib0t/go-pretty/v6/table"
@@ -13,20 +14,13 @@ import (
 	"sync"
 )
 
-type File struct {
-	Filename  string
-	Version   int
-	FileSize  int
-	NumBlocks int
-}
-
 type Server struct {
 	Hostname  string
 	Port      int
 	ID        int
-	Directory string              // Path to save blocks on disk
-	Files     map[string]File     // Files stored by system
-	Nodes     map[int]common.Node // Set of alive nodes
+	Directory string                     // Path to save blocks on disk
+	Files     map[string]filesystem.File // Files stored by system
+	Nodes     map[int]common.Node        // Set of alive nodes
 	Mutex     sync.Mutex
 
 	// A block is represented as "filename:version:blocknum"
@@ -42,7 +36,7 @@ func NewServer(info common.Node, dbDirectory string) *Server {
 	server.Port = info.RPCPort
 	server.ID = info.ID
 	server.Directory = dbDirectory
-	server.Files = make(map[string]File)
+	server.Files = make(map[string]filesystem.File)
 	server.NodesToBlocks = make(map[int][]string)
 	server.BlockToNodes = make(map[string][]int)
 	server.Nodes = make(map[int]common.Node)
@@ -176,7 +170,7 @@ func (s *Server) HandleNodeJoin(info *common.Node) {
 	s.Nodes[info.ID] = *info
 	s.NodesToBlocks[info.ID] = []string{}
 
-	// go s.replicateAllMetadata()
+	go s.replicateAllMetadata()
 }
 
 func (s *Server) HandleNodeLeave(info *common.Node) {
@@ -191,7 +185,7 @@ func (s *Server) HandleNodeLeave(info *common.Node) {
 	delete(s.NodesToBlocks, info.ID)
 	delete(s.Nodes, info.ID)
 
-	// go s.replicateAllMetadata()
+	go s.replicateAllMetadata()
 }
 
 func (s *Server) replicateAllMetadata() {
@@ -199,10 +193,12 @@ func (s *Server) replicateAllMetadata() {
 	defer s.Mutex.Unlock()
 
 	for _, file := range s.Files {
-		fileMetadata := new(FileMetadata)
+		s.Mutex.Unlock()
+		fileMetadata := new(filesystem.FileMetadata)
 		if err := s.GetFileMetadata(&file.Filename, fileMetadata); err == nil {
 			go s.replicateMetadata(*fileMetadata)
 		}
+		s.Mutex.Lock()
 	}
 }
 
@@ -211,7 +207,7 @@ func GetAddressByID(id int) string {
 	return common.GetAddress(node.Hostname, node.RPCPort)
 }
 
-func (s *Server) replicateMetadata(fileMetadata FileMetadata) {
+func (s *Server) replicateMetadata(fileMetadata filesystem.FileMetadata) {
 	for _, replica := range s.GetMetadataReplicaNodes(common.REPLICA_FACTOR - 1) {
 		if client, err := rpc.Dial("tcp", GetAddressByID(replica)); err == nil {
 			defer client.Close()

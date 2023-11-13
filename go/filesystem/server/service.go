@@ -2,24 +2,13 @@ package server
 
 import (
 	"cs425/common"
+	"cs425/filesystem"
 	"errors"
+	log "github.com/sirupsen/logrus"
 	"net/rpc"
 	"os"
 	"strings"
-
-	log "github.com/sirupsen/logrus"
 )
-
-type BlockMetadata struct {
-	Block    string
-	Size     int
-	Replicas []int
-}
-
-type FileMetadata struct {
-	File   File
-	Blocks []BlockMetadata
-}
 
 type UploadArgs struct {
 	ClientID string
@@ -29,14 +18,14 @@ type UploadArgs struct {
 
 type UploadStatus struct {
 	ClientID string
-	File     File
-	Blocks   []BlockMetadata
+	File     filesystem.File
+	Blocks   []filesystem.BlockMetadata
 	Success  bool
 }
 
 type UploadReply struct {
-	File   File
-	Blocks []BlockMetadata
+	File   filesystem.File
+	Blocks []filesystem.BlockMetadata
 }
 
 type DownloadArgs struct {
@@ -46,7 +35,7 @@ type DownloadArgs struct {
 
 type DeleteArgs struct {
 	ClientID string
-	File     File
+	File     filesystem.File
 }
 
 type HeartbeatArgs struct {
@@ -96,7 +85,7 @@ func (s *Server) IsFile(filename *string, reply *bool) error {
 	return nil
 }
 
-func (s *Server) GetFileMetadata(filename *string, reply *FileMetadata) error {
+func (s *Server) GetFileMetadata(filename *string, reply *filesystem.FileMetadata) error {
 	s.Mutex.Lock()
 	defer s.Mutex.Unlock()
 	file, ok := s.Files[*filename]
@@ -104,7 +93,7 @@ func (s *Server) GetFileMetadata(filename *string, reply *FileMetadata) error {
 		return errors.New(ErrorFileNotFound)
 	}
 
-	blocks := []BlockMetadata{}
+	blocks := []filesystem.BlockMetadata{}
 	blockSize := common.BLOCK_SIZE
 
 	for i := 0; i < file.NumBlocks; i++ {
@@ -113,14 +102,14 @@ func (s *Server) GetFileMetadata(filename *string, reply *FileMetadata) error {
 		if i == file.NumBlocks-1 {
 			blockSize = file.FileSize - (file.NumBlocks-1)*common.BLOCK_SIZE
 		}
-		blocks = append(blocks, BlockMetadata{Block: blockName, Replicas: replicas, Size: blockSize})
+		blocks = append(blocks, filesystem.BlockMetadata{Block: blockName, Replicas: replicas, Size: blockSize})
 	}
 
-	*reply = FileMetadata{File: file, Blocks: blocks}
+	*reply = filesystem.FileMetadata{File: file, Blocks: blocks}
 	return nil
 }
 
-func (s *Server) SetFileMetadata(args *FileMetadata, reply *bool) error {
+func (s *Server) SetFileMetadata(args *filesystem.FileMetadata, reply *bool) error {
 	s.Mutex.Lock()
 	defer s.Mutex.Unlock()
 
@@ -147,22 +136,27 @@ func (s *Server) SetFileMetadata(args *FileMetadata, reply *bool) error {
 	return nil
 }
 
-func (s *Server) ReplicateBlock(block *BlockMetadata, reply *bool) error {
-	if common.FileExists(s.Directory + "/" + common.EncodeFilename(block.Block)) {
-		*reply = true
-		return nil
-	}
+func (s *Server) ReplicateBlocks(blocks *[]filesystem.BlockMetadata, reply *bool) error {
+	connCache := filesystem.NewConnectionCache()
+	defer connCache.Close()
 
-	source := common.RandomChoice(block.Replicas)
-	if !replicateBlock(s.Directory, block.Block, block.Size, source) {
-		*reply = false
-		return nil
-	}
+	for _, block := range *blocks {
+		if common.FileExists(s.Directory + "/" + common.EncodeFilename(block.Block)) {
+			continue
+		}
 
-	s.Mutex.Lock()
-	s.BlockToNodes[block.Block] = common.AddUniqueElement(s.BlockToNodes[block.Block], s.ID)
-	s.NodesToBlocks[s.ID] = common.AddUniqueElement(s.NodesToBlocks[s.ID], block.Block)
-	s.Mutex.Unlock()
+		data, ok := filesystem.DownloadBlock(block, connCache)
+		if !ok {
+			continue
+		}
+
+		if common.WriteFile(s.Directory, block.Block, data, block.Size) {
+			s.Mutex.Lock()
+			s.BlockToNodes[block.Block] = common.AddUniqueElement(s.BlockToNodes[block.Block], s.ID)
+			s.NodesToBlocks[s.ID] = common.AddUniqueElement(s.NodesToBlocks[s.ID], block.Block)
+			s.Mutex.Unlock()
+		}
+	}
 
 	*reply = true
 	return nil
@@ -173,7 +167,7 @@ func (s *Server) FinishDownloadFile(args *DownloadArgs, reply *bool) error {
 	return s.ResourceManager.Release(args.ClientID, args.Filename)
 }
 
-func (s *Server) StartDownloadFile(args *DownloadArgs, reply *FileMetadata) error {
+func (s *Server) StartDownloadFile(args *DownloadArgs, reply *filesystem.FileMetadata) error {
 	log.Println("Request download:", *args)
 	if err := s.ResourceManager.Acquire(args.ClientID, args.Filename, READ); err != nil {
 		return err
@@ -215,7 +209,7 @@ func (server *Server) RequestDeleteFile(args *DeleteArgs, reply *bool) error {
 	return server.DeleteFile(&args.File, reply)
 }
 
-func (server *Server) DeleteFile(file *File, reply *bool) error {
+func (server *Server) DeleteFile(file *filesystem.File, reply *bool) error {
 	server.Mutex.Lock()
 	defer server.Mutex.Unlock()
 
@@ -249,7 +243,7 @@ func (s *Server) FinishUploadFile(args *UploadStatus, reply *bool) error {
 		return nil
 	}
 
-	fileMetadata := &FileMetadata{
+	fileMetadata := &filesystem.FileMetadata{
 		File:   args.File,
 		Blocks: args.Blocks,
 	}
@@ -263,7 +257,7 @@ func (s *Server) FinishUploadFile(args *UploadStatus, reply *bool) error {
 }
 
 // update metadata at replicas synchronously
-func (s *Server) postUpload(fileMetadata *FileMetadata) error {
+func (s *Server) postUpload(fileMetadata *filesystem.FileMetadata) error {
 	for _, addr := range s.GetMetadataReplicaNodes(common.REPLICA_FACTOR - 1) {
 		client, err := rpc.Dial("tcp", GetAddressByID(addr))
 		if err != nil {
@@ -291,7 +285,7 @@ func (s *Server) StartUploadFile(args *UploadArgs, reply *UploadReply) error {
 	s.Mutex.Lock()
 	defer s.Mutex.Unlock()
 
-	newFile := File{
+	newFile := filesystem.File{
 		Filename:  args.Filename,
 		FileSize:  args.FileSize,
 		Version:   1,
@@ -302,7 +296,7 @@ func (s *Server) StartUploadFile(args *UploadArgs, reply *UploadReply) error {
 		newFile.Version = old.Version + 1
 	}
 
-	blocks := make([]BlockMetadata, 0)
+	blocks := make([]filesystem.BlockMetadata, 0)
 	blockSize := common.BLOCK_SIZE
 
 	for i := 0; i < newFile.NumBlocks; i++ {
@@ -313,7 +307,7 @@ func (s *Server) StartUploadFile(args *UploadArgs, reply *UploadReply) error {
 			blockSize = newFile.FileSize - (newFile.NumBlocks-1)*common.BLOCK_SIZE
 		}
 
-		blocks = append(blocks, BlockMetadata{
+		blocks = append(blocks, filesystem.BlockMetadata{
 			Block:    blockName,
 			Size:     blockSize,
 			Replicas: replicas,

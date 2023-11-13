@@ -2,9 +2,9 @@ package client
 
 import (
 	"cs425/common"
+	"cs425/filesystem"
 	"cs425/filesystem/server"
 	"errors"
-	"fmt"
 	log "github.com/sirupsen/logrus"
 	"os"
 	"time"
@@ -29,7 +29,7 @@ func (client *SDFSClient) UploadFile(localFilename string, remoteFilename string
 }
 
 func (client *SDFSClient) TryUploadFile(localFilename string, uploadReply server.UploadReply) error {
-	connCache := NewConnectionCache()
+	connCache := filesystem.NewConnectionCache()
 	defer connCache.Close()
 
 	localFile, err := os.Open(localFilename)
@@ -45,7 +45,7 @@ func (client *SDFSClient) TryUploadFile(localFilename string, uploadReply server
 			return err
 		}
 
-		if !client.UploadBlock(block, data[:n], connCache) {
+		if !filesystem.UploadBlock(block, data[:n], connCache) {
 			return errors.New("failed to upload block")
 		}
 	}
@@ -92,36 +92,4 @@ func (client *SDFSClient) RequestUpload(localFilename string, remoteFilename str
 
 	uploadStatus.Success = true
 	return nil
-}
-
-func (client *SDFSClient) UploadBlock(block server.BlockMetadata, data []byte, connCache *ConnectionCache) bool {
-	for _, replica := range block.Replicas {
-		node := common.GetNodeByID(replica)
-		addr := common.GetAddress(node.Hostname, node.TCPPort)
-
-		log.Debugf("Uploading block %s (%d bytes) to %s\n", block.Block, block.Size, addr)
-
-		conn := connCache.GetConnection(addr)
-		if conn == nil {
-			return false
-		}
-
-		if !common.SendMessage(conn, fmt.Sprintf("UPLOAD %s %d\n", block.Block, block.Size)) {
-			return false
-		}
-
-		if !common.GetOKMessage(conn) {
-			return false
-		}
-
-		if common.SendAll(conn, data, block.Size) < 0 {
-			return false
-		}
-
-		if !common.GetOKMessage(conn) {
-			return false
-		}
-	}
-
-	return true
 }

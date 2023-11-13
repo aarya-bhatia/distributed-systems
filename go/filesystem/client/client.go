@@ -1,12 +1,14 @@
 package client
 
 import (
+	"cs425/filesystem"
 	"cs425/filesystem/server"
 	"fmt"
-	log "github.com/sirupsen/logrus"
 	"net/rpc"
 	"os"
 	"time"
+
+	log "github.com/sirupsen/logrus"
 )
 
 type SDFSClient struct {
@@ -60,7 +62,7 @@ func (client *SDFSClient) DeleteFile(filename string) error {
 	return leader.Call("Server.RequestDeleteFile", &deleteArgs, &reply)
 }
 
-func (client *SDFSClient) GetFile(filename string) (*server.FileMetadata, error) {
+func (client *SDFSClient) GetFile(filename string) (*filesystem.FileMetadata, error) {
 	leader, err := client.GetLeader()
 	if err != nil {
 		return nil, err
@@ -68,7 +70,7 @@ func (client *SDFSClient) GetFile(filename string) (*server.FileMetadata, error)
 
 	defer leader.Close()
 
-	reply := server.FileMetadata{}
+	reply := filesystem.FileMetadata{}
 
 	if err = leader.Call("Server.GetFileMetadata", &filename, &reply); err != nil {
 		return nil, err
