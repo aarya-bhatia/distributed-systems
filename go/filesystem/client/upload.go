@@ -76,19 +76,24 @@ func (client *SDFSClient) RequestUpload(localFilename string, remoteFilename str
 		return err
 	}
 
-	log.Println("To upload:", uploadReply.File)
-	reply := true
+	uploadStatus := server.UploadStatus{ClientID: clientID, File: uploadReply.File, Blocks: uploadReply.Blocks, Success: false}
 
-	uploadStatus := server.UploadStatus{ClientID: clientID, File: uploadReply.File, Blocks: uploadReply.Blocks}
+	stop := make(chan bool)
+	go client.startHeartbeat(leader, server.HeartbeatArgs{ClientID: clientID, Resource: remoteFilename}, stop)
+	defer func() {
+		stop <- true
+		reply := true
+		leader.Call("Server.FinishUploadFile", &uploadStatus, &reply)
+	}()
+
+	log.Println("To upload:", uploadReply.File)
 
 	if err = client.TryUploadFile(localFilename, uploadReply); err != nil {
-		uploadStatus.Success = false
-		leader.Call("Server.FinishUploadFile", &uploadStatus, &reply)
 		return err
-	} else {
-		uploadStatus.Success = true
-		return leader.Call("Server.FinishUploadFile", &uploadStatus, &reply)
 	}
+
+	uploadStatus.Success = true
+	return nil
 }
 
 func (client *SDFSClient) UploadBlock(block server.BlockMetadata, data []byte, connCache *ConnectionCache) bool {
