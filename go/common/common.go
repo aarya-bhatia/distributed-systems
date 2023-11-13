@@ -25,8 +25,8 @@ const (
 
 	JOIN_RETRY_TIMEOUT = time.Second * 5
 
-	UPLOAD_RETRY_TIME = time.Second
-	DOWNLOAD_RETRY_TIME = time.Second
+	UPLOAD_RETRY_TIME   = 2 * time.Second
+	DOWNLOAD_RETRY_TIME = 2 * time.Second
 
 	NODES_PER_ROUND = 4 // Number of random peers to send gossip every round
 

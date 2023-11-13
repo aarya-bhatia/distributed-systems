@@ -127,18 +127,18 @@ func stdinListener(info common.Node, fs *server.Server, fd *failuredetector.Serv
 		case "files":
 			fs.PrintFileMetadata()
 
-		case "queue":
-			fs.Mutex.Lock()
-			for filename, q := range fs.FileQueues {
-				fmt.Printf("File %s: %d read tasks, %d write tasks, %d count, %d mode\n",
-					filename,
-					len(q.Reads),
-					len(q.Writes),
-					q.Count,
-					q.Mode,
-				)
-			}
-			fs.Mutex.Unlock()
+		// case "queue":
+		// 	fs.Mutex.Lock()
+		// 	for filename, q := range fs.FileQueues {
+		// 		fmt.Printf("File %s: %d read tasks, %d write tasks, %d count, %d mode\n",
+		// 			filename,
+		// 			len(q.Reads),
+		// 			len(q.Writes),
+		// 			q.Count,
+		// 			q.Mode,
+		// 		)
+		// 	}
+		// 	fs.Mutex.Unlock()
 
 		case "leader":
 			fmt.Println(fs.GetLeaderNode())
@@ -189,7 +189,7 @@ func stdinListener(info common.Node, fs *server.Server, fd *failuredetector.Serv
 			fmt.Println("store: Display local files blocks")
 			fmt.Println("leader: Print leader node")
 			fmt.Println("files: Print file metadata")
-			fmt.Println("queue: Print file queues status")
+			// fmt.Println("queue: Print file queues status")
 		}
 	}
 }

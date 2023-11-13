@@ -82,6 +82,10 @@ func (q *Queue) TryPop() bool {
 func (q *Queue) ReadDone() {
 	q.Mutex.Lock()
 	defer q.Mutex.Unlock()
+	if q.NumReader == 0 {
+		log.Warn("No readers!")
+		return
+	}
 	q.Count++
 	q.NumReader--
 	log.Debug("A read task was completed!")
@@ -91,6 +95,10 @@ func (q *Queue) ReadDone() {
 func (q *Queue) WriteDone() {
 	q.Mutex.Lock()
 	defer q.Mutex.Unlock()
+	if q.NumWriter == 0 {
+		log.Warn("No writers!")
+		return
+	}
 	q.Count++
 	q.NumWriter--
 	log.Debug("A write task was completed!")

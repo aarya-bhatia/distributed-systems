@@ -10,9 +10,7 @@ import (
 	"net"
 	"net/rpc"
 	"os"
-	"strings"
 	"sync"
-	"time"
 )
 
 type File struct {
@@ -23,18 +21,19 @@ type File struct {
 }
 
 type Server struct {
-	Hostname   string
-	Port       int
-	ID         int
-	Directory  string              // Path to save blocks on disk
-	Files      map[string]File     // Files stored by system
-	Nodes      map[int]common.Node // Set of alive nodes
-	Mutex      sync.Mutex
-	FileQueues map[string]*Queue // Handle read/write operations for each file
+	Hostname  string
+	Port      int
+	ID        int
+	Directory string              // Path to save blocks on disk
+	Files     map[string]File     // Files stored by system
+	Nodes     map[int]common.Node // Set of alive nodes
+	Mutex     sync.Mutex
 
 	// A block is represented as "filename:version:blocknum"
 	NodesToBlocks map[int][]string // Maps node ID to the blocks they are storing
 	BlockToNodes  map[string][]int // Maps block to list of node IDs that store the block
+
+	ResourceManager *ResourceManager
 }
 
 func NewServer(info common.Node, dbDirectory string) *Server {
@@ -46,10 +45,10 @@ func NewServer(info common.Node, dbDirectory string) *Server {
 	server.Files = make(map[string]File)
 	server.NodesToBlocks = make(map[int][]string)
 	server.BlockToNodes = make(map[string][]int)
-	server.FileQueues = make(map[string]*Queue)
 	server.Nodes = make(map[int]common.Node)
 	server.Nodes[server.ID] = info
 	server.NodesToBlocks[server.ID] = []string{}
+	server.ResourceManager = NewResourceManager()
 
 	return server
 }
@@ -64,7 +63,9 @@ func (server *Server) Start() {
 	}
 	log.Info("SDFS master server is listening at", listener.Addr())
 
-	go server.pollTasks()
+	go server.ResourceManager.StartTaskPolling()
+	go server.ResourceManager.StartHeartbeatRoutine()
+
 	// go server.startRebalanceRoutine() // TODO
 
 	for {
@@ -152,40 +153,19 @@ func (server *Server) PrintFileMetadata() {
 
 	t := table.NewWriter()
 	t.SetOutputMirror(os.Stdout)
-	t.AppendHeader(table.Row{"Filename", "Version", "Block", "Nodes"})
+	t.AppendHeader(table.Row{"File", "Version", "Blocks", "Size"})
 
-	rows := []table.Row{}
-
-	for blockName, nodeIds := range server.BlockToNodes {
-		tokens := strings.Split(blockName, ":")
-		filename, version, block := tokens[0], tokens[1], tokens[2]
-
-		for _, id := range nodeIds {
-			rows = append(rows, table.Row{
-				filename,
-				version,
-				block,
-				id,
-			})
-		}
+	for _, file := range server.Files {
+		t.AppendRow(table.Row{
+			file.Filename,
+			file.Version,
+			file.NumBlocks,
+			file.FileSize,
+		})
 	}
 
-	t.AppendRows(rows)
 	t.AppendSeparator()
-	t.SetStyle(table.StyleLight)
 	t.Render()
-}
-
-// Get or create a queue to handle requests for given file
-func (server *Server) getQueue(filename string) *Queue {
-	server.Mutex.Lock()
-	defer server.Mutex.Unlock()
-	q, ok := server.FileQueues[filename]
-	if !ok {
-		q = new(Queue)
-		server.FileQueues[filename] = q
-	}
-	return q
 }
 
 func (s *Server) HandleNodeJoin(info *common.Node) {
@@ -212,32 +192,6 @@ func (s *Server) HandleNodeLeave(info *common.Node) {
 	delete(s.Nodes, info.ID)
 
 	// go s.replicateAllMetadata()
-}
-
-// Periodically check for available tasks and launch thread for each task
-func (server *Server) pollTasks() {
-	for {
-		server.Mutex.Lock()
-		for _, queue := range server.FileQueues {
-			// Pop all tasks from queue
-			for queue.TryPop() {
-			}
-		}
-		server.Mutex.Unlock()
-		time.Sleep(common.POLL_INTERVAL)
-	}
-}
-
-func (server *Server) getWriteLock(filename string) {
-	c := make(chan bool)
-	server.getQueue(filename).PushWrite(c)
-	<-c
-}
-
-func (server *Server) getReadLock(filename string) {
-	c := make(chan bool)
-	server.getQueue(filename).PushRead(c)
-	<-c
 }
 
 func (s *Server) replicateAllMetadata() {
