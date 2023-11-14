@@ -6,6 +6,7 @@ import (
 	"cs425/filesystem"
 	"cs425/priqueue"
 	"fmt"
+	set "github.com/deckarep/golang-set/v2"
 	"github.com/jedib0t/go-pretty/v6/table"
 	log "github.com/sirupsen/logrus"
 	"net"
@@ -15,19 +16,15 @@ import (
 )
 
 type Server struct {
-	Hostname  string
-	Port      int
-	ID        int
-	Directory string                     // Path to save blocks on disk
-	Files     map[string]filesystem.File // Files stored by system
-	Nodes     map[int]common.Node        // Set of alive nodes
-	Mutex     sync.Mutex
-
-	// A block is represented as "filename:version:blocknum"
-	NodesToBlocks map[int][]string // Maps node ID to the blocks they are storing
-	BlockToNodes  map[string][]int // Maps block to list of node IDs that store the block
-
+	Hostname        string
+	Port            int
+	ID              int
+	Directory       string                     // Path to save blocks on disk
+	Files           map[string]filesystem.File // Files stored by system
+	Nodes           map[int]common.Node        // Set of alive nodes
+	Mutex           sync.Mutex
 	ResourceManager *ResourceManager
+	Metadata        *ServerMetadata
 }
 
 func NewServer(info common.Node, dbDirectory string) *Server {
@@ -37,12 +34,11 @@ func NewServer(info common.Node, dbDirectory string) *Server {
 	server.ID = info.ID
 	server.Directory = dbDirectory
 	server.Files = make(map[string]filesystem.File)
-	server.NodesToBlocks = make(map[int][]string)
-	server.BlockToNodes = make(map[string][]int)
 	server.Nodes = make(map[int]common.Node)
 	server.Nodes[server.ID] = info
-	server.NodesToBlocks[server.ID] = []string{}
 	server.ResourceManager = NewResourceManager()
+	server.Metadata = NewServerMetadata()
+	server.Metadata.AddNode(server.ID)
 
 	return server
 }
@@ -157,35 +153,13 @@ func (s *Server) GetAliveNodes() []int {
 	return res
 }
 
-// Print file system metadata information to stdout
-func (server *Server) PrintFileMetadata() {
-	server.Mutex.Lock()
-	defer server.Mutex.Unlock()
-
-	t := table.NewWriter()
-	t.SetOutputMirror(os.Stdout)
-	t.AppendHeader(table.Row{"File", "Version", "Blocks", "Size"})
-
-	for _, file := range server.Files {
-		t.AppendRow(table.Row{
-			file.Filename,
-			file.Version,
-			file.NumBlocks,
-			file.FileSize,
-		})
-	}
-
-	t.AppendSeparator()
-	t.Render()
-}
-
 func (s *Server) HandleNodeJoin(info *common.Node) {
 	s.Mutex.Lock()
 	defer s.Mutex.Unlock()
 
 	log.Debug("node join: ", *info)
 	s.Nodes[info.ID] = *info
-	s.NodesToBlocks[info.ID] = []string{}
+	s.Metadata.AddNode(info.ID)
 }
 
 func (s *Server) HandleNodeLeave(info *common.Node) {
@@ -193,10 +167,34 @@ func (s *Server) HandleNodeLeave(info *common.Node) {
 	defer s.Mutex.Unlock()
 
 	log.Debug("node left: ", *info)
-	for _, block := range s.NodesToBlocks[info.ID] {
-		s.BlockToNodes[block] = common.RemoveElement(s.BlockToNodes[block], info.ID)
+	s.Metadata.RemoveNode(info.ID)
+	delete(s.Nodes, info.ID)
+
+}
+func (server *Server) PrintFiles() {
+	server.Mutex.Lock()
+	defer server.Mutex.Unlock()
+
+	t := table.NewWriter()
+	t.SetOutputMirror(os.Stdout)
+	t.AppendHeader(table.Row{"File", "Version", "Blocks", "Size", "Replicas"})
+
+	for _, file := range server.Files {
+		replicas := set.NewSet[int]()
+		for i := 0; i < file.NumBlocks; i++ {
+			blockName := common.GetBlockName(file.Filename, file.Version, i)
+			replicas = replicas.Union(server.Metadata.BlockToNodes[blockName])
+		}
+
+		t.AppendRow(table.Row{
+			file.Filename,
+			file.Version,
+			file.NumBlocks,
+			file.FileSize,
+			replicas.ToSlice(),
+		})
 	}
 
-	delete(s.NodesToBlocks, info.ID)
-	delete(s.Nodes, info.ID)
+	t.AppendSeparator()
+	t.Render()
 }

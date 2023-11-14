@@ -50,7 +50,7 @@ const (
 
 const (
 	RPC_INTERNAL_SET_FILE_METADATA = "Server.InternalSetFileMetadata"
-	RPC_INTERNAL_DELETE_FILE       = "Server.InternalSetFileMetadata"
+	RPC_INTERNAL_DELETE_FILE       = "Server.InternalDeleteFile"
 	RPC_INTERNAL_REPLICATE_BLOCKS  = "Server.InternalReplicateBlocks"
 
 	RPC_HEARTBEAT            = "Server.Heartbeat"
@@ -66,21 +66,26 @@ const (
 	RPC_DELETE_FILE          = "Server.DeleteFile"
 )
 
+// Test function
 func (s *Server) Ping(args *bool, reply *string) error {
 	*reply = "Pong"
 	return nil
 }
 
+// Clients must call this repeatedly during upload or download, otherwise
+// resource will be released
 func (s *Server) Heartbeat(args *HeartbeatArgs, reply *bool) error {
 	log.Debug("Heartbeat:", *args)
 	return s.ResourceManager.Ping(args.ClientID, args.Resource)
 }
 
+// To get leader node ID
 func (s *Server) GetLeader(args *bool, reply *int) error {
 	*reply = s.GetLeaderNode()
 	return nil
 }
 
+// To list files in given directory
 func (s *Server) ListDirectory(dirname *string, reply *[]string) error {
 	s.Mutex.Lock()
 	defer s.Mutex.Unlock()
@@ -95,6 +100,7 @@ func (s *Server) ListDirectory(dirname *string, reply *[]string) error {
 	return nil
 }
 
+// To check if file exists
 func (s *Server) IsFile(filename *string, reply *bool) error {
 	s.Mutex.Lock()
 	defer s.Mutex.Unlock()
@@ -103,6 +109,7 @@ func (s *Server) IsFile(filename *string, reply *bool) error {
 	return nil
 }
 
+// To get file and blocks metadata
 func (s *Server) GetFileMetadata(filename *string, reply *filesystem.FileMetadata) error {
 	s.Mutex.Lock()
 	defer s.Mutex.Unlock()
@@ -111,27 +118,17 @@ func (s *Server) GetFileMetadata(filename *string, reply *filesystem.FileMetadat
 		return errors.New(ErrorFileNotFound)
 	}
 
-	blocks := []filesystem.BlockMetadata{}
-	blockSize := common.BLOCK_SIZE
-
-	for i := 0; i < file.NumBlocks; i++ {
-		blockName := common.GetBlockName(file.Filename, file.Version, i)
-		replicas := s.BlockToNodes[blockName]
-		if i == file.NumBlocks-1 {
-			blockSize = file.FileSize - (file.NumBlocks-1)*common.BLOCK_SIZE
-		}
-		blocks = append(blocks, filesystem.BlockMetadata{Block: blockName, Replicas: replicas, Size: blockSize})
-	}
-
-	*reply = filesystem.FileMetadata{File: file, Blocks: blocks}
+	*reply = s.Metadata.GetMetadata(file)
 	return nil
 }
 
+// Clients should call this after completing download
 func (s *Server) FinishDownloadFile(args *DownloadArgs, reply *bool) error {
 	log.Debug("Download finished:", args.Filename)
 	return s.ResourceManager.Release(args.ClientID, args.Filename)
 }
 
+// To get download access for file
 func (s *Server) StartDownloadFile(args *DownloadArgs, reply *filesystem.FileMetadata) error {
 	log.Println("Request download:", *args)
 	if err := s.ResourceManager.Acquire(args.ClientID, args.Filename, READ); err != nil {
@@ -147,6 +144,7 @@ func (s *Server) StartDownloadFile(args *DownloadArgs, reply *filesystem.FileMet
 	return nil
 }
 
+// To request delete file
 func (server *Server) DeleteFile(args *DeleteArgs, reply *bool) error {
 	if err := server.ResourceManager.Acquire(args.ClientID, args.File.Filename, WRITE); err != nil {
 		return err
@@ -159,21 +157,20 @@ func (server *Server) DeleteFile(args *DeleteArgs, reply *bool) error {
 
 	// broadcast delete request to all nodes
 	for node := range server.Nodes {
-		go func(node int) {
-			client, err := rpc.Dial("tcp", GetAddressByID(node))
-			if err != nil {
-				return
-			}
-			defer client.Close()
-			if err := client.Call(RPC_INTERNAL_DELETE_FILE, args.File, new(bool)); err != nil {
-				log.Println(err)
-			}
-		}(node)
+		client, err := rpc.Dial("tcp", GetAddressByID(node))
+		if err != nil {
+			continue
+		}
+		defer client.Close()
+		if err := client.Call(RPC_INTERNAL_DELETE_FILE, args.File, new(bool)); err != nil {
+			log.Println(err)
+		}
 	}
 
 	return server.InternalDeleteFile(&args.File, reply)
 }
 
+// To finish upload and add update metadata at replicas and self
 func (s *Server) FinishUploadFile(args *UploadStatus, reply *bool) error {
 	defer s.ResourceManager.Release(args.ClientID, args.File.Filename)
 
@@ -187,16 +184,7 @@ func (s *Server) FinishUploadFile(args *UploadStatus, reply *bool) error {
 		Blocks: args.Blocks,
 	}
 
-	if err := s.postUpload(fileMetadata); err != nil {
-		return err
-	}
-
-	log.Println("Upload finished:", args.File)
-	return s.InternalSetFileMetadata(fileMetadata, reply)
-}
-
-// update metadata at replicas synchronously
-func (s *Server) postUpload(fileMetadata *filesystem.FileMetadata) error {
+	// update metadata at replicas
 	for _, addr := range s.GetMetadataReplicaNodes(common.REPLICA_FACTOR - 1) {
 		client, err := rpc.Dial("tcp", GetAddressByID(addr))
 		if err != nil {
@@ -211,9 +199,13 @@ func (s *Server) postUpload(fileMetadata *filesystem.FileMetadata) error {
 		}
 	}
 
+	*reply = true
+	log.Println("Upload finished:", args.File)
+	s.InternalSetFileMetadata(fileMetadata, new(bool))
 	return nil
 }
 
+// To get upload access to file
 func (s *Server) StartUploadFile(args *UploadArgs, reply *UploadReply) error {
 	if err := s.ResourceManager.Acquire(args.ClientID, args.Filename, WRITE); err != nil {
 		return err
@@ -224,68 +216,52 @@ func (s *Server) StartUploadFile(args *UploadArgs, reply *UploadReply) error {
 	s.Mutex.Lock()
 	defer s.Mutex.Unlock()
 
+	numBlocks := common.GetNumFileBlocks(int64(args.FileSize))
+	newVersion := 1
+
+	if old, ok := s.Files[args.Filename]; ok {
+		newVersion = old.Version + 1
+	}
+
 	newFile := filesystem.File{
 		Filename:  args.Filename,
 		FileSize:  args.FileSize,
-		Version:   1,
-		NumBlocks: common.GetNumFileBlocks(int64(args.FileSize)),
+		Version:   newVersion,
+		NumBlocks: numBlocks,
 	}
 
-	if old, ok := s.Files[args.Filename]; ok {
-		newFile.Version = old.Version + 1
-	}
+	newMetadata := s.Metadata.GetNewMetadata(newFile, aliveNodes)
 
-	blocks := make([]filesystem.BlockMetadata, 0)
-	blockSize := common.BLOCK_SIZE
+	reply.File = newMetadata.File
+	reply.Blocks = newMetadata.Blocks
 
-	for i := 0; i < newFile.NumBlocks; i++ {
-		blockName := common.GetBlockName(newFile.Filename, newFile.Version, i)
-		replicas := GetReplicaNodes(aliveNodes, blockName, common.REPLICA_FACTOR)
-
-		if i == newFile.NumBlocks-1 {
-			blockSize = newFile.FileSize - (newFile.NumBlocks-1)*common.BLOCK_SIZE
-		}
-
-		blocks = append(blocks, filesystem.BlockMetadata{
-			Block:    blockName,
-			Size:     blockSize,
-			Replicas: replicas,
-		})
-	}
-
-	reply.Blocks = blocks
-	reply.File = newFile
 	log.Println("Upload started:", *args)
 	return nil
 }
 
+// To update file metadata at node
 func (s *Server) InternalSetFileMetadata(args *filesystem.FileMetadata, reply *bool) error {
 	s.Mutex.Lock()
 	defer s.Mutex.Unlock()
 
 	if old, ok := s.Files[args.File.Filename]; ok {
-		if old.Version > args.File.Version {
-			return nil
-		} else if old.Version < args.File.Version {
+		if old.Version > args.File.Version { // given file is older than current
+			return nil // do nothing
+		} else if old.Version < args.File.Version { // given file is newer than current
 			go s.InternalDeleteFile(&old, new(bool)) // delete old file
 		}
 	}
 
 	s.Files[args.File.Filename] = args.File
 
-	for i := 0; i < len(args.Blocks); i++ {
-		block := args.Blocks[i]
-		for _, replica := range block.Replicas {
-			s.BlockToNodes[block.Block] = common.AddUniqueElement(s.BlockToNodes[block.Block], replica)
-			s.NodesToBlocks[replica] = common.AddUniqueElement(s.NodesToBlocks[replica], block.Block)
-		}
-		log.Debug("block metadata was updated:", block)
+	for _, block := range args.Blocks {
+		s.Metadata.UpdateBlockMetadata(block)
 	}
 
-	log.Println("file metadata was updated:", args.File)
 	return nil
 }
 
+// To delete given file at current node
 func (server *Server) InternalDeleteFile(file *filesystem.File, reply *bool) error {
 	server.Mutex.Lock()
 	defer server.Mutex.Unlock()
@@ -293,14 +269,11 @@ func (server *Server) InternalDeleteFile(file *filesystem.File, reply *bool) err
 	// delete disk blocks and metadata
 	for i := 0; i < file.NumBlocks; i++ {
 		blockName := common.GetBlockName(file.Filename, file.Version, i)
-		for _, replica := range server.BlockToNodes[blockName] {
-			server.NodesToBlocks[replica] = common.RemoveElement(server.NodesToBlocks[replica], blockName)
-		}
+		server.Metadata.RemoveBlock(blockName)
 		localFilename := server.Directory + "/" + common.EncodeFilename(blockName)
 		if common.FileExists(localFilename) {
 			os.Remove(localFilename)
 		}
-		delete(server.BlockToNodes, blockName)
 	}
 
 	// delete file metadata unless newer version file exists
@@ -312,6 +285,7 @@ func (server *Server) InternalDeleteFile(file *filesystem.File, reply *bool) err
 	return nil
 }
 
+// To replicate given blocks at current node
 func (s *Server) InternalReplicateBlocks(blocks *[]filesystem.BlockMetadata, reply *[]filesystem.BlockMetadata) error {
 	connCache := filesystem.NewConnectionCache()
 	defer connCache.Close()
@@ -320,25 +294,27 @@ func (s *Server) InternalReplicateBlocks(blocks *[]filesystem.BlockMetadata, rep
 
 	for _, block := range *blocks {
 		if common.FileExists(s.Directory + "/" + common.EncodeFilename(block.Block)) {
-			*reply = append(*reply, block)
+			*reply = append(*reply, block) // block already exists
 			continue
 		}
 
+		// download block from replica
 		data, ok := filesystem.DownloadBlock(block, connCache)
 		if !ok {
 			continue
 		}
 
+		// save block to disk
 		if common.WriteFile(s.Directory, block.Block, data, block.Size) {
 			s.Mutex.Lock()
-			s.BlockToNodes[block.Block] = common.AddUniqueElement(s.BlockToNodes[block.Block], s.ID)
-			s.NodesToBlocks[s.ID] = common.AddUniqueElement(s.NodesToBlocks[s.ID], block.Block)
+			block.Replicas = append(block.Replicas, s.ID) // add self to replicas
+			s.Metadata.UpdateBlockMetadata(block)
 			s.Mutex.Unlock()
 			*reply = append(*reply, block)
+
+			log.Println("block replicated:", block)
 		}
 	}
-
-	log.Println("blocks replicated:", *reply)
 
 	return nil
 }

@@ -36,7 +36,7 @@ func (s *Server) startRebalanceRoutine() {
 
 		for replica, tasks := range replicaTasks {
 			log.Infof("Sending %d replication tasks to node %d:%v", len(tasks), replica, tasks)
-			go s.sendRebalanceRequests(replica, tasks)
+			s.sendRebalanceRequests(replica, tasks)
 		}
 
 		time.Sleep(common.REBALANCE_INTERVAL)
@@ -61,8 +61,7 @@ func (s *Server) sendRebalanceRequests(replica int, blocks []filesystem.BlockMet
 	defer s.Mutex.Unlock()
 
 	for _, block := range reply {
-		s.BlockToNodes[block.Block] = common.AddUniqueElement(s.BlockToNodes[block.Block], replica)
-		s.NodesToBlocks[replica] = common.AddUniqueElement(s.NodesToBlocks[replica], block.Block)
+		s.Metadata.UpdateBlockMetadata(block)
 	}
 }
 
