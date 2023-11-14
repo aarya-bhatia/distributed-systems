@@ -6,41 +6,10 @@ import (
 	"cs425/filesystem/server"
 	"errors"
 	log "github.com/sirupsen/logrus"
-	"os"
 	"time"
 )
 
-func (client *SDFSClient) UploadFile(localFilename string, remoteFilename string) error {
-	if !common.FileExists(localFilename) {
-		return errors.New("File not found")
-	}
-
-	var err error
-	for i := 0; i < 3; i++ {
-		if err = client.TryUploadFile(localFilename, remoteFilename); err == nil {
-			return nil
-		}
-		log.Println(err)
-		log.Println("Retrying upload in", common.UPLOAD_RETRY_TIME)
-		time.Sleep(common.UPLOAD_RETRY_TIME)
-	}
-
-	return errors.New("Max retries were exceeded")
-}
-
-func (client *SDFSClient) TryUploadFile(localFilename string, remoteFilename string) error {
-	stat, err := os.Stat(localFilename)
-	if err != nil {
-		return err
-	}
-	fileSize := int(stat.Size())
-
-	localFile, err := os.Open(localFilename)
-	if err != nil {
-		return nil
-	}
-	defer localFile.Close()
-
+func (client *SDFSClient) TryWrite(source Reader, filename string, mode int) error {
 	leader, err := client.GetLeader()
 	if err != nil {
 		return err
@@ -51,7 +20,7 @@ func (client *SDFSClient) TryUploadFile(localFilename string, remoteFilename str
 	defer connCache.Close()
 
 	clientID := GetClientID()
-	uploadArgs := server.UploadArgs{ClientID: clientID, Filename: remoteFilename, FileSize: fileSize}
+	uploadArgs := server.UploadArgs{ClientID: clientID, Filename: filename, FileSize: source.Size(), Mode: mode}
 	uploadReply := filesystem.FileMetadata{}
 	if err = leader.Call(server.RPC_START_UPLOAD_FILE, &uploadArgs, &uploadReply); err != nil {
 		return err
@@ -67,21 +36,35 @@ func (client *SDFSClient) TryUploadFile(localFilename string, remoteFilename str
 
 	log.Println("To upload:", uploadReply.File)
 
-	data := make([]byte, common.BLOCK_SIZE)
-
-	for _, block := range uploadReply.Blocks {
-		n, err := localFile.Read(data)
+	for i, block := range uploadReply.Blocks {
+		freeSpace := common.BLOCK_SIZE - block.Size
+		data, err := source.Read(freeSpace)
 		if err != nil {
 			return err
 		}
-
-		if !filesystem.UploadBlock(block, data[:n], connCache) {
+		if !filesystem.UploadBlock(block, data, connCache) {
 			return errors.New("failed to upload block")
 		}
-
-		log.Printf("Upload block %s (%d bytes) to %d replicas: %v", block.Block, block.Size, len(block.Replicas), block.Replicas)
+		uploadReply.Blocks[i].Size += len(data)
+		if len(data) < freeSpace {
+			break
+		}
 	}
 
 	uploadStatus.Success = true
 	return nil
+}
+
+func (client *SDFSClient) WriteFile(source Reader, dest string, mode int) error {
+	for i := 0; i < 3; i++ {
+		err := client.TryWrite(source, dest, mode)
+		if err == nil {
+			return nil
+		}
+		log.Println(err)
+		log.Println("Retrying append in", common.UPLOAD_RETRY_TIME)
+		time.Sleep(common.UPLOAD_RETRY_TIME)
+	}
+
+	return errors.New("Max retries were exceeded")
 }

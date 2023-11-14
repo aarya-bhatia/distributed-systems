@@ -24,6 +24,7 @@ type UploadArgs struct {
 	ClientID string
 	Filename string
 	FileSize int
+	Mode int
 }
 
 type UploadStatus struct {
@@ -54,6 +55,11 @@ const (
 	RPC_IS_FILE              = "Server.IsFile"
 	RPC_LIST_DIRECTORY       = "Server.ListDirectory"
 	RPC_DELETE_FILE          = "Server.DeleteFile"
+)
+
+const (
+	FILE_TRUNCATE = 0
+	FILE_APPEND   = 1
 )
 
 // Test function
@@ -161,7 +167,7 @@ func (server *Server) DeleteFile(args *DeleteArgs, reply *bool) error {
 }
 
 // To finish upload and add update metadata at replicas and self
-func (s *Server) FinishUploadFile(args *UploadStatus, reply *bool) error {
+func (s *Server) finishWrite(args *UploadStatus, reply *bool) error {
 	defer s.ResourceManager.Release(args.ClientID, args.File.Filename)
 
 	if !args.Success {
@@ -190,43 +196,82 @@ func (s *Server) FinishUploadFile(args *UploadStatus, reply *bool) error {
 	}
 
 	*reply = true
-	log.Println("Upload finished:", args.File)
 	s.InternalSetFileMetadata(fileMetadata, new(bool))
 	return nil
 }
 
-// To get upload access to file
-func (s *Server) StartUploadFile(args *UploadArgs, reply *filesystem.FileMetadata) error {
-	if err := s.ResourceManager.Acquire(args.ClientID, args.Filename, WRITE); err != nil {
+func (s *Server) startWrite(args *UploadArgs, reply *filesystem.FileMetadata, mode int) error {
+	clientID := args.ClientID
+	filename := args.Filename
+	size := args.FileSize
+
+	if err := s.ResourceManager.Acquire(clientID, filename, WRITE); err != nil {
 		return err
 	}
-
-	aliveNodes := s.GetAliveNodes()
 
 	s.Mutex.Lock()
 	defer s.Mutex.Unlock()
 
-	numBlocks := common.GetNumFileBlocks(int64(args.FileSize))
-	newVersion := 1
+	prevFile, ok := s.Files[filename]
 
-	if old, ok := s.Files[args.Filename]; ok {
-		newVersion = old.Version + 1
+	if !ok {
+		newFile := filesystem.File{
+			Filename:  filename,
+			FileSize:  size,
+			Version:   1,
+			NumBlocks: common.GetNumFileBlocks(int64(size)),
+		}
+
+		*reply = s.Metadata.GetNewMetadata(newFile, s.Nodes)
+		return nil
+
+	} else if mode == FILE_TRUNCATE {
+		newFile := filesystem.File{
+			Filename:  filename,
+			FileSize:  size,
+			Version:   prevFile.Version + 1,
+			NumBlocks: common.GetNumFileBlocks(int64(size)),
+		}
+
+		*reply = s.Metadata.GetNewMetadata(newFile, s.Nodes)
+		return nil
+
+	} else if mode == FILE_APPEND {
+		newFile := filesystem.File{
+			Filename:  filename,
+			FileSize:  size + prevFile.FileSize,
+			Version:   prevFile.Version + 1,
+			NumBlocks: common.GetNumFileBlocks(int64(size + prevFile.FileSize)),
+		}
+
+		metadata := s.Metadata.GetNewMetadata(newFile, s.Nodes)
+
+		for i := 0; i < prevFile.NumBlocks; i++ {
+			metadata.Blocks[i].Size = GetBlockSize(prevFile, i)
+		}
+
+		*reply = metadata
+		return nil
 	}
 
-	newFile := filesystem.File{
-		Filename:  args.Filename,
-		FileSize:  args.FileSize,
-		Version:   newVersion,
-		NumBlocks: numBlocks,
-	}
-
-	*reply = s.Metadata.GetNewMetadata(newFile, aliveNodes)
-	log.Println("Upload started:", *args)
-	return nil
+	return errors.New("invalid write mode")
 }
 
-// func (s *Server) StartAppendFile(args *UploadArgs, reply *AppendReply) error {
-// }
+func (s *Server) FinishUploadFile(args *UploadStatus, reply *bool) error {
+	err := s.finishWrite(args, reply)
+	log.Println("Upload finished:", args.File)
+	return err
+}
+
+func (s *Server) StartUploadFile(args *UploadArgs, reply *filesystem.FileMetadata) error {
+	err := s.startWrite(args, reply, args.Mode)
+	if err != nil {
+		log.Println("Upload failed:", args.Filename)
+	} else {
+		log.Println("Upload started:", args.Filename)
+	}
+	return err
+}
 
 // To update file metadata at node
 func (s *Server) InternalSetFileMetadata(args *filesystem.FileMetadata, reply *bool) error {
