@@ -51,7 +51,7 @@ func (client *SDFSClient) TryDownloadFile(localFilename string, remoteFilename s
 	reply := true
 	defer leader.Call(server.RPC_FINISH_DOWNLOAD_FILE, &downloadArgs, &reply)
 
-	h := NewHeartbeat(leader, clientID, remoteFilename, common.CLIENT_HEARTBEAT_INTERVAL)
+	h := NewHeartbeat(leader, clientID, common.CLIENT_HEARTBEAT_INTERVAL)
 	go h.Start()
 	defer h.Stop()
 

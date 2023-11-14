@@ -165,7 +165,6 @@ func stdinListener(info common.Node, fs *server.Server, fd *failuredetector.Serv
 			}
 
 			t.AppendSeparator()
-			t.SetStyle(table.StyleLight)
 			t.Render()
 
 		case "info":

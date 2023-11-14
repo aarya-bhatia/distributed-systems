@@ -10,6 +10,16 @@ import (
 	"strings"
 )
 
+type DownloadArgs struct {
+	ClientID string
+	Filename string
+}
+
+type DeleteArgs struct {
+	ClientID string
+	File     filesystem.File
+}
+
 type UploadArgs struct {
 	ClientID string
 	Filename string
@@ -21,26 +31,6 @@ type UploadStatus struct {
 	File     filesystem.File
 	Blocks   []filesystem.BlockMetadata
 	Success  bool
-}
-
-type UploadReply struct {
-	File   filesystem.File
-	Blocks []filesystem.BlockMetadata
-}
-
-type DownloadArgs struct {
-	ClientID string
-	Filename string
-}
-
-type DeleteArgs struct {
-	ClientID string
-	File     filesystem.File
-}
-
-type HeartbeatArgs struct {
-	ClientID string
-	Resource string
 }
 
 const (
@@ -74,9 +64,9 @@ func (s *Server) Ping(args *bool, reply *string) error {
 
 // Clients must call this repeatedly during upload or download, otherwise
 // resource will be released
-func (s *Server) Heartbeat(args *HeartbeatArgs, reply *bool) error {
-	log.Debug("Heartbeat:", *args)
-	return s.ResourceManager.Ping(args.ClientID, args.Resource)
+func (s *Server) Heartbeat(clientID *string, reply *bool) error {
+	log.Debug("Heartbeat from", *clientID)
+	return s.ResourceManager.Ping(*clientID)
 }
 
 // To get leader node ID
@@ -206,7 +196,7 @@ func (s *Server) FinishUploadFile(args *UploadStatus, reply *bool) error {
 }
 
 // To get upload access to file
-func (s *Server) StartUploadFile(args *UploadArgs, reply *UploadReply) error {
+func (s *Server) StartUploadFile(args *UploadArgs, reply *filesystem.FileMetadata) error {
 	if err := s.ResourceManager.Acquire(args.ClientID, args.Filename, WRITE); err != nil {
 		return err
 	}
@@ -230,14 +220,13 @@ func (s *Server) StartUploadFile(args *UploadArgs, reply *UploadReply) error {
 		NumBlocks: numBlocks,
 	}
 
-	newMetadata := s.Metadata.GetNewMetadata(newFile, aliveNodes)
-
-	reply.File = newMetadata.File
-	reply.Blocks = newMetadata.Blocks
-
+	*reply = s.Metadata.GetNewMetadata(newFile, aliveNodes)
 	log.Println("Upload started:", *args)
 	return nil
 }
+
+// func (s *Server) StartAppendFile(args *UploadArgs, reply *AppendReply) error {
+// }
 
 // To update file metadata at node
 func (s *Server) InternalSetFileMetadata(args *filesystem.FileMetadata, reply *bool) error {

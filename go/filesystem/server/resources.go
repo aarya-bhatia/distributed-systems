@@ -94,18 +94,13 @@ func (rm *ResourceManager) getReadLock(filename string) {
 	<-c
 }
 
-func (rm *ResourceManager) Ping(clientID string, resource string) error {
+func (rm *ResourceManager) Ping(clientID string) error {
 	rm.Mutex.Lock()
 	defer rm.Mutex.Unlock()
 
 	if _, ok := rm.Clients[clientID]; !ok {
 		log.Warn("unauthorized")
 		return errors.New("unauthorized")
-	}
-
-	if rm.Clients[clientID].Name != resource {
-		log.Warn("client resource mismatch")
-		return errors.New("client resource mismatch")
 	}
 
 	r := rm.Clients[clientID]

@@ -8,16 +8,16 @@ import (
 )
 
 type Heartbeat struct {
+	ClientID string
 	Server   *rpc.Client
-	Args     server.HeartbeatArgs
 	Signal   chan bool
 	Interval time.Duration
 }
 
-func NewHeartbeat(conn *rpc.Client, clientID string, resource string, interval time.Duration) *Heartbeat {
+func NewHeartbeat(conn *rpc.Client, clientID string, interval time.Duration) *Heartbeat {
 	h := new(Heartbeat)
 	h.Server = conn
-	h.Args = server.HeartbeatArgs{ClientID: clientID, Resource: resource}
+	h.ClientID = clientID
 	h.Interval = interval
 	h.Signal = make(chan bool)
 	return h
@@ -30,7 +30,7 @@ func (h *Heartbeat) Start() {
 		case <-h.Signal:
 			return
 		case <-time.After(h.Interval):
-			if err := h.Server.Call(server.RPC_HEARTBEAT, &h.Args, &reply); err != nil {
+			if err := h.Server.Call(server.RPC_HEARTBEAT, &h.ClientID, &reply); err != nil {
 				log.Warn(err)
 			}
 		}

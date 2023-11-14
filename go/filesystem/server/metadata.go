@@ -53,6 +53,18 @@ func (m *ServerMetadata) RemoveBlock(block string) {
 	delete(m.BlockToNodes, block)
 }
 
+func GetBlockSize(file filesystem.File, n int) int {
+	if n > file.NumBlocks {
+		return 0
+	}
+
+	if n == file.NumBlocks-1 {
+		return file.FileSize - (file.NumBlocks-1)*common.BLOCK_SIZE
+	}
+
+	return common.BLOCK_SIZE
+}
+
 func (m *ServerMetadata) UpdateBlockMetadata(block filesystem.BlockMetadata) {
 	m.AddBlock(block.Block)
 	for _, replica := range block.Replicas {
@@ -67,15 +79,11 @@ func (m *ServerMetadata) GetMetadata(file filesystem.File) filesystem.FileMetada
 
 	for i := 0; i < file.NumBlocks; i++ {
 		blockName := common.GetBlockName(file.Filename, file.Version, i)
-		blockSize := common.BLOCK_SIZE
-		if i == file.NumBlocks-1 {
-			blockSize = file.FileSize - (file.NumBlocks-1)*common.BLOCK_SIZE
-		}
 
 		blockMetadata := filesystem.BlockMetadata{
 			Block:    blockName,
 			Replicas: m.BlockToNodes[blockName].ToSlice(),
-			Size:     blockSize,
+			Size:     GetBlockSize(file, i),
 		}
 
 		res.Blocks = append(res.Blocks, blockMetadata)
@@ -89,16 +97,12 @@ func (m *ServerMetadata) GetNewMetadata(file filesystem.File, aliveNodes []int) 
 
 	for i := 0; i < file.NumBlocks; i++ {
 		blockName := common.GetBlockName(file.Filename, file.Version, i)
-		blockSize := common.BLOCK_SIZE
-		if i == file.NumBlocks-1 {
-			blockSize = file.FileSize - (file.NumBlocks-1)*common.BLOCK_SIZE
-		}
 		blockReplicas := GetReplicaNodes(aliveNodes, blockName, common.REPLICA_FACTOR)
 
 		blockMetadata := filesystem.BlockMetadata{
 			Block:    blockName,
 			Replicas: blockReplicas,
-			Size:     blockSize,
+			Size:     GetBlockSize(file, i),
 		}
 
 		res.Blocks = append(res.Blocks, blockMetadata)

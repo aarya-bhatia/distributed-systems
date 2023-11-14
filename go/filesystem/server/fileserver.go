@@ -18,12 +18,12 @@ type FileServer struct {
 }
 
 func (s *FileServer) Start() {
-	listener, err := net.Listen("tcp", fmt.Sprintf("%s:%d", s.Hostname, s.TCPPort))
+	listener, err := net.Listen("tcp4", fmt.Sprintf("%s:%d", s.Hostname, s.TCPPort))
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	log.Info("SDFS file server is listening at", listener.Addr())
+	log.Info("SDFS file server is listening at ", listener.Addr())
 
 	for {
 		conn, err := listener.Accept()

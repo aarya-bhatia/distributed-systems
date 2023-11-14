@@ -47,9 +47,7 @@ func SendBlock(block string, data []byte, conn net.Conn) bool {
 }
 
 func ReceiveBlock(block string, size int, conn net.Conn) ([]byte, bool) {
-	request := fmt.Sprintf("DOWNLOAD %s\n", block)
-	log.Debug(request)
-	if !common.SendMessage(conn, request) {
+	if !common.SendMessage(conn, fmt.Sprintf("DOWNLOAD %s\n", block)) {
 		return nil, false
 	}
 

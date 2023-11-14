@@ -44,7 +44,7 @@ func NewServer(info common.Node, dbDirectory string) *Server {
 }
 
 func (server *Server) Start() {
-	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", server.Port))
+	listener, err := net.Listen("tcp4", fmt.Sprintf("%s:%d", server.Hostname, server.Port))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -52,7 +52,7 @@ func (server *Server) Start() {
 		log.Fatal(err)
 	}
 
-	log.Info("SDFS master server is listening at", listener.Addr())
+	log.Info("SDFS master server is listening at ", listener.Addr())
 
 	go server.ResourceManager.StartTaskPolling()
 	go server.ResourceManager.StartHeartbeatRoutine()
