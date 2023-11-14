@@ -15,16 +15,10 @@
 - Power on all vms from https://vc.cs.illinois.edu
 - Run `./deploy.sh`
 
-Note:
-
-- The (MP1) distributed shell daemon runs on port 3000 on each VM
-- Each server runs a UDP failure detector server on port 6000 (MP2), a frontend TCP server on port 4000 and a backend TCP server on port 5000 (MP3).
-- Node address is set by the system hostname
-
 To start each server manually on VMs:
 
 ```
-cd go
+cd ./go/main/filesystem/server
 go run .
 ```
 
@@ -47,7 +41,7 @@ cd go/shell
 ## Run locally
 
 ```
-cd go
+cd ./go/main/filesystem/server
 go run . <ID>
 ```
 
@@ -61,24 +55,25 @@ Notes:
 ## Client
 
 ```
-cd go/client
-```
-- The client can run commands from a "tasks" file, or stdin.
-- Example: `cat tasks | go run .` or `go run . <tasks`
-- The format of a task file is: `<VM> <command> <args>...`,
-where VM can be any number from 1 to 10. Possible commands are "get", "put", "ls", "delete".
+cd go/main/filesystem/client
+go run . <server_id> <command> <args>...
 
-Examples:
-- `echo 1 put /home/aaryab2/file1 file1 | go run . ` will upload file1 from VM1 to SDFS
-- `echo 2 get file1 /home/aaryab2/file1.out | go run .` will download file1 from SDFS to VM2
-- You can add a "sleep x" command to space out the commands by 'x' seconds.
-- Any blank line or lines starting with '#' are ignored.
+```
+
+## Client Commands
+
+- list file replicas: `ls <file>`
+- download file from sdfs to disk: `get <remote> <local>`
+- upload file from disk to sdfs: `put <local> <remote>`
+- delete file from sdfs: `delete <remote>`
 
 ## Config
 
-Config parameters can be changed in [here](./go/common/common.go)
+Config parameters can be changed in [here](./go/common/config.go)
 
-## Commands
+## Server Commands
+
+These commands can be sent by stdin to SDFS servers.
 
 - `kill`: crash server
 - `list_mem`: print FD membership table
