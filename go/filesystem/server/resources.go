@@ -14,10 +14,6 @@ const (
 	WRITE = 1
 )
 
-const (
-	CLIENT_TIMEOUT = 3 * time.Second
-)
-
 type Resource struct {
 	Name      string
 	Mode      int
@@ -57,7 +53,7 @@ func (rm *ResourceManager) StartHeartbeatRoutine() {
 		rm.Mutex.Lock()
 		timeNow := time.Now().UnixNano()
 		for client, resource := range rm.Clients {
-			if timeNow-resource.Heartbeat > CLIENT_TIMEOUT.Nanoseconds() {
+			if timeNow-resource.Heartbeat > common.CLIENT_TIMEOUT.Nanoseconds() {
 				log.Println("client failure detected:", client, resource)
 				if resource.Mode == READ {
 					rm.FileQueues[resource.Name].ReadDone()
