@@ -1,2 +1,3 @@
 #!/bin/sh
-echo $@ | go run . "echo KILL | nc localhost 5000"
+echo $@ | go run . "echo KILL >/dev/udp/localhost/4000"
+

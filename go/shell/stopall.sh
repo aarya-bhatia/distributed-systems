@@ -1,2 +1,2 @@
 #!/bin/sh
-./all "echo KILL | nc localhost 5000"
+./all "echo KILL >/dev/udp/localhost/4000"
