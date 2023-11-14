@@ -11,13 +11,14 @@ git pull origin $GIT_BRANCH
 go mod tidy
 
 if pgrep -f cs425 >/dev/null; then
-	echo KILL | nc localhost 5000
-	echo KILL | nc localhost 3000
+	echo KILL >/dev/tcp/localhost/3000
+	echo KILL >/dev/udp/localhost/4000
 fi
 
+cd $HOME/cs425/go/main/filesystem/server
 nohup go run . >$HOME/log 2>&1 &
 
-cd shell/server
+cd $HOME/cs425/go/shell/server
 nohup go run . >$HOME/mp1.log 2>&1 &
 
 echo node $(hostname) is online

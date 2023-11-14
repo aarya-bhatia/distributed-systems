@@ -1,39 +1,26 @@
 #!/bin/bash
 
-passwd_file="/home/aarya/passwd"
-netid="aaryab2"
+PASSWD_FILE="/home/aarya/passwd"
+NETID="aaryab2"
+HOSTS="hosts"
 
-if [ ! -f $passwd_file ]; then
-	echo Password file not found: $passwd_file
+if [ ! -f $PASSWD_FILE ]; then
+	echo Please save your netid password in a file and update the PASSWD_FILE \
+		variable in this script.
 	exit 1
 fi
 
-cluster=(
-	"fa23-cs425-0701.cs.illinois.edu"
-	"fa23-cs425-0702.cs.illinois.edu"
-	"fa23-cs425-0703.cs.illinois.edu"
-	"fa23-cs425-0704.cs.illinois.edu"
-	"fa23-cs425-0705.cs.illinois.edu"
-	"fa23-cs425-0706.cs.illinois.edu"
-	"fa23-cs425-0707.cs.illinois.edu"
-	"fa23-cs425-0708.cs.illinois.edu"
-	"fa23-cs425-0709.cs.illinois.edu"
-	"fa23-cs425-0710.cs.illinois.edu"
-)
+timeout=20
 
-timeout=15
-
-for vm in "${cluster[@]}"; do
+for vm in $(cat $HOSTS); do
 	echo "VM: $vm"
 	ping -W $timeout -c 1 $vm
 
 	if [ $? -eq 0 ]; then
-		sshpass -f $passwd_file rsync -avu -e "ssh -o 'StrictHostKeyChecking no'" start.sh $netid@$vm:~/start.sh
-		sshpass -f $passwd_file ssh -f -n -o "StrictHostKeyChecking no" $netid@$vm "./start.sh" &
+		sshpass -f $PASSWD_FILE rsync -avu -e "ssh -o 'StrictHostKeyChecking no'" start.sh $NETID@$vm:~/start.sh
+		sshpass -f $PASSWD_FILE ssh -f -n -o "StrictHostKeyChecking no" $NETID@$vm "./start.sh" &
 	else
 		echo "Failed to connect to $vm"
 	fi
-
-	sleep 2
 done
 

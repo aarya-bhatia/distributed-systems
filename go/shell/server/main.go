@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"cs425/common"
 	"fmt"
 	"log"
 	"net"
@@ -30,7 +31,7 @@ func worker(conn net.Conn) {
 }
 
 func main() {
-	port := 3000
+	port := common.SHELL_PORT
 
 	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 	if err != nil {
