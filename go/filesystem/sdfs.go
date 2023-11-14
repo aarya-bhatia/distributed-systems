@@ -3,6 +3,8 @@ package filesystem
 import (
 	"cs425/common"
 	"fmt"
+	"net"
+
 	log "github.com/sirupsen/logrus"
 )
 
@@ -24,32 +26,37 @@ type FileMetadata struct {
 	Blocks []BlockMetadata
 }
 
-func DownloadBlock(block BlockMetadata, connCache *ConnectionCache) ([]byte, bool) {
-	for _, replica := range common.Shuffle(block.Replicas) {
-		if data, ok := TryDownloadBlock(block, replica, connCache); ok {
-			return data, true
-		}
+func SendBlock(block string, data []byte, conn net.Conn) bool {
+	if !common.SendMessage(conn, fmt.Sprintf("UPLOAD %s %d\n", block, len(data))) {
+		return false
 	}
-	return nil, false
+
+	if !common.GetOKMessage(conn) {
+		return false
+	}
+
+	if common.SendAll(conn, data, len(data)) < 0 {
+		return false
+	}
+
+	if !common.GetOKMessage(conn) {
+		return false
+	}
+
+	return true
 }
 
-func TryDownloadBlock(block BlockMetadata, replica int, connCache *ConnectionCache) ([]byte, bool) {
-	node := common.GetNodeByID(replica)
-	addr := common.GetAddress(node.Hostname, node.TCPPort)
-	conn := connCache.GetConnection(addr)
-	if conn == nil {
-		return nil, false
-	}
-	request := fmt.Sprintf("DOWNLOAD %s\n", block.Block)
+func ReceiveBlock(block string, size int, conn net.Conn) ([]byte, bool) {
+	request := fmt.Sprintf("DOWNLOAD %s\n", block)
 	log.Debug(request)
 	if !common.SendMessage(conn, request) {
 		return nil, false
 	}
 
-	buffer := make([]byte, block.Size)
+	buffer := make([]byte, size)
 	bufferSize := 0
 
-	for bufferSize < block.Size {
+	for bufferSize < size {
 		n, err := conn.Read(buffer[bufferSize:])
 		if err != nil {
 			log.Warn(err)
@@ -58,14 +65,30 @@ func TryDownloadBlock(block BlockMetadata, replica int, connCache *ConnectionCac
 		bufferSize += n
 	}
 
-	if bufferSize < block.Size {
-		log.Warn("Insufficient bytes:", block.Block)
+	if bufferSize < size {
+		log.Warn("Insufficient bytes:", block)
 		return nil, false
 	}
 
-	log.Debugf("downloaded block %s with %d bytes from %s\n", block.Block, bufferSize, addr)
+	log.Debugf("downloaded block %s with %d bytes from %s\n", block, bufferSize, conn.RemoteAddr())
 
 	return buffer[:bufferSize], true
+}
+
+func DownloadBlock(block BlockMetadata, connCache *ConnectionCache) ([]byte, bool) {
+	for _, replica := range common.Shuffle(block.Replicas) {
+		node := common.GetNodeByID(replica)
+		addr := common.GetAddress(node.Hostname, node.TCPPort)
+		conn := connCache.GetConnection(addr)
+		if conn == nil {
+			continue
+		}
+		if data, ok := ReceiveBlock(block.Block, block.Size, conn); ok {
+			return data, true
+		}
+	}
+
+	return nil, false
 }
 
 func UploadBlock(block BlockMetadata, data []byte, connCache *ConnectionCache) bool {
@@ -80,19 +103,7 @@ func UploadBlock(block BlockMetadata, data []byte, connCache *ConnectionCache) b
 			return false
 		}
 
-		if !common.SendMessage(conn, fmt.Sprintf("UPLOAD %s %d\n", block.Block, block.Size)) {
-			return false
-		}
-
-		if !common.GetOKMessage(conn) {
-			return false
-		}
-
-		if common.SendAll(conn, data, block.Size) < 0 {
-			return false
-		}
-
-		if !common.GetOKMessage(conn) {
+		if !SendBlock(block.Block, data, conn) {
 			return false
 		}
 	}
