@@ -53,13 +53,13 @@ func (client *SDFSClient) TryUploadFile(localFilename string, remoteFilename str
 	clientID := GetClientID()
 	uploadArgs := server.UploadArgs{ClientID: clientID, Filename: remoteFilename, FileSize: fileSize}
 	uploadReply := server.UploadReply{}
-	if err = leader.Call("Server.StartUploadFile", &uploadArgs, &uploadReply); err != nil {
+	if err = leader.Call(server.RPC_START_UPLOAD_FILE, &uploadArgs, &uploadReply); err != nil {
 		return err
 	}
 
 	reply := true
 	uploadStatus := server.UploadStatus{ClientID: clientID, File: uploadReply.File, Blocks: uploadReply.Blocks, Success: false}
-	defer leader.Call("Server.FinishUploadFile", &uploadStatus, &reply)
+	defer leader.Call(server.RPC_FINISH_UPLOAD_FILE, &uploadStatus, &reply)
 
 	h := NewHeartbeat(leader, clientID, remoteFilename, common.CLIENT_HEARTBEAT_INTERVAL)
 	go h.Start()

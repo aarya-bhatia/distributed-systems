@@ -3,9 +3,10 @@ package server
 import (
 	"cs425/common"
 	"cs425/filesystem"
-	log "github.com/sirupsen/logrus"
 	"net/rpc"
 	"time"
+
+	log "github.com/sirupsen/logrus"
 )
 
 // To periodically redistribute file blocks to replicas
@@ -51,7 +52,7 @@ func (s *Server) sendRebalanceRequests(replica int, blocks []filesystem.BlockMet
 
 	reply := []filesystem.BlockMetadata{}
 
-	if err := conn.Call("Server.ReplicateBlocks", &blocks, &reply); err != nil {
+	if err := conn.Call(RPC_INTERNAL_REPLICATE_BLOCKS, &blocks, &reply); err != nil {
 		log.Println(err)
 		return
 	}
@@ -78,7 +79,7 @@ func (s *Server) startMetadataRebalanceRoutine() {
 			for _, file := range s.GetFiles() {
 				metadata := filesystem.FileMetadata{}
 				s.GetFileMetadata(&file.Filename, &metadata)
-				client.Call("Server.SetFileMetadata", &metadata, new(bool))
+				client.Call(RPC_INTERNAL_SET_FILE_METADATA, &metadata, new(bool))
 			}
 		}
 

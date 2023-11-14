@@ -44,12 +44,12 @@ func (client *SDFSClient) TryDownloadFile(localFilename string, remoteFilename s
 	clientID := GetClientID()
 	downloadArgs := server.DownloadArgs{ClientID: clientID, Filename: remoteFilename}
 	fileMetadata := filesystem.FileMetadata{}
-	if err = leader.Call("Server.StartDownloadFile", &downloadArgs, &fileMetadata); err != nil {
+	if err = leader.Call(server.RPC_START_DOWNLOAD_FILE, &downloadArgs, &fileMetadata); err != nil {
 		return err
 	}
 
 	reply := true
-	defer leader.Call("Server.FinishDownloadFile", &downloadArgs, &reply)
+	defer leader.Call(server.RPC_FINISH_DOWNLOAD_FILE, &downloadArgs, &reply)
 
 	h := NewHeartbeat(leader, clientID, remoteFilename, common.CLIENT_HEARTBEAT_INTERVAL)
 	go h.Start()

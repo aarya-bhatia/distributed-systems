@@ -33,7 +33,7 @@ func (client *SDFSClient) GetLeader() (*rpc.Client, error) {
 
 	var args bool
 	reply := 1
-	if err = conn.Call("Server.GetLeader", &args, &reply); err != nil {
+	if err = conn.Call(server.RPC_GET_LEADER, &args, &reply); err != nil {
 		return nil, err
 	}
 
@@ -59,7 +59,7 @@ func (client *SDFSClient) DeleteFile(filename string) error {
 	reply := true
 	clientID := GetClientID()
 	deleteArgs := server.DeleteArgs{ClientID: clientID, File: file.File}
-	return leader.Call("Server.RequestDeleteFile", &deleteArgs, &reply)
+	return leader.Call(server.RPC_DELETE_FILE, &deleteArgs, &reply)
 }
 
 func (client *SDFSClient) GetFile(filename string) (*filesystem.FileMetadata, error) {
@@ -72,7 +72,7 @@ func (client *SDFSClient) GetFile(filename string) (*filesystem.FileMetadata, er
 
 	reply := filesystem.FileMetadata{}
 
-	if err = leader.Call("Server.GetFileMetadata", &filename, &reply); err != nil {
+	if err = leader.Call(server.RPC_GET_FILE_METADATA, &filename, &reply); err != nil {
 		return nil, err
 	}
 
@@ -89,7 +89,7 @@ func (client *SDFSClient) ListDirectory(dirname string) (*[]string, error) {
 
 	reply := []string{}
 
-	if err = leader.Call("Server.ListDirectory", &dirname, &reply); err != nil {
+	if err = leader.Call(server.RPC_LIST_DIRECTORY, &dirname, &reply); err != nil {
 		return nil, err
 	}
 

@@ -48,6 +48,24 @@ const (
 	ErrorBlockNotFound = "ERROR Block not found"
 )
 
+const (
+	RPC_INTERNAL_SET_FILE_METADATA = "Server.InternalSetFileMetadata"
+	RPC_INTERNAL_DELETE_FILE       = "Server.InternalSetFileMetadata"
+	RPC_INTERNAL_REPLICATE_BLOCKS  = "Server.InternalReplicateBlocks"
+
+	RPC_HEARTBEAT            = "Server.Heartbeat"
+	RPC_PING                 = "Server.Ping"
+	RPC_GET_FILE_METADATA    = "Server.GetFileMetadata"
+	RPC_FINISH_DOWNLOAD_FILE = "Server.FinishDownloadFile"
+	RPC_START_DOWNLOAD_FILE  = "Server.StartDownloadFile"
+	RPC_START_UPLOAD_FILE    = "Server.StartUploadFile"
+	RPC_FINISH_UPLOAD_FILE   = "Server.FinishUploadFile"
+	RPC_GET_LEADER           = "Server.GetLeader"
+	RPC_IS_FILE              = "Server.IsFile"
+	RPC_LIST_DIRECTORY       = "Server.ListDirectory"
+	RPC_DELETE_FILE          = "Server.DeleteFile"
+)
+
 func (s *Server) Ping(args *bool, reply *string) error {
 	*reply = "Pong"
 	return nil
@@ -109,64 +127,6 @@ func (s *Server) GetFileMetadata(filename *string, reply *filesystem.FileMetadat
 	return nil
 }
 
-func (s *Server) SetFileMetadata(args *filesystem.FileMetadata, reply *bool) error {
-	s.Mutex.Lock()
-	defer s.Mutex.Unlock()
-
-	if old, ok := s.Files[args.File.Filename]; ok {
-		if old.Version > args.File.Version {
-			return nil
-		} else if old.Version < args.File.Version {
-			go s.DeleteFile(&old, new(bool)) // delete old file
-		}
-	}
-
-	s.Files[args.File.Filename] = args.File
-
-	for i := 0; i < len(args.Blocks); i++ {
-		block := args.Blocks[i]
-		for _, replica := range block.Replicas {
-			s.BlockToNodes[block.Block] = common.AddUniqueElement(s.BlockToNodes[block.Block], replica)
-			s.NodesToBlocks[replica] = common.AddUniqueElement(s.NodesToBlocks[replica], block.Block)
-		}
-		log.Debug("block metadata was updated:", block)
-	}
-
-	log.Println("file metadata was updated:", args.File)
-	return nil
-}
-
-func (s *Server) ReplicateBlocks(blocks *[]filesystem.BlockMetadata, reply *[]filesystem.BlockMetadata) error {
-	connCache := filesystem.NewConnectionCache()
-	defer connCache.Close()
-
-	*reply = make([]filesystem.BlockMetadata, 0)
-
-	for _, block := range *blocks {
-		if common.FileExists(s.Directory + "/" + common.EncodeFilename(block.Block)) {
-			*reply = append(*reply, block)
-			continue
-		}
-
-		data, ok := filesystem.DownloadBlock(block, connCache)
-		if !ok {
-			continue
-		}
-
-		if common.WriteFile(s.Directory, block.Block, data, block.Size) {
-			s.Mutex.Lock()
-			s.BlockToNodes[block.Block] = common.AddUniqueElement(s.BlockToNodes[block.Block], s.ID)
-			s.NodesToBlocks[s.ID] = common.AddUniqueElement(s.NodesToBlocks[s.ID], block.Block)
-			s.Mutex.Unlock()
-			*reply = append(*reply, block)
-		}
-	}
-
-	log.Println("blocks replicated:", *reply)
-
-	return nil
-}
-
 func (s *Server) FinishDownloadFile(args *DownloadArgs, reply *bool) error {
 	log.Debug("Download finished:", args.Filename)
 	return s.ResourceManager.Release(args.ClientID, args.Filename)
@@ -187,7 +147,7 @@ func (s *Server) StartDownloadFile(args *DownloadArgs, reply *filesystem.FileMet
 	return nil
 }
 
-func (server *Server) RequestDeleteFile(args *DeleteArgs, reply *bool) error {
+func (server *Server) DeleteFile(args *DeleteArgs, reply *bool) error {
 	if err := server.ResourceManager.Acquire(args.ClientID, args.File.Filename, WRITE); err != nil {
 		return err
 	}
@@ -205,39 +165,13 @@ func (server *Server) RequestDeleteFile(args *DeleteArgs, reply *bool) error {
 				return
 			}
 			defer client.Close()
-			if err := client.Call("Server.DeleteFile", args.File, new(bool)); err != nil {
+			if err := client.Call(RPC_INTERNAL_DELETE_FILE, args.File, new(bool)); err != nil {
 				log.Println(err)
 			}
 		}(node)
 	}
 
-	return server.DeleteFile(&args.File, reply)
-}
-
-func (server *Server) DeleteFile(file *filesystem.File, reply *bool) error {
-	server.Mutex.Lock()
-	defer server.Mutex.Unlock()
-
-	// delete disk blocks and metadata
-	for i := 0; i < file.NumBlocks; i++ {
-		blockName := common.GetBlockName(file.Filename, file.Version, i)
-		for _, replica := range server.BlockToNodes[blockName] {
-			server.NodesToBlocks[replica] = common.RemoveElement(server.NodesToBlocks[replica], blockName)
-		}
-		localFilename := server.Directory + "/" + common.EncodeFilename(blockName)
-		if common.FileExists(localFilename) {
-			os.Remove(localFilename)
-		}
-		delete(server.BlockToNodes, blockName)
-	}
-
-	// delete file metadata unless newer version file exists
-	if found, ok := server.Files[file.Filename]; ok && found.Version <= file.Version {
-		delete(server.Files, file.Filename)
-	}
-
-	log.Warn("Deleted file:", file)
-	return nil
+	return server.InternalDeleteFile(&args.File, reply)
 }
 
 func (s *Server) FinishUploadFile(args *UploadStatus, reply *bool) error {
@@ -258,7 +192,7 @@ func (s *Server) FinishUploadFile(args *UploadStatus, reply *bool) error {
 	}
 
 	log.Println("Upload finished:", args.File)
-	return s.SetFileMetadata(fileMetadata, reply)
+	return s.InternalSetFileMetadata(fileMetadata, reply)
 }
 
 // update metadata at replicas synchronously
@@ -271,7 +205,7 @@ func (s *Server) postUpload(fileMetadata *filesystem.FileMetadata) error {
 		}
 		defer client.Close()
 		reply := new(bool)
-		if err = client.Call("Server.SetFileMetadata", fileMetadata, reply); err != nil {
+		if err = client.Call(RPC_INTERNAL_SET_FILE_METADATA, fileMetadata, reply); err != nil {
 			log.Println(err)
 			return err
 		}
@@ -322,5 +256,89 @@ func (s *Server) StartUploadFile(args *UploadArgs, reply *UploadReply) error {
 	reply.Blocks = blocks
 	reply.File = newFile
 	log.Println("Upload started:", *args)
+	return nil
+}
+
+func (s *Server) InternalSetFileMetadata(args *filesystem.FileMetadata, reply *bool) error {
+	s.Mutex.Lock()
+	defer s.Mutex.Unlock()
+
+	if old, ok := s.Files[args.File.Filename]; ok {
+		if old.Version > args.File.Version {
+			return nil
+		} else if old.Version < args.File.Version {
+			go s.InternalDeleteFile(&old, new(bool)) // delete old file
+		}
+	}
+
+	s.Files[args.File.Filename] = args.File
+
+	for i := 0; i < len(args.Blocks); i++ {
+		block := args.Blocks[i]
+		for _, replica := range block.Replicas {
+			s.BlockToNodes[block.Block] = common.AddUniqueElement(s.BlockToNodes[block.Block], replica)
+			s.NodesToBlocks[replica] = common.AddUniqueElement(s.NodesToBlocks[replica], block.Block)
+		}
+		log.Debug("block metadata was updated:", block)
+	}
+
+	log.Println("file metadata was updated:", args.File)
+	return nil
+}
+
+func (server *Server) InternalDeleteFile(file *filesystem.File, reply *bool) error {
+	server.Mutex.Lock()
+	defer server.Mutex.Unlock()
+
+	// delete disk blocks and metadata
+	for i := 0; i < file.NumBlocks; i++ {
+		blockName := common.GetBlockName(file.Filename, file.Version, i)
+		for _, replica := range server.BlockToNodes[blockName] {
+			server.NodesToBlocks[replica] = common.RemoveElement(server.NodesToBlocks[replica], blockName)
+		}
+		localFilename := server.Directory + "/" + common.EncodeFilename(blockName)
+		if common.FileExists(localFilename) {
+			os.Remove(localFilename)
+		}
+		delete(server.BlockToNodes, blockName)
+	}
+
+	// delete file metadata unless newer version file exists
+	if found, ok := server.Files[file.Filename]; ok && found.Version <= file.Version {
+		delete(server.Files, file.Filename)
+	}
+
+	log.Warn("Deleted file:", file)
+	return nil
+}
+
+func (s *Server) InternalReplicateBlocks(blocks *[]filesystem.BlockMetadata, reply *[]filesystem.BlockMetadata) error {
+	connCache := filesystem.NewConnectionCache()
+	defer connCache.Close()
+
+	*reply = make([]filesystem.BlockMetadata, 0)
+
+	for _, block := range *blocks {
+		if common.FileExists(s.Directory + "/" + common.EncodeFilename(block.Block)) {
+			*reply = append(*reply, block)
+			continue
+		}
+
+		data, ok := filesystem.DownloadBlock(block, connCache)
+		if !ok {
+			continue
+		}
+
+		if common.WriteFile(s.Directory, block.Block, data, block.Size) {
+			s.Mutex.Lock()
+			s.BlockToNodes[block.Block] = common.AddUniqueElement(s.BlockToNodes[block.Block], s.ID)
+			s.NodesToBlocks[s.ID] = common.AddUniqueElement(s.NodesToBlocks[s.ID], block.Block)
+			s.Mutex.Unlock()
+			*reply = append(*reply, block)
+		}
+	}
+
+	log.Println("blocks replicated:", *reply)
+
 	return nil
 }

@@ -30,7 +30,7 @@ func (h *Heartbeat) Start() {
 		case <-h.Signal:
 			return
 		case <-time.After(h.Interval):
-			if err := h.Server.Call("Server.Heartbeat", &h.Args, &reply); err != nil {
+			if err := h.Server.Call(server.RPC_HEARTBEAT, &h.Args, &reply); err != nil {
 				log.Warn(err)
 			}
 		}
