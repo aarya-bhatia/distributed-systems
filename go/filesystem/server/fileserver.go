@@ -125,36 +125,3 @@ func (s *FileServer) upload(client net.Conn, name string, size int) bool {
 	return common.WriteFile(s.Directory, name, buffer, size)
 }
 
-// Download a block from source node to replicate it at current node
-// TODO: replica all blocks
-func replicateBlock(directory string, blockName string, blockSize int, source int) bool {
-	node := common.GetNodeByID(source)
-	addr := common.GetAddress(node.Hostname, node.TCPPort)
-
-	log.Debugf("To replicate block %s from host %s\n", blockName, addr)
-
-	repliaConn, err := net.Dial("tcp", addr)
-	if err != nil {
-		return false
-	}
-	defer repliaConn.Close()
-
-	if !common.SendMessage(repliaConn, fmt.Sprintf("DOWNLOAD %s\n", blockName)) {
-		return false
-	}
-
-	buffer := make([]byte, common.BLOCK_SIZE)
-	size := 0
-	for size < blockSize {
-		n, err := repliaConn.Read(buffer[size:])
-		if err != nil {
-			return false
-		}
-		if n == 0 {
-			break
-		}
-		size += n
-	}
-
-	return common.WriteFile(directory, blockName, buffer, size)
-}
