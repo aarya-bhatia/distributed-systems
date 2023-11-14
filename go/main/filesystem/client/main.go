@@ -4,10 +4,12 @@ import (
 	"cs425/common"
 	"cs425/filesystem/client"
 	"fmt"
-	"github.com/jedib0t/go-pretty/table"
-	"github.com/sirupsen/logrus"
 	"os"
 	"strconv"
+	"strings"
+
+	"github.com/jedib0t/go-pretty/table"
+	"github.com/sirupsen/logrus"
 )
 
 func printUsage() {
@@ -26,6 +28,18 @@ func main() {
 		printUsage()
 		return
 	}
+
+	hostname, err := os.Hostname()
+	if err != nil {
+		logrus.Fatal(err)
+	}
+
+	if strings.Index(hostname, "illinois.edu") > 0 {
+		common.Cluster = common.SDFSProdCluster
+	}
+
+	logrus.Println("VM cluster:", common.Cluster)
+
 	ID, err := strconv.Atoi(os.Args[1])
 	if err != nil {
 		logrus.Fatal(err)
