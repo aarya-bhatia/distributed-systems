@@ -162,27 +162,31 @@ func (server *Server) DeleteFile(args *DeleteArgs, reply *bool) error {
 
 	log.Println("DeleteFile()")
 
-	defer server.ResourceManager.Release(args.ClientID, args.File.Filename)
-	defer server.InternalDeleteFile(&args.File, reply)
+	go func() {
 
-	server.Mutex.Lock()
-	defer server.Mutex.Unlock()
+		defer server.ResourceManager.Release(args.ClientID, args.File.Filename)
+		defer server.InternalDeleteFile(&args.File, reply)
 
-	// broadcast delete request to all nodes
-	for node := range server.Nodes {
-		if node == server.ID {
-			continue
+		server.Mutex.Lock()
+		defer server.Mutex.Unlock()
+
+		// broadcast delete request to all nodes
+		for node := range server.Nodes {
+			if node == server.ID {
+				continue
+			}
+			client, err := common.Connect(node)
+			if err != nil {
+				log.Println(err)
+				continue
+			}
+			defer client.Close()
+			if err := client.Call(RPC_INTERNAL_DELETE_FILE, args.File, new(bool)); err != nil {
+				log.Println(err)
+			}
 		}
-		client, err := common.Connect(node)
-		if err != nil {
-			log.Println(err)
-			continue
-		}
-		defer client.Close()
-		if err := client.Call(RPC_INTERNAL_DELETE_FILE, args.File, new(bool)); err != nil {
-			log.Println(err)
-		}
-	}
+
+	}()
 
 	return nil
 }

@@ -55,7 +55,11 @@ func (client *SDFSClient) TryWrite(reader Reader, filename string, mode int, res
 		}
 	}()
 
-	h := NewHeartbeat(leader, clientID, common.CLIENT_HEARTBEAT_INTERVAL)
+	h, err := NewHeartbeat(client.Leader, clientID, common.CLIENT_HEARTBEAT_INTERVAL)
+	if err != nil {
+		return err
+	}
+
 	go h.Start()
 	defer h.Stop()
 

@@ -40,7 +40,11 @@ func (client *SDFSClient) TryDownloadFile(writer Writer, filename string) error 
 
 	clientID := GetClientID()
 
-	h := NewHeartbeat(leader, clientID, common.CLIENT_HEARTBEAT_INTERVAL)
+	h, err := NewHeartbeat(client.Leader, clientID, common.CLIENT_HEARTBEAT_INTERVAL)
+	if err != nil {
+		return err
+	}
+
 	go h.Start()
 	defer h.Stop()
 

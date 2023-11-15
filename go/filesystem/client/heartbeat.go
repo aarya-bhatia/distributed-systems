@@ -1,10 +1,12 @@
 package client
 
 import (
+	"cs425/common"
 	"cs425/filesystem/server"
-	log "github.com/sirupsen/logrus"
 	"net/rpc"
 	"time"
+
+	log "github.com/sirupsen/logrus"
 )
 
 type Heartbeat struct {
@@ -14,13 +16,17 @@ type Heartbeat struct {
 	Interval time.Duration
 }
 
-func NewHeartbeat(conn *rpc.Client, clientID string, interval time.Duration) *Heartbeat {
+func NewHeartbeat(leader int, clientID string, interval time.Duration) (*Heartbeat, error) {
 	h := new(Heartbeat)
+	conn, err := common.Connect(leader)
+	if err != nil {
+		return nil, err
+	}
 	h.Server = conn
 	h.ClientID = clientID
 	h.Interval = interval
 	h.Signal = make(chan bool)
-	return h
+	return h, nil
 }
 
 func (h *Heartbeat) Start() {
@@ -39,4 +45,5 @@ func (h *Heartbeat) Start() {
 
 func (h *Heartbeat) Stop() {
 	h.Signal <- true
+	h.Server.Close()
 }

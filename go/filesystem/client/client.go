@@ -12,6 +12,7 @@ import (
 
 type SDFSClient struct {
 	SDFSServer string
+	Leader     int
 }
 
 func NewSDFSClient(SDFSServer string) *SDFSClient {
@@ -35,6 +36,8 @@ func (client *SDFSClient) GetLeader() (*rpc.Client, error) {
 	if err = conn.Call(server.RPC_GET_LEADER, &args, &reply); err != nil {
 		return nil, err
 	}
+
+	client.Leader = reply
 
 	leaderConn, err := rpc.Dial("tcp", server.GetAddressByID(reply))
 	if err != nil {
