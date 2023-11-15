@@ -141,22 +141,4 @@ func TestDownload(t *testing.T) {
 
 	elapsed := writer.EndTimeNano - writer.StartTimeNano
 	log.Println("Download time:", float64(elapsed)*1e-9)
-
-	// for i := 0; i < 10; i++ {
-	// 	go func() {
-	// 		writer := NewByteWriter()
-	// 		assert.Nil(t, sdfsClient.DownloadFile(writer, filename))
-	// 		assert.Equal(t, writer.String(), data)
-	// 		done <- true
-	// 	}()
-	// }
-	//
-	// for i := 0; i < 10; i++ {
-	// 	<-done
-	// }
-	//
-	// endTime = time.Now().UnixNano()
-	// elapsedNew := endTime - startTime
-	//
-	// log.Println("Time 10 reads:", float64(elapsedNew)*1e-9)
 }
