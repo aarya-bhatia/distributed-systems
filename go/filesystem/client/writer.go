@@ -1,14 +1,23 @@
 package client
 
 import (
+	log "github.com/sirupsen/logrus"
 	"io"
 	"os"
+	"time"
 )
 
 type Writer interface {
 	Write([]byte) error // consume next chunk of data
 	Close()
 	Open() error
+}
+
+type TestWriter struct {
+	StartTimeNano int64
+	EndTimeNano   int64
+	NumBytes      int
+	NumBlocks     int
 }
 
 type FileWriter struct {
@@ -18,6 +27,25 @@ type FileWriter struct {
 
 type ByteWriter struct {
 	Data []byte
+}
+
+func (w *TestWriter) Write(data []byte) error {
+	log.Println("TestWriter: Write()")
+	w.NumBytes += len(data)
+	w.NumBlocks++
+	return nil
+}
+func (w *TestWriter) Close() {
+	log.Println("TestWriter: Close()")
+	w.EndTimeNano = time.Now().UnixNano()
+}
+
+func (w *TestWriter) Open() error {
+	log.Println("TestWriter: Open()")
+	w.NumBytes = 0
+	w.NumBlocks = 0
+	w.StartTimeNano = time.Now().UnixNano()
+	return nil
 }
 
 func NewFileWriter(filename string) (*FileWriter, error) {

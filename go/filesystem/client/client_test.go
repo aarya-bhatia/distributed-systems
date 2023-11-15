@@ -4,6 +4,7 @@ import (
 	"cs425/common"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
+	"os"
 	"os/exec"
 	"testing"
 )
@@ -93,7 +94,7 @@ func TestLargeFile(t *testing.T) {
 	assert.True(t, len(file.Blocks[0].Replicas) > 0)
 }
 
-func TestParallel(t *testing.T) {
+func TestManyWrite(t *testing.T) {
 	sdfsClient := getClient()
 	filename := "pi"
 	data := "0123456789"
@@ -115,4 +116,47 @@ func TestParallel(t *testing.T) {
 	writer := NewByteWriter()
 	assert.Nil(t, sdfsClient.DownloadFile(writer, filename))
 	assert.Equal(t, writer.String(), data)
+}
+
+func TestDownload(t *testing.T) {
+	sdfsClient := getClient()
+	inputFilename := "./data/large"
+	outputFilename := "oak"
+
+	stat, err := os.Stat(inputFilename)
+	assert.Nil(t, err)
+	totalSize := int(stat.Size())
+	totalBlocks := common.GetNumFileBlocks(stat.Size())
+
+	assert.Nil(t, sdfsClient.DeleteFile(outputFilename))
+
+	reader, err := NewFileReader(inputFilename)
+	assert.Nil(t, err)
+	assert.Nil(t, sdfsClient.WriteFile(reader, outputFilename, common.FILE_TRUNCATE))
+
+	writer := &TestWriter{}
+	assert.Nil(t, sdfsClient.DownloadFile(writer, outputFilename))
+	assert.Equal(t, writer.NumBlocks, totalBlocks)
+	assert.Equal(t, writer.NumBytes, totalSize)
+
+	elapsed := writer.EndTimeNano - writer.StartTimeNano
+	log.Println("Download time:", float64(elapsed)*1e-9)
+
+	// for i := 0; i < 10; i++ {
+	// 	go func() {
+	// 		writer := NewByteWriter()
+	// 		assert.Nil(t, sdfsClient.DownloadFile(writer, filename))
+	// 		assert.Equal(t, writer.String(), data)
+	// 		done <- true
+	// 	}()
+	// }
+	//
+	// for i := 0; i < 10; i++ {
+	// 	<-done
+	// }
+	//
+	// endTime = time.Now().UnixNano()
+	// elapsedNew := endTime - startTime
+	//
+	// log.Println("Time 10 reads:", float64(elapsedNew)*1e-9)
 }
