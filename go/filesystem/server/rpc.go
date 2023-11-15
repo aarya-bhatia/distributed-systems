@@ -323,6 +323,9 @@ func (server *Server) InternalDeleteFile(file *File, reply *bool) error {
 func (s *Server) InternalReplicateBlocks(blocks *[]BlockMetadata, reply *[]BlockMetadata) error {
 	*reply = make([]BlockMetadata, 0)
 
+	pool := common.NewConnectionPool()
+	defer pool.Close()
+
 	for _, block := range *blocks {
 		filename := s.Directory + "/" + common.EncodeFilename(block.Block)
 		if common.FileExists(filename) {
@@ -333,12 +336,11 @@ func (s *Server) InternalReplicateBlocks(blocks *[]BlockMetadata, reply *[]Block
 		// download block from replica
 
 		source := common.RandomChoice[int](block.Replicas)
-		conn, err := common.Connect(source)
+		conn, err := pool.GetConnection(source)
 		if err != nil {
 			log.Println(err)
 			continue
 		}
-		defer conn.Close()
 
 		blockReply := Block{}
 		args := DownloadBlockArgs{Block: block.Block, Size: block.Size}

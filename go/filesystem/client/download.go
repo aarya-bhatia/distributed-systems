@@ -29,6 +29,9 @@ func (client *SDFSClient) TryDownloadFile(writer Writer, filename string) error 
 
 	defer writer.Close()
 
+	pool := common.NewConnectionPool()
+	defer pool.Close()
+
 	leader, err := client.GetLeader()
 	if err != nil {
 		return err
@@ -53,7 +56,7 @@ func (client *SDFSClient) TryDownloadFile(writer Writer, filename string) error 
 	log.Println("To download:", fileMetadata.File, fileMetadata.Blocks)
 
 	for _, block := range fileMetadata.Blocks {
-		if err := client.DownloadBlock(writer, block); err != nil {
+		if err := client.DownloadBlock(writer, block, pool); err != nil {
 			return err
 		}
 	}
@@ -61,14 +64,13 @@ func (client *SDFSClient) TryDownloadFile(writer Writer, filename string) error 
 	return nil
 }
 
-func (client *SDFSClient) DownloadBlock(writer Writer, block server.BlockMetadata) error {
+func (client *SDFSClient) DownloadBlock(writer Writer, block server.BlockMetadata, pool *common.ConnectionPool) error {
 	for _, replica := range common.Shuffle(block.Replicas) {
-		conn, err := common.Connect(replica)
+		conn, err := pool.GetConnection(replica)
 		if err != nil {
 			log.Println(err)
 			continue
 		}
-		defer conn.Close()
 		log.Printf("Downloading block %v from replica %v", block, replica)
 		data := server.Block{}
 		if err := conn.Call(server.RPC_READ_BLOCK, &block, &data); err != nil {

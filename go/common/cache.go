@@ -6,31 +6,29 @@ import (
 )
 
 type ConnectionPool struct {
-	conn map[string]*rpc.Client
+	conn map[int]*rpc.Client
 }
 
-func NewConnectionCache() *ConnectionPool {
-	cache := new(ConnectionPool)
-	cache.conn = make(map[string]*rpc.Client)
-	return cache
+func NewConnectionPool() *ConnectionPool {
+	pool := new(ConnectionPool)
+	pool.conn = make(map[int]*rpc.Client)
+	return pool
 }
 
-func (cache *ConnectionPool) GetConnection(addr string) *rpc.Client {
-	if _, ok := cache.conn[addr]; !ok {
-		conn, err := rpc.Dial("tcp", addr)
+func (pool *ConnectionPool) GetConnection(node int) (*rpc.Client, error) {
+	if _, ok := pool.conn[node]; !ok {
+		conn, err := Connect(node)
 		if err != nil {
-			log.Warn("Failed to connect:", addr)
-			return nil
+			log.Warn("Failed to connect:", node)
+			return nil, err
 		}
-
-		cache.conn[addr] = conn
+		pool.conn[node] = conn
 	}
-
-	return cache.conn[addr]
+	return pool.conn[node], nil
 }
 
-func (cache *ConnectionPool) Close() {
-	for _, conn := range cache.conn {
+func (pool *ConnectionPool) Close() {
+	for _, conn := range pool.conn {
 		conn.Close()
 	}
 }

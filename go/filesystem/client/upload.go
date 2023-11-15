@@ -31,6 +31,9 @@ func (client *SDFSClient) TryWrite(reader Reader, filename string, mode int, res
 
 	defer reader.Close()
 
+	pool := common.NewConnectionPool()
+	defer pool.Close()
+
 	leader, err := client.GetLeader()
 	if err != nil {
 		return err
@@ -79,7 +82,7 @@ func (client *SDFSClient) TryWrite(reader Reader, filename string, mode int, res
 			Mode: mode,
 		}
 
-		if err := client.UploadBlock(args, block.Replicas); err != nil {
+		if err := client.UploadBlock(args, block.Replicas, pool); err != nil {
 			log.Println(err)
 			return err
 		}
@@ -95,13 +98,12 @@ func (client *SDFSClient) TryWrite(reader Reader, filename string, mode int, res
 	return nil
 }
 
-func (client *SDFSClient) UploadBlock(args server.WriteBlockArgs, replicas []int) error {
+func (client *SDFSClient) UploadBlock(args server.WriteBlockArgs, replicas []int, pool *common.ConnectionPool) error {
 	for _, replica := range replicas {
-		conn, err := common.Connect(replica)
+		conn, err := pool.GetConnection(replica)
 		if err != nil {
 			return err
 		}
-		defer conn.Close()
 		log.Printf("Uploading block %v to replica %v", args.Block.Name, replica)
 		reply := true
 		if err := conn.Call(server.RPC_WRITE_BLOCK, &args, &reply); err != nil {
