@@ -1,10 +1,16 @@
 package client
 
-import "os"
+import (
+	"errors"
+	"io"
+	"os"
+)
 
 type Reader interface {
 	Read(blockSize int) ([]byte, error) // read next chunk of data
 	Size() int                          // total bytes
+	Open() error
+	Close()
 }
 
 type ByteReader struct {
@@ -26,31 +32,24 @@ func (r *ByteReader) Size() int {
 	return len(r.data)
 }
 
-func (r *ByteReader) Read(blockSize int) ([]byte, error) {
-	if len(r.data) < blockSize {
-		ret := r.data[r.offset:]
-		r.offset += len(r.data)
-		return ret, nil
-	}
+func (r *ByteReader) Open() error {
+	r.offset = 0
+	return nil
+}
 
-	ret := r.data[r.offset : r.offset+blockSize]
-	r.offset += blockSize
-	return ret, nil
+func (r *ByteReader) Close() {
+}
+
+func (r *ByteReader) Read(blockSize int) ([]byte, error) {
+	ret := make([]byte, blockSize)
+	n := copy(ret, r.data[r.offset:])
+	r.offset += n
+	return ret[:n], nil
 }
 
 func NewFileReader(filename string) (*FileReader, error) {
 	r := new(FileReader)
 	r.filename = filename
-	info, err := os.Stat(filename)
-	if err != nil {
-		return nil, err
-	}
-	file, err := os.Open(filename)
-	if err != nil {
-		return nil, err
-	}
-	r.info = info
-	r.file = file
 	return r, nil
 }
 
@@ -65,4 +64,30 @@ func (r *FileReader) Read(blockSize int) ([]byte, error) {
 		return nil, err
 	}
 	return buffer[:n], nil
+}
+
+func (r *FileReader) Open() error {
+	if r.file != nil {
+		r.file.Seek(0, io.SeekStart)
+		return nil
+	}
+	info, err := os.Stat(r.filename)
+	if err != nil {
+		return err
+	}
+	if info.IsDir() {
+		return errors.New("Not a regular file")
+	}
+	file, err := os.Open(r.filename)
+	if err != nil {
+		return err
+	}
+	r.info = info
+	r.file = file
+	return nil
+}
+
+func (r *FileReader) Close() {
+	r.file.Close()
+	r.file = nil
 }

@@ -2,17 +2,15 @@ package client
 
 import (
 	"cs425/common"
-	"cs425/filesystem"
 	"cs425/filesystem/server"
 	"errors"
 	log "github.com/sirupsen/logrus"
-	"os"
 	"time"
 )
 
-func (client *SDFSClient) DownloadFile(localFilename string, remoteFilename string) error {
+func (client *SDFSClient) DownloadFile(writer Writer, filename string) error {
 	for i := 0; i < 3; i++ {
-		err := client.TryDownloadFile(localFilename, remoteFilename)
+		err := client.TryDownloadFile(writer, filename)
 		if err == nil {
 			return nil
 		}
@@ -23,50 +21,63 @@ func (client *SDFSClient) DownloadFile(localFilename string, remoteFilename stri
 	return errors.New("Max retries exceeded")
 }
 
-func (client *SDFSClient) TryDownloadFile(localFilename string, remoteFilename string) error {
-	localFile, err := os.OpenFile(localFilename, os.O_WRONLY|os.O_TRUNC|os.O_CREATE, 0666)
-	if err != nil {
+func (client *SDFSClient) TryDownloadFile(writer Writer, filename string) error {
+	if err := writer.Open(); err != nil {
+		log.Println(err)
 		return err
 	}
 
-	defer localFile.Close()
-
-	connCache := filesystem.NewConnectionCache()
-	defer connCache.Close()
+	defer writer.Close()
 
 	leader, err := client.GetLeader()
 	if err != nil {
 		return err
 	}
-
 	defer leader.Close()
 
 	clientID := GetClientID()
-	downloadArgs := server.DownloadArgs{ClientID: clientID, Filename: remoteFilename}
-	fileMetadata := filesystem.FileMetadata{}
-	if err = leader.Call(server.RPC_START_DOWNLOAD_FILE, &downloadArgs, &fileMetadata); err != nil {
-		return err
-	}
-
-	reply := true
-	defer leader.Call(server.RPC_FINISH_DOWNLOAD_FILE, &downloadArgs, &reply)
 
 	h := NewHeartbeat(leader, clientID, common.CLIENT_HEARTBEAT_INTERVAL)
 	go h.Start()
 	defer h.Stop()
 
-	log.Println("To download:", fileMetadata.File)
+	args := server.DownloadArgs{ClientID: clientID, Filename: filename}
+	fileMetadata := server.FileMetadata{}
+	if err := leader.Call(server.RPC_START_DOWNLOAD_FILE, &args, &fileMetadata); err != nil {
+		return err
+	}
+
+	reply := true
+	defer leader.Call(server.RPC_FINISH_DOWNLOAD_FILE, &args, &reply)
+
+	log.Println("To download:", fileMetadata.File, fileMetadata.Blocks)
 
 	for _, block := range fileMetadata.Blocks {
-		data, ok := filesystem.DownloadBlock(block, connCache)
-		if !ok {
-			return errors.New("failed to download block")
-		}
-		_, err := localFile.Write(data)
-		if err != nil {
+		if err := client.DownloadBlock(writer, block); err != nil {
 			return err
 		}
 	}
 
 	return nil
+}
+
+func (client *SDFSClient) DownloadBlock(writer Writer, block server.BlockMetadata) error {
+	for _, replica := range common.Shuffle(block.Replicas) {
+		conn, err := common.Connect(replica)
+		if err != nil {
+			continue
+		}
+		defer conn.Close()
+		log.Printf("Downloading block %v from replica %v", block, replica)
+		data := []byte{}
+		if err := conn.Call(server.RPC_READ_BLOCK, &block, &data); err != nil {
+			continue
+		}
+		if err := writer.Write(data); err != nil {
+			return err
+		}
+		return nil
+	}
+
+	return errors.New("failed to download block")
 }

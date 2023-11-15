@@ -57,7 +57,11 @@ func main() {
 			return
 		}
 
-		if err := sdfsClient.UploadFile(tokens[1], tokens[2]); err != nil {
+		reader, err := client.NewFileReader(tokens[1])
+		if err != nil {
+			logrus.Fatal(err)
+		}
+		if err := sdfsClient.WriteFile(reader, tokens[2], common.FILE_TRUNCATE); err != nil {
 			logrus.Fatal(err)
 		}
 
@@ -67,7 +71,11 @@ func main() {
 			return
 		}
 
-		if err := sdfsClient.DownloadFile(tokens[2], tokens[1]); err != nil {
+		writer, err := client.NewFileWriter(tokens[2])
+		if err != nil {
+			logrus.Fatal(err)
+		}
+		if err := sdfsClient.DownloadFile(writer, tokens[1]); err != nil {
 			logrus.Fatal(err)
 		}
 

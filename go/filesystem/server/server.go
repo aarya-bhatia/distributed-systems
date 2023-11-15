@@ -3,7 +3,6 @@ package server
 import (
 	"container/heap"
 	"cs425/common"
-	"cs425/filesystem"
 	"cs425/priqueue"
 	"fmt"
 	set "github.com/deckarep/golang-set/v2"
@@ -15,12 +14,30 @@ import (
 	"sync"
 )
 
+type File struct {
+	Filename  string
+	Version   int
+	FileSize  int
+	NumBlocks int
+}
+
+type BlockMetadata struct {
+	Block    string
+	Size     int
+	Replicas []int
+}
+
+type FileMetadata struct {
+	File   File
+	Blocks []BlockMetadata
+}
+
 type Server struct {
 	Hostname        string
 	Port            int
 	ID              int
 	Directory       string                     // Path to save blocks on disk
-	Files           map[string]filesystem.File // Files stored by system
+	Files           map[string]File // Files stored by system
 	Nodes           map[int]common.Node        // Set of alive nodes
 	Mutex           sync.Mutex
 	ResourceManager *ResourceManager
@@ -33,7 +50,7 @@ func NewServer(info common.Node, dbDirectory string) *Server {
 	server.Port = info.RPCPort
 	server.ID = info.ID
 	server.Directory = dbDirectory
-	server.Files = make(map[string]filesystem.File)
+	server.Files = make(map[string]File)
 	server.Nodes = make(map[int]common.Node)
 	server.Nodes[server.ID] = info
 	server.ResourceManager = NewResourceManager()
@@ -57,8 +74,8 @@ func (server *Server) Start() {
 	go server.ResourceManager.StartTaskPolling()
 	go server.ResourceManager.StartHeartbeatRoutine()
 
-	go server.startRebalanceRoutine()
-	go server.startMetadataRebalanceRoutine()
+	// go server.startRebalanceRoutine()
+	// go server.startMetadataRebalanceRoutine()
 
 	for {
 		conn, err := listener.Accept()
@@ -77,10 +94,10 @@ func GetAddressByID(id int) string {
 	return common.GetAddress(node.Hostname, node.RPCPort)
 }
 
-func (s *Server) GetFiles() []filesystem.File {
+func (s *Server) GetFiles() []File {
 	s.Mutex.Lock()
 	defer s.Mutex.Unlock()
-	files := []filesystem.File{}
+	files := []File{}
 	for _, file := range s.Files {
 		files = append(files, file)
 	}

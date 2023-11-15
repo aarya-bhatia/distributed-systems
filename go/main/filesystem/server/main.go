@@ -82,12 +82,12 @@ func main() {
 	log.Debug("Node Info:", info)
 
 	master := server.NewServer(info, dbDirectory)
-	fs := &server.FileServer{Directory: dbDirectory, Hostname: info.Hostname, TCPPort: info.TCPPort}
+	// fs := &server.FileServer{Directory: dbDirectory, Hostname: info.Hostname, TCPPort: info.TCPPort}
 	fd := failuredetector.NewServer(info.Hostname, info.UDPPort, common.GOSSIP_PROTOCOL, master)
 
 	go master.Start()
 	go fd.Start()
-	go fs.Start()
+	// go fs.Start()
 
 	go stdinListener(info, master, fd)
 
@@ -170,7 +170,7 @@ func stdinListener(info common.Node, fs *server.Server, fd *failuredetector.Serv
 		case "info":
 			fmt.Println("----------------------------------------------------------")
 			fmt.Printf("Node Address: %s\n", info.Hostname)
-			fmt.Printf("Ports: UDP %d, RPC %d, TCP %d\n", info.UDPPort, info.RPCPort, info.TCPPort)
+			fmt.Printf("Ports: UDP %d, RPC %d\n", info.UDPPort, info.RPCPort)
 			fmt.Println("Member ID:", fd.Self.ID)
 			fmt.Println("Node ID:", fs.ID)
 			fmt.Println("Total disk blocks", common.GetFileCountInDirectory(fs.Directory))

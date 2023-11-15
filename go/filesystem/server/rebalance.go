@@ -2,7 +2,6 @@ package server
 
 import (
 	"cs425/common"
-	"cs425/filesystem"
 	"net/rpc"
 	"time"
 
@@ -14,10 +13,10 @@ func (s *Server) startRebalanceRoutine() {
 	log.Debug("Starting rebalance routine")
 	for {
 		aliveNodes := s.GetAliveNodes()
-		replicaTasks := make(map[int][]filesystem.BlockMetadata)
+		replicaTasks := make(map[int][]BlockMetadata)
 
 		for _, file := range s.GetFiles() {
-			metadata := filesystem.FileMetadata{}
+			metadata := FileMetadata{}
 			s.GetFileMetadata(&file.Filename, &metadata)
 			// TODO: Delete extra replicas
 
@@ -42,7 +41,7 @@ func (s *Server) startRebalanceRoutine() {
 		time.Sleep(common.REBALANCE_INTERVAL)
 	}
 }
-func (s *Server) sendRebalanceRequests(replica int, blocks []filesystem.BlockMetadata) {
+func (s *Server) sendRebalanceRequests(replica int, blocks []BlockMetadata) {
 	addr := GetAddressByID(replica)
 	conn, err := rpc.Dial("tcp", addr)
 	if err != nil {
@@ -50,7 +49,7 @@ func (s *Server) sendRebalanceRequests(replica int, blocks []filesystem.BlockMet
 	}
 	defer conn.Close()
 
-	reply := []filesystem.BlockMetadata{}
+	reply := []BlockMetadata{}
 
 	if err := conn.Call(RPC_INTERNAL_REPLICATE_BLOCKS, &blocks, &reply); err != nil {
 		log.Println(err)
@@ -76,7 +75,7 @@ func (s *Server) startMetadataRebalanceRoutine() {
 			defer client.Close()
 
 			for _, file := range s.GetFiles() {
-				metadata := filesystem.FileMetadata{}
+				metadata := FileMetadata{}
 				s.GetFileMetadata(&file.Filename, &metadata)
 				client.Call(RPC_INTERNAL_SET_FILE_METADATA, &metadata, new(bool))
 			}

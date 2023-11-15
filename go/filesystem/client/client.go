@@ -1,7 +1,6 @@
 package client
 
 import (
-	"cs425/filesystem"
 	"cs425/filesystem/server"
 	"fmt"
 	"net/rpc"
@@ -62,7 +61,7 @@ func (client *SDFSClient) DeleteFile(filename string) error {
 	return leader.Call(server.RPC_DELETE_FILE, &deleteArgs, &reply)
 }
 
-func (client *SDFSClient) GetFile(filename string) (*filesystem.FileMetadata, error) {
+func (client *SDFSClient) GetFile(filename string) (*server.FileMetadata, error) {
 	leader, err := client.GetLeader()
 	if err != nil {
 		return nil, err
@@ -70,7 +69,7 @@ func (client *SDFSClient) GetFile(filename string) (*filesystem.FileMetadata, er
 
 	defer leader.Close()
 
-	reply := filesystem.FileMetadata{}
+	reply := server.FileMetadata{}
 
 	if err = leader.Call(server.RPC_GET_FILE_METADATA, &filename, &reply); err != nil {
 		return nil, err

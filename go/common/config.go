@@ -26,6 +26,9 @@ const (
 	GOSSIP_PROTOCOL            = 0
 	GOSPSIP_SUSPICION_PROTOCOL = 1
 
+	FILE_TRUNCATE = 0
+	FILE_APPEND   = 1
+
 	NODE_ALIVE     = 0
 	NODE_SUSPECTED = 1
 	NODE_FAILED    = 2
@@ -34,71 +37,68 @@ const (
 
 	SDFS_FD_PORT  = 4000
 	SDFS_RPC_PORT = 5000
-	SDFS_TCP_PORT = 6000
 
 	MAPLEJUICE_FD_PORT  = 9000
 	MAPLEJUICE_RPC_PORT = 7000
-	MAPLEJUICE_TCP_PORT = 8000
 )
 
 type Node struct {
 	ID       int
 	Hostname string
 	UDPPort  int
-	TCPPort  int
 	RPCPort  int
 }
 
 var SDFSProdCluster = []Node{
-	{1, "fa23-cs425-0701.cs.illinois.edu", SDFS_FD_PORT, SDFS_RPC_PORT, SDFS_TCP_PORT},
-	{2, "fa23-cs425-0702.cs.illinois.edu", SDFS_FD_PORT, SDFS_RPC_PORT, SDFS_TCP_PORT},
-	{3, "fa23-cs425-0703.cs.illinois.edu", SDFS_FD_PORT, SDFS_RPC_PORT, SDFS_TCP_PORT},
-	{4, "fa23-cs425-0704.cs.illinois.edu", SDFS_FD_PORT, SDFS_RPC_PORT, SDFS_TCP_PORT},
-	{5, "fa23-cs425-0705.cs.illinois.edu", SDFS_FD_PORT, SDFS_RPC_PORT, SDFS_TCP_PORT},
-	{6, "fa23-cs425-0706.cs.illinois.edu", SDFS_FD_PORT, SDFS_RPC_PORT, SDFS_TCP_PORT},
-	{7, "fa23-cs425-0707.cs.illinois.edu", SDFS_FD_PORT, SDFS_RPC_PORT, SDFS_TCP_PORT},
-	{8, "fa23-cs425-0708.cs.illinois.edu", SDFS_FD_PORT, SDFS_RPC_PORT, SDFS_TCP_PORT},
-	{9, "fa23-cs425-0709.cs.illinois.edu", SDFS_FD_PORT, SDFS_RPC_PORT, SDFS_TCP_PORT},
-	{10, "fa23-cs425-0710.cs.illinois.edu", SDFS_FD_PORT, SDFS_RPC_PORT, SDFS_TCP_PORT},
+	{1, "fa23-cs425-0701.cs.illinois.edu", SDFS_FD_PORT, SDFS_RPC_PORT},
+	{2, "fa23-cs425-0702.cs.illinois.edu", SDFS_FD_PORT, SDFS_RPC_PORT},
+	{3, "fa23-cs425-0703.cs.illinois.edu", SDFS_FD_PORT, SDFS_RPC_PORT},
+	{4, "fa23-cs425-0704.cs.illinois.edu", SDFS_FD_PORT, SDFS_RPC_PORT},
+	{5, "fa23-cs425-0705.cs.illinois.edu", SDFS_FD_PORT, SDFS_RPC_PORT},
+	{6, "fa23-cs425-0706.cs.illinois.edu", SDFS_FD_PORT, SDFS_RPC_PORT},
+	{7, "fa23-cs425-0707.cs.illinois.edu", SDFS_FD_PORT, SDFS_RPC_PORT},
+	{8, "fa23-cs425-0708.cs.illinois.edu", SDFS_FD_PORT, SDFS_RPC_PORT},
+	{9, "fa23-cs425-0709.cs.illinois.edu", SDFS_FD_PORT, SDFS_RPC_PORT},
+	{10, "fa23-cs425-0710.cs.illinois.edu", SDFS_FD_PORT, SDFS_RPC_PORT},
 }
 
 var SDFSLocalCluster = []Node{
-	{1, "localhost", SDFS_FD_PORT + 1, SDFS_RPC_PORT + 1, SDFS_TCP_PORT + 1},
-	{2, "localhost", SDFS_FD_PORT + 2, SDFS_RPC_PORT + 2, SDFS_TCP_PORT + 2},
-	{3, "localhost", SDFS_FD_PORT + 3, SDFS_RPC_PORT + 3, SDFS_TCP_PORT + 3},
-	{4, "localhost", SDFS_FD_PORT + 4, SDFS_RPC_PORT + 4, SDFS_TCP_PORT + 4},
-	{5, "localhost", SDFS_FD_PORT + 5, SDFS_RPC_PORT + 5, SDFS_TCP_PORT + 5},
-	{6, "localhost", SDFS_FD_PORT + 6, SDFS_RPC_PORT + 6, SDFS_TCP_PORT + 6},
-	{7, "localhost", SDFS_FD_PORT + 7, SDFS_RPC_PORT + 7, SDFS_TCP_PORT + 7},
-	{8, "localhost", SDFS_FD_PORT + 8, SDFS_RPC_PORT + 8, SDFS_TCP_PORT + 8},
-	{9, "localhost", SDFS_FD_PORT + 9, SDFS_RPC_PORT + 9, SDFS_TCP_PORT + 9},
-	{10, "localhost", SDFS_FD_PORT + 10, SDFS_RPC_PORT + 10, SDFS_TCP_PORT + 10},
+	{1, "localhost", SDFS_FD_PORT + 1, SDFS_RPC_PORT + 1},
+	{2, "localhost", SDFS_FD_PORT + 2, SDFS_RPC_PORT + 2},
+	{3, "localhost", SDFS_FD_PORT + 3, SDFS_RPC_PORT + 3},
+	{4, "localhost", SDFS_FD_PORT + 4, SDFS_RPC_PORT + 4},
+	{5, "localhost", SDFS_FD_PORT + 5, SDFS_RPC_PORT + 5},
+	{6, "localhost", SDFS_FD_PORT + 6, SDFS_RPC_PORT + 6},
+	{7, "localhost", SDFS_FD_PORT + 7, SDFS_RPC_PORT + 7},
+	{8, "localhost", SDFS_FD_PORT + 8, SDFS_RPC_PORT + 8},
+	{9, "localhost", SDFS_FD_PORT + 9, SDFS_RPC_PORT + 9},
+	{10, "localhost", SDFS_FD_PORT + 10, SDFS_RPC_PORT + 10},
 }
 
 var ProdMapleJuiceCluster = []Node{
-	{1, "fa23-cs425-0701.cs.illinois.edu", MAPLEJUICE_FD_PORT, MAPLEJUICE_RPC_PORT, MAPLEJUICE_TCP_PORT},
-	{2, "fa23-cs425-0702.cs.illinois.edu", MAPLEJUICE_FD_PORT, MAPLEJUICE_RPC_PORT, MAPLEJUICE_TCP_PORT},
-	{3, "fa23-cs425-0703.cs.illinois.edu", MAPLEJUICE_FD_PORT, MAPLEJUICE_RPC_PORT, MAPLEJUICE_TCP_PORT},
-	{4, "fa23-cs425-0704.cs.illinois.edu", MAPLEJUICE_FD_PORT, MAPLEJUICE_RPC_PORT, MAPLEJUICE_TCP_PORT},
-	{5, "fa23-cs425-0705.cs.illinois.edu", MAPLEJUICE_FD_PORT, MAPLEJUICE_RPC_PORT, MAPLEJUICE_TCP_PORT},
-	{6, "fa23-cs425-0706.cs.illinois.edu", MAPLEJUICE_FD_PORT, MAPLEJUICE_RPC_PORT, MAPLEJUICE_TCP_PORT},
-	{7, "fa23-cs425-0707.cs.illinois.edu", MAPLEJUICE_FD_PORT, MAPLEJUICE_RPC_PORT, MAPLEJUICE_TCP_PORT},
-	{8, "fa23-cs425-0708.cs.illinois.edu", MAPLEJUICE_FD_PORT, MAPLEJUICE_RPC_PORT, MAPLEJUICE_TCP_PORT},
-	{9, "fa23-cs425-0709.cs.illinois.edu", MAPLEJUICE_FD_PORT, MAPLEJUICE_RPC_PORT, MAPLEJUICE_TCP_PORT},
-	{10, "fa23-cs425-0710.cs.illinois.edu", MAPLEJUICE_FD_PORT, MAPLEJUICE_RPC_PORT, MAPLEJUICE_TCP_PORT},
+	{1, "fa23-cs425-0701.cs.illinois.edu", MAPLEJUICE_FD_PORT, MAPLEJUICE_RPC_PORT},
+	{2, "fa23-cs425-0702.cs.illinois.edu", MAPLEJUICE_FD_PORT, MAPLEJUICE_RPC_PORT},
+	{3, "fa23-cs425-0703.cs.illinois.edu", MAPLEJUICE_FD_PORT, MAPLEJUICE_RPC_PORT},
+	{4, "fa23-cs425-0704.cs.illinois.edu", MAPLEJUICE_FD_PORT, MAPLEJUICE_RPC_PORT},
+	{5, "fa23-cs425-0705.cs.illinois.edu", MAPLEJUICE_FD_PORT, MAPLEJUICE_RPC_PORT},
+	{6, "fa23-cs425-0706.cs.illinois.edu", MAPLEJUICE_FD_PORT, MAPLEJUICE_RPC_PORT},
+	{7, "fa23-cs425-0707.cs.illinois.edu", MAPLEJUICE_FD_PORT, MAPLEJUICE_RPC_PORT},
+	{8, "fa23-cs425-0708.cs.illinois.edu", MAPLEJUICE_FD_PORT, MAPLEJUICE_RPC_PORT},
+	{9, "fa23-cs425-0709.cs.illinois.edu", MAPLEJUICE_FD_PORT, MAPLEJUICE_RPC_PORT},
+	{10, "fa23-cs425-0710.cs.illinois.edu", MAPLEJUICE_FD_PORT, MAPLEJUICE_RPC_PORT},
 }
 
 var LocalMapleJuiceCluster = []Node{
-	{1, "localhost", MAPLEJUICE_FD_PORT + 1, MAPLEJUICE_RPC_PORT + 1, MAPLEJUICE_TCP_PORT + 1},
-	{2, "localhost", MAPLEJUICE_FD_PORT + 2, MAPLEJUICE_RPC_PORT + 2, MAPLEJUICE_TCP_PORT + 2},
-	{3, "localhost", MAPLEJUICE_FD_PORT + 3, MAPLEJUICE_RPC_PORT + 3, MAPLEJUICE_TCP_PORT + 3},
-	{4, "localhost", MAPLEJUICE_FD_PORT + 4, MAPLEJUICE_RPC_PORT + 4, MAPLEJUICE_TCP_PORT + 4},
-	{5, "localhost", MAPLEJUICE_FD_PORT + 5, MAPLEJUICE_RPC_PORT + 5, MAPLEJUICE_TCP_PORT + 5},
-	{6, "localhost", MAPLEJUICE_FD_PORT + 6, MAPLEJUICE_RPC_PORT + 6, MAPLEJUICE_TCP_PORT + 6},
-	{7, "localhost", MAPLEJUICE_FD_PORT + 7, MAPLEJUICE_RPC_PORT + 7, MAPLEJUICE_TCP_PORT + 7},
-	{8, "localhost", MAPLEJUICE_FD_PORT + 8, MAPLEJUICE_RPC_PORT + 8, MAPLEJUICE_TCP_PORT + 8},
-	{9, "localhost", MAPLEJUICE_FD_PORT + 9, MAPLEJUICE_RPC_PORT + 9, MAPLEJUICE_TCP_PORT + 9},
-	{10, "localhost", MAPLEJUICE_FD_PORT + 10, MAPLEJUICE_RPC_PORT + 10, MAPLEJUICE_TCP_PORT + 10},
+	{1, "localhost", MAPLEJUICE_FD_PORT + 1, MAPLEJUICE_RPC_PORT + 1},
+	{2, "localhost", MAPLEJUICE_FD_PORT + 2, MAPLEJUICE_RPC_PORT + 2},
+	{3, "localhost", MAPLEJUICE_FD_PORT + 3, MAPLEJUICE_RPC_PORT + 3},
+	{4, "localhost", MAPLEJUICE_FD_PORT + 4, MAPLEJUICE_RPC_PORT + 4},
+	{5, "localhost", MAPLEJUICE_FD_PORT + 5, MAPLEJUICE_RPC_PORT + 5},
+	{6, "localhost", MAPLEJUICE_FD_PORT + 6, MAPLEJUICE_RPC_PORT + 6},
+	{7, "localhost", MAPLEJUICE_FD_PORT + 7, MAPLEJUICE_RPC_PORT + 7},
+	{8, "localhost", MAPLEJUICE_FD_PORT + 8, MAPLEJUICE_RPC_PORT + 8},
+	{9, "localhost", MAPLEJUICE_FD_PORT + 9, MAPLEJUICE_RPC_PORT + 9},
+	{10, "localhost", MAPLEJUICE_FD_PORT + 10, MAPLEJUICE_RPC_PORT + 10},
 }
 
 var Cluster []Node = SDFSLocalCluster

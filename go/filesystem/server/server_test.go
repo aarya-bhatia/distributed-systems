@@ -17,15 +17,15 @@ func TestMetadata(t *testing.T) {
 	b1 := "foo:1:0"
 	b2 := "bar:1:0"
 
-	m.UpdateBlockMetadata(filesystem.BlockMetadata{
+	m.UpdateBlockMetadata(BlockMetadata{
 		Block:    b1,
 		Replicas: []int{1, 2},
 	})
-	m.UpdateBlockMetadata(filesystem.BlockMetadata{
+	m.UpdateBlockMetadata(BlockMetadata{
 		Block:    b1,
 		Replicas: []int{3, 2},
 	})
-	m.UpdateBlockMetadata(filesystem.BlockMetadata{
+	m.UpdateBlockMetadata(BlockMetadata{
 		Block:    b2,
 		Replicas: []int{1},
 	})
@@ -49,8 +49,8 @@ func TestMetadata(t *testing.T) {
 	assert.True(t, m.NodesToBlocks[2].Contains(b1))
 	assert.False(t, m.NodesToBlocks[2].Contains(b2))
 
-	log.Println(m.GetMetadata(filesystem.File{Filename: "foo", FileSize: 10, Version: 1, NumBlocks: 1}))
-	log.Println(m.GetMetadata(filesystem.File{Filename: "bar", FileSize: 10, Version: 1, NumBlocks: 1}))
+	log.Println(m.GetMetadata(File{Filename: "foo", FileSize: 10, Version: 1, NumBlocks: 1}))
+	log.Println(m.GetMetadata(File{Filename: "bar", FileSize: 10, Version: 1, NumBlocks: 1}))
 }
 
 func TestRPC(t *testing.T) {

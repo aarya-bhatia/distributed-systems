@@ -1,15 +1,18 @@
 package common
 
 import (
+	"errors"
 	"fmt"
-	log "github.com/sirupsen/logrus"
 	"hash"
 	"hash/fnv"
 	"io"
 	"math/rand"
 	"net"
+	"net/rpc"
 	"os"
 	"strings"
+
+	log "github.com/sirupsen/logrus"
 )
 
 type FileEntry struct {
@@ -29,6 +32,15 @@ func GetNodeByID(ID int) *Node {
 		}
 	}
 	return nil
+}
+
+func Connect(nodeID int) (*rpc.Client, error) {
+	node := GetNodeByID(nodeID)
+	if node == nil {
+		return nil, errors.New("Unknown Node")
+	}
+	addr := GetAddress(node.Hostname, node.RPCPort)
+	return rpc.Dial("tcp", addr)
 }
 
 func GetNodeByAddress(hostname string, udpPort int) *Node {
@@ -116,40 +128,38 @@ func RemoveIndex[T comparable](arr []T, i int) []T {
 }
 
 // Writes all bytes of given file and returns true if successful
-func WriteFile(directory string, filename string, buffer []byte, blockSize int) bool {
-	filepath := fmt.Sprintf("%s/%s", directory, filename)
-	file, err := os.OpenFile(filepath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0666)
+func WriteFile(filename string, flags int, buffer []byte, blockSize int) error {
+	file, err := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE|flags, 0666)
 	if err != nil {
 		log.Warn(err)
-		return false
+		return err
 	}
 	defer file.Close()
 
 	_, err = file.Write(buffer[:blockSize])
 	if err != nil {
 		log.Warn(err)
-		return false
+		return err
 	}
 
-	return true
+	return nil
 }
 
 // Returns all bytes of given file or nil
-func ReadFile(directory string, filename string) []byte {
-	filepath := fmt.Sprintf("%s/%s", directory, filename)
-	file, err := os.Open(filepath)
+func ReadFile(filename string) ([]byte, error) {
+	file, err := os.Open(filename)
 	if err != nil {
 		log.Warn(err)
-		return nil
+		return nil, err
 	}
 
 	buffer, err := io.ReadAll(file)
 	if err != nil {
 		log.Warn(err)
-		return nil
+		return nil, err
 	}
 
-	return buffer
+	return buffer, nil
 }
 
 // Return list of file entries in directory which include name and size of file

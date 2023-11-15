@@ -2,7 +2,6 @@ package server
 
 import (
 	"cs425/common"
-	"cs425/filesystem"
 	"errors"
 	log "github.com/sirupsen/logrus"
 	"net/rpc"
@@ -17,21 +16,36 @@ type DownloadArgs struct {
 
 type DeleteArgs struct {
 	ClientID string
-	File     filesystem.File
+	File     File
 }
 
 type UploadArgs struct {
 	ClientID string
 	Filename string
 	FileSize int
-	Mode int
+	Mode     int
 }
 
 type UploadStatus struct {
 	ClientID string
-	File     filesystem.File
-	Blocks   []filesystem.BlockMetadata
+	File     File
+	Blocks   []BlockMetadata
 	Success  bool
+}
+
+type Block struct {
+	Name string
+	Data []byte
+}
+
+type WriteBlockArgs struct {
+	Block Block
+	Mode  int
+}
+
+type DownloadBlockArgs struct {
+	Block string
+	Size  int
 }
 
 const (
@@ -55,11 +69,9 @@ const (
 	RPC_IS_FILE              = "Server.IsFile"
 	RPC_LIST_DIRECTORY       = "Server.ListDirectory"
 	RPC_DELETE_FILE          = "Server.DeleteFile"
-)
 
-const (
-	FILE_TRUNCATE = 0
-	FILE_APPEND   = 1
+	RPC_READ_BLOCK  = "Server.ReadBlock"
+	RPC_WRITE_BLOCK = "Server.WriteBlock"
 )
 
 // Test function
@@ -106,7 +118,7 @@ func (s *Server) IsFile(filename *string, reply *bool) error {
 }
 
 // To get file and blocks metadata
-func (s *Server) GetFileMetadata(filename *string, reply *filesystem.FileMetadata) error {
+func (s *Server) GetFileMetadata(filename *string, reply *FileMetadata) error {
 	s.Mutex.Lock()
 	defer s.Mutex.Unlock()
 	file, ok := s.Files[*filename]
@@ -125,7 +137,7 @@ func (s *Server) FinishDownloadFile(args *DownloadArgs, reply *bool) error {
 }
 
 // To get download access for file
-func (s *Server) StartDownloadFile(args *DownloadArgs, reply *filesystem.FileMetadata) error {
+func (s *Server) StartDownloadFile(args *DownloadArgs, reply *FileMetadata) error {
 	log.Println("Request download:", *args)
 	if err := s.ResourceManager.Acquire(args.ClientID, args.Filename, READ); err != nil {
 		return err
@@ -170,12 +182,13 @@ func (server *Server) DeleteFile(args *DeleteArgs, reply *bool) error {
 func (s *Server) finishWrite(args *UploadStatus, reply *bool) error {
 	defer s.ResourceManager.Release(args.ClientID, args.File.Filename)
 
+	*reply = false
+
 	if !args.Success {
-		*reply = false
 		return nil
 	}
 
-	fileMetadata := &filesystem.FileMetadata{
+	fileMetadata := &FileMetadata{
 		File:   args.File,
 		Blocks: args.Blocks,
 	}
@@ -200,7 +213,7 @@ func (s *Server) finishWrite(args *UploadStatus, reply *bool) error {
 	return nil
 }
 
-func (s *Server) startWrite(args *UploadArgs, reply *filesystem.FileMetadata, mode int) error {
+func (s *Server) startWrite(args *UploadArgs, reply *FileMetadata, mode int) error {
 	clientID := args.ClientID
 	filename := args.Filename
 	size := args.FileSize
@@ -215,7 +228,7 @@ func (s *Server) startWrite(args *UploadArgs, reply *filesystem.FileMetadata, mo
 	prevFile, ok := s.Files[filename]
 
 	if !ok {
-		newFile := filesystem.File{
+		newFile := File{
 			Filename:  filename,
 			FileSize:  size,
 			Version:   1,
@@ -225,8 +238,8 @@ func (s *Server) startWrite(args *UploadArgs, reply *filesystem.FileMetadata, mo
 		*reply = s.Metadata.GetNewMetadata(newFile, s.Nodes)
 		return nil
 
-	} else if mode == FILE_TRUNCATE {
-		newFile := filesystem.File{
+	} else if mode == common.FILE_TRUNCATE {
+		newFile := File{
 			Filename:  filename,
 			FileSize:  size,
 			Version:   prevFile.Version + 1,
@@ -236,8 +249,8 @@ func (s *Server) startWrite(args *UploadArgs, reply *filesystem.FileMetadata, mo
 		*reply = s.Metadata.GetNewMetadata(newFile, s.Nodes)
 		return nil
 
-	} else if mode == FILE_APPEND {
-		newFile := filesystem.File{
+	} else if mode == common.FILE_APPEND {
+		newFile := File{
 			Filename:  filename,
 			FileSize:  size + prevFile.FileSize,
 			Version:   prevFile.Version + 1,
@@ -263,7 +276,7 @@ func (s *Server) FinishUploadFile(args *UploadStatus, reply *bool) error {
 	return err
 }
 
-func (s *Server) StartUploadFile(args *UploadArgs, reply *filesystem.FileMetadata) error {
+func (s *Server) StartUploadFile(args *UploadArgs, reply *FileMetadata) error {
 	err := s.startWrite(args, reply, args.Mode)
 	if err != nil {
 		log.Println("Upload failed:", args.Filename)
@@ -274,7 +287,7 @@ func (s *Server) StartUploadFile(args *UploadArgs, reply *filesystem.FileMetadat
 }
 
 // To update file metadata at node
-func (s *Server) InternalSetFileMetadata(args *filesystem.FileMetadata, reply *bool) error {
+func (s *Server) InternalSetFileMetadata(args *FileMetadata, reply *bool) error {
 	s.Mutex.Lock()
 	defer s.Mutex.Unlock()
 
@@ -292,11 +305,13 @@ func (s *Server) InternalSetFileMetadata(args *filesystem.FileMetadata, reply *b
 		s.Metadata.UpdateBlockMetadata(block)
 	}
 
+	log.Println("Metadata updated:", args.File)
+
 	return nil
 }
 
 // To delete given file at current node
-func (server *Server) InternalDeleteFile(file *filesystem.File, reply *bool) error {
+func (server *Server) InternalDeleteFile(file *File, reply *bool) error {
 	server.Mutex.Lock()
 	defer server.Mutex.Unlock()
 
@@ -320,35 +335,70 @@ func (server *Server) InternalDeleteFile(file *filesystem.File, reply *bool) err
 }
 
 // To replicate given blocks at current node
-func (s *Server) InternalReplicateBlocks(blocks *[]filesystem.BlockMetadata, reply *[]filesystem.BlockMetadata) error {
-	connCache := filesystem.NewConnectionCache()
-	defer connCache.Close()
+// func (s *Server) InternalReplicateBlocks(blocks *[]BlockMetadata, reply *[]BlockMetadata) error {
+// 	connCache := NewConnectionCache()
+// 	defer connCache.Close()
+//
+// 	*reply = make([]BlockMetadata, 0)
+//
+// 	for _, block := range *blocks {
+// 		filename := s.Directory + "/" + common.EncodeFilename(block.Block)
+// 		if common.FileExists(filename) {
+// 			*reply = append(*reply, block) // block already exists
+// 			continue
+// 		}
+//
+// 		// download block from replica
+// 		data, ok := DownloadBlock(block, connCache)
+// 		if !ok {
+// 			continue
+// 		}
+//
+// 		// save block to disk
+// 		if common.WriteFile(filename, data, block.Size) {
+// 			s.Mutex.Lock()
+// 			block.Replicas = append(block.Replicas, s.ID) // add self to replicas
+// 			s.Metadata.UpdateBlockMetadata(block)
+// 			s.Mutex.Unlock()
+// 			*reply = append(*reply, block)
+//
+// 			log.Println("block replicated:", block)
+// 		}
+// 	}
+//
+// 	return nil
+// }
 
-	*reply = make([]filesystem.BlockMetadata, 0)
+func (s *Server) WriteBlock(args *WriteBlockArgs, reply *bool) error {
+	log.Println("WriteBlock()")
+	filename := s.Directory + "/" + common.EncodeFilename(args.Block.Name)
 
-	for _, block := range *blocks {
-		if common.FileExists(s.Directory + "/" + common.EncodeFilename(block.Block)) {
-			*reply = append(*reply, block) // block already exists
-			continue
-		}
-
-		// download block from replica
-		data, ok := filesystem.DownloadBlock(block, connCache)
-		if !ok {
-			continue
-		}
-
-		// save block to disk
-		if common.WriteFile(s.Directory, block.Block, data, block.Size) {
-			s.Mutex.Lock()
-			block.Replicas = append(block.Replicas, s.ID) // add self to replicas
-			s.Metadata.UpdateBlockMetadata(block)
-			s.Mutex.Unlock()
-			*reply = append(*reply, block)
-
-			log.Println("block replicated:", block)
-		}
+	if args.Mode == common.FILE_TRUNCATE {
+		return common.WriteFile(filename, os.O_TRUNC, args.Block.Data, len(args.Block.Data))
+	} else if args.Mode == common.FILE_APPEND {
+		return common.WriteFile(filename, os.O_APPEND, args.Block.Data, len(args.Block.Data))
 	}
 
+	return errors.New("File mode is not valid")
+}
+
+func (s *Server) ReadBlock(args *DownloadBlockArgs, reply *Block) error {
+	log.Println("ReadBlock()")
+	filename := s.Directory + "/" + common.DecodeFilename(args.Block)
+	if !common.FileExists(filename) {
+		return errors.New("block not found")
+	}
+
+	data, err := common.ReadFile(filename)
+	if err != nil {
+		return err
+	}
+
+	if len(data) != args.Size {
+		return errors.New("Block size mistmatch")
+	}
+
+	reply.Name = args.Block
+	reply.Data = data
 	return nil
 }

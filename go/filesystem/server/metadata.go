@@ -2,8 +2,6 @@ package server
 
 import (
 	"cs425/common"
-	"cs425/filesystem"
-
 	set "github.com/deckarep/golang-set/v2"
 )
 
@@ -63,7 +61,7 @@ func (m *ServerMetadata) RemoveBlock(block string) {
 	delete(m.BlockToNodes, block)
 }
 
-func GetBlockSize(file filesystem.File, n int) int {
+func GetBlockSize(file File, n int) int {
 	if n > file.NumBlocks {
 		return 0
 	}
@@ -75,7 +73,7 @@ func GetBlockSize(file filesystem.File, n int) int {
 	return common.BLOCK_SIZE
 }
 
-func (m *ServerMetadata) UpdateBlockMetadata(block filesystem.BlockMetadata) {
+func (m *ServerMetadata) UpdateBlockMetadata(block BlockMetadata) {
 	m.AddBlock(block.Block)
 	for _, replica := range block.Replicas {
 		m.AddNode(replica)
@@ -85,12 +83,12 @@ func (m *ServerMetadata) UpdateBlockMetadata(block filesystem.BlockMetadata) {
 }
 
 // Computes the file metadata for an existing file
-func (m *ServerMetadata) GetMetadata(file filesystem.File) filesystem.FileMetadata {
-	res := filesystem.FileMetadata{File: file, Blocks: make([]filesystem.BlockMetadata, 0)}
+func (m *ServerMetadata) GetMetadata(file File) FileMetadata {
+	res := FileMetadata{File: file, Blocks: make([]BlockMetadata, 0)}
 	for i := 0; i < file.NumBlocks; i++ {
 		blockName := common.GetBlockName(file.Filename, file.Version, i)
 		blockReplicas := m.BlockToNodes[blockName].ToSlice()
-		blockMetadata := filesystem.BlockMetadata{
+		blockMetadata := BlockMetadata{
 			Block:    blockName,
 			Replicas: blockReplicas,
 			Size:     GetBlockSize(file, i),
@@ -101,14 +99,14 @@ func (m *ServerMetadata) GetMetadata(file filesystem.File) filesystem.FileMetada
 }
 
 // Computes the file metadata for a new file
-func (m *ServerMetadata) GetNewMetadata(file filesystem.File, aliveNodes map[int]common.Node) filesystem.FileMetadata {
-	res := filesystem.FileMetadata{File: file, Blocks: make([]filesystem.BlockMetadata, 0)}
+func (m *ServerMetadata) GetNewMetadata(file File, aliveNodes map[int]common.Node) FileMetadata {
+	res := FileMetadata{File: file, Blocks: make([]BlockMetadata, 0)}
 	aliveNodeSet := set.NewSetFromMapKeys[int](aliveNodes)
 	for i := 0; i < file.NumBlocks; i++ {
 		blockName := common.GetBlockName(file.Filename, file.Version, i)
 		blockReplicas := GetReplicaNodes(aliveNodeSet.ToSlice(), blockName, common.REPLICA_FACTOR)
 
-		blockMetadata := filesystem.BlockMetadata{
+		blockMetadata := BlockMetadata{
 			Block:    blockName,
 			Replicas: blockReplicas,
 			Size:     0,
