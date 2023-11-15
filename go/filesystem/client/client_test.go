@@ -92,3 +92,27 @@ func TestLargeFile(t *testing.T) {
 	assert.True(t, file.Blocks[0].Size == common.BLOCK_SIZE)
 	assert.True(t, len(file.Blocks[0].Replicas) > 0)
 }
+
+func TestParallel(t *testing.T) {
+	sdfsClient := getClient()
+	filename := "pi"
+	data := "0123456789"
+	done := make(chan bool)
+
+	assert.Nil(t, sdfsClient.DeleteFile(filename))
+
+	for i := 0; i < 10; i++ {
+		go func() {
+			assert.Nil(t, sdfsClient.WriteFile(NewByteReader([]byte(data)), filename, common.FILE_TRUNCATE))
+			done <- true
+		}()
+	}
+
+	for i := 0; i < 10; i++ {
+		<-done
+	}
+
+	writer := NewByteWriter()
+	assert.Nil(t, sdfsClient.DownloadFile(writer, filename))
+	assert.Equal(t, writer.String(), data)
+}
