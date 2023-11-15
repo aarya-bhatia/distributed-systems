@@ -320,39 +320,51 @@ func (server *Server) InternalDeleteFile(file *File, reply *bool) error {
 }
 
 // To replicate given blocks at current node
-// func (s *Server) InternalReplicateBlocks(blocks *[]BlockMetadata, reply *[]BlockMetadata) error {
-// 	connCache := NewConnectionCache()
-// 	defer connCache.Close()
-//
-// 	*reply = make([]BlockMetadata, 0)
-//
-// 	for _, block := range *blocks {
-// 		filename := s.Directory + "/" + common.EncodeFilename(block.Block)
-// 		if common.FileExists(filename) {
-// 			*reply = append(*reply, block) // block already exists
-// 			continue
-// 		}
-//
-// 		// download block from replica
-// 		data, ok := DownloadBlock(block, connCache)
-// 		if !ok {
-// 			continue
-// 		}
-//
-// 		// save block to disk
-// 		if common.WriteFile(filename, data, block.Size) {
-// 			s.Mutex.Lock()
-// 			block.Replicas = append(block.Replicas, s.ID) // add self to replicas
-// 			s.Metadata.UpdateBlockMetadata(block)
-// 			s.Mutex.Unlock()
-// 			*reply = append(*reply, block)
-//
-// 			log.Println("block replicated:", block)
-// 		}
-// 	}
-//
-// 	return nil
-// }
+func (s *Server) InternalReplicateBlocks(blocks *[]BlockMetadata, reply *[]BlockMetadata) error {
+	*reply = make([]BlockMetadata, 0)
+
+	for _, block := range *blocks {
+		filename := s.Directory + "/" + common.EncodeFilename(block.Block)
+		if common.FileExists(filename) {
+			*reply = append(*reply, block) // block already exists
+			continue
+		}
+
+		// download block from replica
+
+		source := common.RandomChoice[int](block.Replicas)
+		conn, err := common.Connect(source)
+		if err != nil {
+			log.Println(err)
+			continue
+		}
+		defer conn.Close()
+
+		blockReply := Block{}
+		args := DownloadBlockArgs{Block: block.Block, Size: block.Size}
+		if err = conn.Call(RPC_READ_BLOCK, args, &blockReply); err != nil {
+			log.Println(err)
+			continue
+		}
+
+		// save block to disk
+		if err = common.WriteFile(filename, os.O_TRUNC, blockReply.Data, len(blockReply.Data)); err != nil {
+			log.Println(err)
+			continue
+		}
+
+		s.Mutex.Lock()
+		block.Replicas = append(block.Replicas, s.ID)
+		s.Metadata.UpdateBlockMetadata(block)
+		s.Mutex.Unlock()
+
+		*reply = append(*reply, block)
+
+		log.Println("block replicated:", block)
+	}
+
+	return nil
+}
 
 func (s *Server) WriteBlock(args *WriteBlockArgs, reply *bool) error {
 	log.Println("WriteBlock():", args.File, args.Block.Num, args.Block.Name)

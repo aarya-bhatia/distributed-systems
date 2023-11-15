@@ -73,8 +73,8 @@ func (server *Server) Start() {
 	go server.ResourceManager.StartTaskPolling()
 	go server.ResourceManager.StartHeartbeatRoutine()
 
-	// go server.startRebalanceRoutine()
-	// go server.startMetadataRebalanceRoutine()
+	go server.startRebalanceRoutine()
+	go server.startMetadataRebalanceRoutine()
 
 	for {
 		conn, err := listener.Accept()
