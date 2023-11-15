@@ -129,6 +129,7 @@ func RemoveIndex[T comparable](arr []T, i int) []T {
 
 // Writes all bytes of given file and returns true if successful
 func WriteFile(filename string, flags int, buffer []byte, blockSize int) error {
+	// log.Println("Flags:",flags)
 	file, err := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE|flags, 0666)
 	if err != nil {
 		log.Warn(err)

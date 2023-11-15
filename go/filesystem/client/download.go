@@ -9,7 +9,7 @@ import (
 )
 
 func (client *SDFSClient) DownloadFile(writer Writer, filename string) error {
-	for i := 0; i < 3; i++ {
+	for i := 0; i < common.MAX_DOWNLOAD_RETRIES; i++ {
 		err := client.TryDownloadFile(writer, filename)
 		if err == nil {
 			return nil
@@ -65,15 +65,22 @@ func (client *SDFSClient) DownloadBlock(writer Writer, block server.BlockMetadat
 	for _, replica := range common.Shuffle(block.Replicas) {
 		conn, err := common.Connect(replica)
 		if err != nil {
+			log.Println(err)
 			continue
 		}
 		defer conn.Close()
 		log.Printf("Downloading block %v from replica %v", block, replica)
-		data := []byte{}
+		data := server.Block{}
 		if err := conn.Call(server.RPC_READ_BLOCK, &block, &data); err != nil {
+			log.Println(err)
 			continue
 		}
-		if err := writer.Write(data); err != nil {
+		if data.Name != block.Block {
+			log.Warn("Incorrect block received")
+			continue
+		}
+		if err := writer.Write(data.Data); err != nil {
+			log.Println(err)
 			return err
 		}
 		return nil

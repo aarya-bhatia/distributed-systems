@@ -34,11 +34,13 @@ type UploadStatus struct {
 }
 
 type Block struct {
+	Num  int
 	Name string
 	Data []byte
 }
 
 type WriteBlockArgs struct {
+	File  File
 	Block Block
 	Mode  int
 }
@@ -158,15 +160,22 @@ func (server *Server) DeleteFile(args *DeleteArgs, reply *bool) error {
 		return err
 	}
 
+	log.Println("DeleteFile()")
+
 	defer server.ResourceManager.Release(args.ClientID, args.File.Filename)
+	defer server.InternalDeleteFile(&args.File, reply)
 
 	server.Mutex.Lock()
 	defer server.Mutex.Unlock()
 
 	// broadcast delete request to all nodes
 	for node := range server.Nodes {
-		client, err := rpc.Dial("tcp", GetAddressByID(node))
+		if node == server.ID {
+			continue
+		}
+		client, err := common.Connect(node)
 		if err != nil {
+			log.Println(err)
 			continue
 		}
 		defer client.Close()
@@ -175,7 +184,7 @@ func (server *Server) DeleteFile(args *DeleteArgs, reply *bool) error {
 		}
 	}
 
-	return server.InternalDeleteFile(&args.File, reply)
+	return nil
 }
 
 // To finish upload and add update metadata at replicas and self
@@ -261,6 +270,7 @@ func (s *Server) startWrite(args *UploadArgs, reply *FileMetadata, mode int) err
 
 		for i := 0; i < prevFile.NumBlocks; i++ {
 			metadata.Blocks[i].Size = GetBlockSize(prevFile, i)
+			metadata.Blocks[i].Replicas = s.Metadata.GetReplicas(common.GetBlockName(prevFile.Filename, prevFile.Version, i)) // append to existing blocks at the same replicas
 		}
 
 		*reply = metadata
@@ -314,6 +324,8 @@ func (s *Server) InternalSetFileMetadata(args *FileMetadata, reply *bool) error 
 func (server *Server) InternalDeleteFile(file *File, reply *bool) error {
 	server.Mutex.Lock()
 	defer server.Mutex.Unlock()
+
+	log.Println("InternalDeleteFile()")
 
 	// delete disk blocks and metadata
 	for i := 0; i < file.NumBlocks; i++ {
@@ -373,10 +385,24 @@ func (s *Server) WriteBlock(args *WriteBlockArgs, reply *bool) error {
 	log.Println("WriteBlock()")
 	filename := s.Directory + "/" + common.EncodeFilename(args.Block.Name)
 
+	if args.Mode == common.FILE_APPEND {
+		if args.File.Version > 1 {
+			prevBlockName := common.GetBlockName(args.File.Filename, args.File.Version-1, args.Block.Num)
+			prevBlockFile := s.Directory + "/" + common.EncodeFilename(prevBlockName)
+			if !common.FileExists(prevBlockFile) {
+				return errors.New("prev block does not exist")
+			}
+			if err := os.Rename(prevBlockFile, filename); err != nil {
+				log.Println(err)
+				return err
+			}
+			log.Printf("Renamed prev block from %s to %s", prevBlockFile, filename)
+		}
+		return common.WriteFile(filename, os.O_APPEND, args.Block.Data, len(args.Block.Data))
+	}
+
 	if args.Mode == common.FILE_TRUNCATE {
 		return common.WriteFile(filename, os.O_TRUNC, args.Block.Data, len(args.Block.Data))
-	} else if args.Mode == common.FILE_APPEND {
-		return common.WriteFile(filename, os.O_APPEND, args.Block.Data, len(args.Block.Data))
 	}
 
 	return errors.New("File mode is not valid")

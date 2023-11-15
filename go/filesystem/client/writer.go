@@ -6,7 +6,7 @@ import (
 )
 
 type Writer interface {
-	Write([]byte) (int, error) // consume next chunk of data
+	Write([]byte) error // consume next chunk of data
 	Close()
 	Open() error
 }
@@ -17,8 +17,7 @@ type FileWriter struct {
 }
 
 type ByteWriter struct {
-	Data   []byte
-	Offset int
+	Data []byte
 }
 
 func NewFileWriter(filename string) (*FileWriter, error) {
@@ -27,8 +26,9 @@ func NewFileWriter(filename string) (*FileWriter, error) {
 	return w, nil
 }
 
-func (w *FileWriter) Write(data []byte) (int, error) {
-	return w.file.Write(data)
+func (w *FileWriter) Write(data []byte) error {
+	_, err := w.file.Write(data)
+	return err
 }
 
 func (w *FileWriter) Open() error {
@@ -55,14 +55,16 @@ func NewByteWriter() *ByteWriter {
 }
 
 func (w *ByteWriter) Open() error {
-	w.Offset = 0
+	w.Data = []byte{}
 	return nil
 }
 
-func (w *ByteWriter) Write(data []byte) (int, error) {
-	n := copy(data, w.Data[w.Offset:])
-	w.Offset += n
-	return n, nil
+func (w *ByteWriter) Write(data []byte) error {
+	newData := make([]byte, len(w.Data)+len(data))
+	n := copy(newData, w.Data)
+	copy(newData[n:], data)
+	w.Data = newData
+	return nil
 }
 
 func (w *ByteWriter) String() string {

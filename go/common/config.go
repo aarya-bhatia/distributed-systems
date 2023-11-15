@@ -21,6 +21,9 @@ const (
 	UPLOAD_RETRY_TIME   = 2 * time.Second
 	DOWNLOAD_RETRY_TIME = 2 * time.Second
 
+	MAX_DOWNLOAD_RETRIES = 1
+	MAX_UPLOAD_RETRIES   = 1
+
 	NODES_PER_ROUND = 4 // Number of random peers to send gossip every round
 
 	GOSSIP_PROTOCOL            = 0

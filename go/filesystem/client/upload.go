@@ -9,7 +9,7 @@ import (
 )
 
 func (client *SDFSClient) WriteFile(reader Reader, dest string, mode int) error {
-	for i := 0; i < 3; i++ {
+	for i := 0; i < common.MAX_UPLOAD_RETRIES; i++ {
 		result := false
 		err := client.TryWrite(reader, dest, mode, &result)
 		if err == nil && result {
@@ -70,7 +70,9 @@ func (client *SDFSClient) TryWrite(reader Reader, filename string, mode int, res
 		}
 
 		args := server.WriteBlockArgs{
+			File: uploadReply.File,
 			Block: server.Block{
+				Num:  i,
 				Name: block.Block,
 				Data: data,
 			},

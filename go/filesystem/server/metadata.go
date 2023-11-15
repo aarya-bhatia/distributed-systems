@@ -43,6 +43,13 @@ func (m *ServerMetadata) HasBlock(block string) bool {
 	return ok
 }
 
+func (m *ServerMetadata) GetReplicas(block string) []int {
+	if !m.HasBlock(block) {
+		return []int{}
+	}
+	return m.BlockToNodes[block].ToSlice()
+}
+
 func (m *ServerMetadata) AddBlock(block string) {
 	if _, ok := m.BlockToNodes[block]; !ok {
 		m.BlockToNodes[block] = set.NewSet[int]()
