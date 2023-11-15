@@ -19,6 +19,7 @@ func printUsage() {
 	fmt.Println("ls <file>")
 	fmt.Println("get <remote> <local>")
 	fmt.Println("put <local> <remote>")
+	fmt.Println("append <local> <remote>")
 	fmt.Println("delete <remote>")
 	fmt.Println()
 }
@@ -65,6 +66,20 @@ func main() {
 			logrus.Fatal(err)
 		}
 
+	case "append":
+		if len(tokens) != 3 {
+			printUsage()
+			return
+		}
+
+		reader, err := client.NewFileReader(tokens[1])
+		if err != nil {
+			logrus.Fatal(err)
+		}
+		if err := sdfsClient.WriteFile(reader, tokens[2], common.FILE_APPEND); err != nil {
+			logrus.Fatal(err)
+		}
+
 	case "get":
 		if len(tokens) != 3 {
 			printUsage()
@@ -102,7 +117,6 @@ func main() {
 
 		fmt.Println("File:", file.File.Filename)
 		fmt.Println("Size:", file.File.FileSize)
-		fmt.Println("Version:", file.File.Version)
 
 		t := table.NewWriter()
 		t.SetOutputMirror(os.Stdout)

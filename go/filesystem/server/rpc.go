@@ -236,22 +236,10 @@ func (s *Server) startWrite(args *UploadArgs, reply *FileMetadata, mode int) err
 
 	prevFile, ok := s.Files[filename]
 
-	if !ok {
+	if !ok || mode == common.FILE_TRUNCATE {
 		newFile := File{
 			Filename:  filename,
 			FileSize:  size,
-			Version:   1,
-			NumBlocks: common.GetNumFileBlocks(int64(size)),
-		}
-
-		*reply = s.Metadata.GetNewMetadata(newFile, s.Nodes)
-		return nil
-
-	} else if mode == common.FILE_TRUNCATE {
-		newFile := File{
-			Filename:  filename,
-			FileSize:  size,
-			Version:   prevFile.Version + 1,
 			NumBlocks: common.GetNumFileBlocks(int64(size)),
 		}
 
@@ -262,7 +250,6 @@ func (s *Server) startWrite(args *UploadArgs, reply *FileMetadata, mode int) err
 		newFile := File{
 			Filename:  filename,
 			FileSize:  size + prevFile.FileSize,
-			Version:   prevFile.Version + 1,
 			NumBlocks: common.GetNumFileBlocks(int64(size + prevFile.FileSize)),
 		}
 
@@ -270,7 +257,7 @@ func (s *Server) startWrite(args *UploadArgs, reply *FileMetadata, mode int) err
 
 		for i := 0; i < prevFile.NumBlocks; i++ {
 			metadata.Blocks[i].Size = GetBlockSize(prevFile, i)
-			metadata.Blocks[i].Replicas = s.Metadata.GetReplicas(common.GetBlockName(prevFile.Filename, prevFile.Version, i)) // append to existing blocks at the same replicas
+			metadata.Blocks[i].Replicas = s.Metadata.GetReplicas(common.GetBlockName(prevFile.Filename, i)) // append to existing blocks at the same replicas
 		}
 
 		*reply = metadata
@@ -301,22 +288,11 @@ func (s *Server) InternalSetFileMetadata(args *FileMetadata, reply *bool) error 
 	s.Mutex.Lock()
 	defer s.Mutex.Unlock()
 
-	if old, ok := s.Files[args.File.Filename]; ok {
-		if old.Version > args.File.Version { // given file is older than current
-			return nil // do nothing
-		} else if old.Version < args.File.Version { // given file is newer than current
-			go s.InternalDeleteFile(&old, new(bool)) // delete old file
-		}
-	}
-
 	s.Files[args.File.Filename] = args.File
-
 	for _, block := range args.Blocks {
 		s.Metadata.UpdateBlockMetadata(block)
 	}
-
 	log.Println("Metadata updated:", args.File)
-
 	return nil
 }
 
@@ -329,7 +305,7 @@ func (server *Server) InternalDeleteFile(file *File, reply *bool) error {
 
 	// delete disk blocks and metadata
 	for i := 0; i < file.NumBlocks; i++ {
-		blockName := common.GetBlockName(file.Filename, file.Version, i)
+		blockName := common.GetBlockName(file.Filename, i)
 		server.Metadata.RemoveBlock(blockName)
 		localFilename := server.Directory + "/" + common.EncodeFilename(blockName)
 		if common.FileExists(localFilename) {
@@ -337,10 +313,7 @@ func (server *Server) InternalDeleteFile(file *File, reply *bool) error {
 		}
 	}
 
-	// delete file metadata unless newer version file exists
-	if found, ok := server.Files[file.Filename]; ok && found.Version <= file.Version {
-		delete(server.Files, file.Filename)
-	}
+	delete(server.Files, file.Filename)
 
 	log.Warn("Deleted file:", file)
 	return nil
@@ -382,22 +355,11 @@ func (server *Server) InternalDeleteFile(file *File, reply *bool) error {
 // }
 
 func (s *Server) WriteBlock(args *WriteBlockArgs, reply *bool) error {
-	log.Println("WriteBlock()")
+	log.Println("WriteBlock():", args.File, args.Block.Num, args.Block.Name)
+
 	filename := s.Directory + "/" + common.EncodeFilename(args.Block.Name)
 
 	if args.Mode == common.FILE_APPEND {
-		if args.File.Version > 1 {
-			prevBlockName := common.GetBlockName(args.File.Filename, args.File.Version-1, args.Block.Num)
-			prevBlockFile := s.Directory + "/" + common.EncodeFilename(prevBlockName)
-			if !common.FileExists(prevBlockFile) {
-				return errors.New("prev block does not exist")
-			}
-			if err := os.Rename(prevBlockFile, filename); err != nil {
-				log.Println(err)
-				return err
-			}
-			log.Printf("Renamed prev block from %s to %s", prevBlockFile, filename)
-		}
 		return common.WriteFile(filename, os.O_APPEND, args.Block.Data, len(args.Block.Data))
 	}
 
@@ -409,7 +371,8 @@ func (s *Server) WriteBlock(args *WriteBlockArgs, reply *bool) error {
 }
 
 func (s *Server) ReadBlock(args *DownloadBlockArgs, reply *Block) error {
-	log.Println("ReadBlock()")
+	log.Println("ReadBlock():", args.Block, args.Size)
+
 	filename := s.Directory + "/" + common.DecodeFilename(args.Block)
 	if !common.FileExists(filename) {
 		return errors.New("block not found")

@@ -12,8 +12,6 @@ import (
 const (
 	READ  = 0
 	WRITE = 1
-	// APPEND = 2
-	// DELETE = 3
 )
 
 type Resource struct {

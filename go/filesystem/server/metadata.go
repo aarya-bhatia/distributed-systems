@@ -93,7 +93,7 @@ func (m *ServerMetadata) UpdateBlockMetadata(block BlockMetadata) {
 func (m *ServerMetadata) GetMetadata(file File) FileMetadata {
 	res := FileMetadata{File: file, Blocks: make([]BlockMetadata, 0)}
 	for i := 0; i < file.NumBlocks; i++ {
-		blockName := common.GetBlockName(file.Filename, file.Version, i)
+		blockName := common.GetBlockName(file.Filename, i)
 		blockReplicas := m.BlockToNodes[blockName].ToSlice()
 		blockMetadata := BlockMetadata{
 			Block:    blockName,
@@ -110,7 +110,7 @@ func (m *ServerMetadata) GetNewMetadata(file File, aliveNodes map[int]common.Nod
 	res := FileMetadata{File: file, Blocks: make([]BlockMetadata, 0)}
 	aliveNodeSet := set.NewSetFromMapKeys[int](aliveNodes)
 	for i := 0; i < file.NumBlocks; i++ {
-		blockName := common.GetBlockName(file.Filename, file.Version, i)
+		blockName := common.GetBlockName(file.Filename, i)
 		blockReplicas := GetReplicaNodes(aliveNodeSet.ToSlice(), blockName, common.REPLICA_FACTOR)
 
 		blockMetadata := BlockMetadata{

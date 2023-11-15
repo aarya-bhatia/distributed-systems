@@ -16,7 +16,6 @@ import (
 
 type File struct {
 	Filename  string
-	Version   int
 	FileSize  int
 	NumBlocks int
 }
@@ -36,9 +35,9 @@ type Server struct {
 	Hostname        string
 	Port            int
 	ID              int
-	Directory       string                     // Path to save blocks on disk
-	Files           map[string]File // Files stored by system
-	Nodes           map[int]common.Node        // Set of alive nodes
+	Directory       string              // Path to save blocks on disk
+	Files           map[string]File     // Files stored by system
+	Nodes           map[int]common.Node // Set of alive nodes
 	Mutex           sync.Mutex
 	ResourceManager *ResourceManager
 	Metadata        *ServerMetadata
@@ -194,18 +193,17 @@ func (server *Server) PrintFiles() {
 
 	t := table.NewWriter()
 	t.SetOutputMirror(os.Stdout)
-	t.AppendHeader(table.Row{"File", "Version", "Blocks", "Size", "Replicas"})
+	t.AppendHeader(table.Row{"File", "Blocks", "Size", "Replicas"})
 
 	for _, file := range server.Files {
 		replicas := set.NewSet[int]()
 		for i := 0; i < file.NumBlocks; i++ {
-			blockName := common.GetBlockName(file.Filename, file.Version, i)
+			blockName := common.GetBlockName(file.Filename, i)
 			replicas = replicas.Union(server.Metadata.BlockToNodes[blockName])
 		}
 
 		t.AppendRow(table.Row{
 			file.Filename,
-			file.Version,
 			file.NumBlocks,
 			file.FileSize,
 			replicas.ToSlice(),

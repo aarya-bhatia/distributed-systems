@@ -49,8 +49,8 @@ func TestMetadata(t *testing.T) {
 	assert.True(t, m.NodesToBlocks[2].Contains(b1))
 	assert.False(t, m.NodesToBlocks[2].Contains(b2))
 
-	log.Println(m.GetMetadata(File{Filename: "foo", FileSize: 10, Version: 1, NumBlocks: 1}))
-	log.Println(m.GetMetadata(File{Filename: "bar", FileSize: 10, Version: 1, NumBlocks: 1}))
+	log.Println(m.GetMetadata(File{Filename: "foo", FileSize: 10, NumBlocks: 1}))
+	log.Println(m.GetMetadata(File{Filename: "bar", FileSize: 10, NumBlocks: 1}))
 }
 
 func TestRPC(t *testing.T) {

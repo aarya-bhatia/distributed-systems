@@ -60,9 +60,9 @@ func GetHash(s string, N int) int {
 	return int(hashValue % uint32(N))
 }
 
-// Returns block name using the convention filename:version:blockNumber
-func GetBlockName(filename string, version int, blockNum int) string {
-	return fmt.Sprintf("%s:%d:%d", filename, version, blockNum)
+// Returns block name using the convention filename:blockNumber
+func GetBlockName(filename string, blockNum int) string {
+	return fmt.Sprintf("%s:%d", filename, blockNum)
 }
 
 // Returns the number blocks for a file of given size

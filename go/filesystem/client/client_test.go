@@ -70,3 +70,25 @@ func TestAppend(t *testing.T) {
 	assert.Nil(t, sdfsClient.DownloadFile(w, "test"))
 	assert.Equal(t, w.String(), "Hello\nWorld\n")
 }
+
+func TestLargeFile(t *testing.T) {
+	sdfsClient := getClient()
+
+	assert.Nil(t, sdfsClient.DeleteFile("large"))
+
+	reader, err := NewFileReader("data/large")
+	assert.Nil(t, err)
+
+	err = sdfsClient.WriteFile(reader, "large", common.FILE_TRUNCATE)
+	assert.Nil(t, err)
+
+	err = sdfsClient.WriteFile(reader, "large", common.FILE_APPEND)
+	assert.Nil(t, err)
+
+	file, err := sdfsClient.GetFile("large")
+	assert.Nil(t, err)
+	assert.True(t, file.File.FileSize == 2*reader.Size())
+	assert.True(t, len(file.Blocks) == common.GetNumFileBlocks(int64(2*reader.Size())))
+	assert.True(t, file.Blocks[0].Size == common.BLOCK_SIZE)
+	assert.True(t, len(file.Blocks[0].Replicas) > 0)
+}

@@ -152,14 +152,13 @@ func stdinListener(info common.Node, fs *server.Server, fd *failuredetector.Serv
 
 			t := table.NewWriter()
 			t.SetOutputMirror(os.Stdout)
-			t.AppendHeader(table.Row{"Filename", "Version", "Block", "Size"})
+			t.AppendHeader(table.Row{"Filename", "Block", "Size"})
 
 			for _, f := range files {
 				tokens := strings.Split(f.Name, ":")
 				t.AppendRow(table.Row{
 					tokens[0],
 					tokens[1],
-					tokens[2],
 					f.Size,
 				})
 			}
