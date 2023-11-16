@@ -7,8 +7,8 @@ import (
 )
 
 type Scheduler struct {
-	BusyWorkers map[string]Task
-	IdleWorkers []string
+	BusyWorkers map[int]Task
+	IdleWorkers []int
 	Mutex       sync.Mutex
 	CV          sync.Cond
 	Tasks       []Task
@@ -16,14 +16,14 @@ type Scheduler struct {
 
 func NewScheduler() *Scheduler {
 	s := new(Scheduler)
-	s.BusyWorkers = make(map[string]Task, 0)
-	s.IdleWorkers = make([]string, 0)
+	s.BusyWorkers = make(map[int]Task, 0)
+	s.IdleWorkers = make([]int, 0)
 	s.Tasks = make([]Task, 0)
 	s.CV = *sync.NewCond(&s.Mutex)
 	return s
 }
 
-func (s *Scheduler) StartTask(worker string, task Task, data TaskData) {
+func (s *Scheduler) StartTask(worker int, task Task, data TaskData) {
 	log.Println("task started")
 	if task.Start(worker, data) {
 		s.TaskDone(worker)
@@ -33,7 +33,7 @@ func (s *Scheduler) StartTask(worker string, task Task, data TaskData) {
 	log.Println("task finished")
 }
 
-func (s *Scheduler) RestartTask(worker string, task Task) {
+func (s *Scheduler) RestartTask(worker int, task Task) {
 	if task.Restart(worker) {
 		s.TaskDone(worker)
 	} else {
@@ -41,7 +41,7 @@ func (s *Scheduler) RestartTask(worker string, task Task) {
 	}
 }
 
-func (s *Scheduler) AddWorker(worker string) {
+func (s *Scheduler) AddWorker(worker int) {
 	s.Mutex.Lock()
 	defer s.Mutex.Unlock()
 	defer s.CV.Broadcast()
@@ -49,7 +49,7 @@ func (s *Scheduler) AddWorker(worker string) {
 	log.Debug("Added worker", worker)
 }
 
-func (s *Scheduler) RemoveWorker(worker string) {
+func (s *Scheduler) RemoveWorker(worker int) {
 	s.Mutex.Lock()
 	defer s.Mutex.Unlock()
 	defer s.CV.Broadcast()
@@ -61,7 +61,7 @@ func (s *Scheduler) RemoveWorker(worker string) {
 	log.Debug("Removed worker", worker)
 }
 
-func (s *Scheduler) TaskDone(worker string) {
+func (s *Scheduler) TaskDone(worker int) {
 	s.Mutex.Lock()
 	defer s.Mutex.Unlock()
 	defer s.CV.Broadcast()
@@ -70,7 +70,7 @@ func (s *Scheduler) TaskDone(worker string) {
 	log.Debug("Task done by worker", worker)
 }
 
-func (s *Scheduler) TaskFail(worker string) {
+func (s *Scheduler) TaskFail(worker int) {
 	s.Mutex.Lock()
 	defer s.Mutex.Unlock()
 	defer s.CV.Broadcast()

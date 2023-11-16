@@ -1,0 +1,68 @@
+package main
+
+import (
+	"cs425/common"
+	"cs425/maplejuice"
+	"fmt"
+	"os"
+	"strconv"
+
+	log "github.com/sirupsen/logrus"
+)
+
+func printUsage() {
+	fmt.Println("maple <maple_exe> <num_maples> <sdfs_intermediate_filename_prefix> <sdfs_src_directory>")
+	os.Exit(1)
+}
+
+func checkError(err error) {
+	if err != nil {
+		log.Fatal(err)
+	}
+}
+
+func Maple(tokens []string) error {
+	leaderID := common.Cluster[0].ID
+	conn, err := common.Connect(leaderID)
+	checkError(err)
+
+	if len(tokens) < 5 {
+		printUsage()
+	}
+
+	maple_exe := tokens[1]
+
+	num_maples, err := strconv.Atoi(tokens[2])
+	checkError(err)
+
+	sdfs_prefix := tokens[3]
+	sdfs_src_dir := tokens[4]
+
+	args := maplejuice.MapParam{
+		MapperExe:    maple_exe,
+		NumMapper:    num_maples,
+		OutputPrefix: sdfs_prefix,
+		InputDir:     sdfs_src_dir,
+	}
+
+	return conn.Call("Leader.MapleRequest", &args, new(bool))
+}
+
+func main() {
+	common.Cluster = common.LocalMapleJuiceCluster
+	log.Println(common.Cluster)
+
+	if len(os.Args) < 2 {
+		printUsage()
+	}
+
+	tokens := os.Args[1:]
+
+	switch tokens[0] {
+	case "maple":
+		Maple(tokens)
+
+	default:
+		printUsage()
+	}
+}

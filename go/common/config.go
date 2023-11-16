@@ -43,6 +43,8 @@ const (
 
 	MAPLEJUICE_FD_PORT  = 9000
 	MAPLEJUICE_RPC_PORT = 7000
+
+	MAPLE_CHUNK_LINE_COUNT = 100
 )
 
 type Node struct {

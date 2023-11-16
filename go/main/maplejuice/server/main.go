@@ -10,7 +10,7 @@ import (
 )
 
 func main() {
-	common.Cluster = common.LocalMapReduceCluster // TODO
+	common.Cluster = common.LocalMapleJuiceCluster // TODO
 
 	if len(os.Args) < 2 {
 		log.Fatal("Usage: maplejuice <ID>")
@@ -22,7 +22,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	info := common.LocalMapReduceCluster[id-1]
+	info := common.Cluster[id-1]
 
 	if id == 1 {
 		server := maplejuice.NewLeader(info)
@@ -30,7 +30,7 @@ func main() {
 		go server.Start()
 	} else {
 		go failuredetector.NewServer(info.Hostname, info.UDPPort, common.GOSSIP_PROTOCOL, nil).Start()
-		go maplejuice.StartRPCServer(info.Hostname, info.TCPPort)
+		go maplejuice.StartRPCServer(info.Hostname, info.RPCPort)
 	}
 
 	<-make(chan bool)
