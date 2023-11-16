@@ -127,7 +127,7 @@ func Setup() {
 		os.Exit(1)
 	}
 
-	if os.Getenv("environment") == "production" || strings.Index(hostname, "illinois.edU") > 0 {
+	if os.Getenv("environment") == "production" || strings.Index(hostname, "illinois.edu") > 0 {
 		os.Setenv("environment", "production")
 		SDFSCluster = SDFSProdCluster
 		MapleJuiceCluster = ProdMapleJuiceCluster
@@ -139,6 +139,7 @@ func Setup() {
 		INTRODUCER_ADDRESS = fmt.Sprintf("%s:%d", local_introducer_host, local_introducer_port)
 	}
 
+	logrus.Println("Environment:", os.Getenv("environment"))
 	logrus.Println("SDFS cluster:", SDFSCluster)
 	logrus.Println("MapleJuice cluster:", MapleJuiceCluster)
 	logrus.Println("Introducer:", INTRODUCER_ADDRESS)
@@ -168,6 +169,8 @@ func GetNodeByHostname(hostname string, cluster []Node) *Node {
 			return &node
 		}
 	}
+
+	logrus.Fatal("No node with hostname:", hostname)
 	return nil
 }
 
@@ -177,6 +180,8 @@ func GetNodeByID(ID int, cluster []Node) *Node {
 			return &node
 		}
 	}
+
+	logrus.Fatal("No node with ID:", ID)
 	return nil
 }
 
@@ -191,6 +196,8 @@ func GetNodeByAddress(hostname string, udpPort int) *Node {
 			return &node
 		}
 	}
+
+	logrus.Fatalf("No node with hostname %s and udpPort %d", hostname, udpPort)
 	return nil
 }
 
