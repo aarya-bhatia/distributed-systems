@@ -172,18 +172,18 @@ func (s *Server) GetAliveNodes() []int {
 func (s *Server) HandleNodeJoin(info *common.Node) {
 	s.Mutex.Lock()
 	defer s.Mutex.Unlock()
-
 	if info == nil {
 		return
 	}
-
-	if !common.IsSDFSNode(*info) {
+	if common.IsMapleJuiceNode(*info) {
+		log.Println("MapleJuice Node joined:", *info)
 		return
 	}
-
-	log.Debug("node join: ", *info)
-	s.Nodes[info.ID] = *info
-	s.Metadata.AddNode(info.ID)
+	if common.IsSDFSNode(*info) {
+		log.Debug("SDFS Node joined: ", *info)
+		s.Nodes[info.ID] = *info
+		s.Metadata.AddNode(info.ID)
+	}
 }
 
 func (s *Server) HandleNodeLeave(info *common.Node) {
@@ -193,15 +193,15 @@ func (s *Server) HandleNodeLeave(info *common.Node) {
 	if info == nil {
 		return
 	}
-
-	if !common.IsSDFSNode(*info) {
+	if common.IsMapleJuiceNode(*info) {
+		log.Println("MapleJuice Node left:", *info)
 		return
 	}
-
-	log.Debug("node left: ", *info)
-	s.Metadata.RemoveNode(info.ID)
-	delete(s.Nodes, info.ID)
-
+	if common.IsSDFSNode(*info) {
+		log.Println("SDFS Node left:", *info)
+		s.Metadata.RemoveNode(info.ID)
+		delete(s.Nodes, info.ID)
+	}
 }
 func (server *Server) PrintFiles() {
 	server.Mutex.Lock()

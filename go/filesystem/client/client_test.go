@@ -10,8 +10,8 @@ import (
 )
 
 func getClient() *SDFSClient {
-	common.Cluster = common.SDFSLocalCluster
-	node := common.Cluster[0]
+	common.SDFSCluster = common.SDFSLocalCluster
+	node := common.SDFSCluster[0]
 	addr := common.GetAddress(node.Hostname, node.RPCPort)
 	return NewSDFSClient(addr)
 }

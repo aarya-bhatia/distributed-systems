@@ -1,12 +1,10 @@
 package common
 
 import (
-	"fmt"
+	"github.com/sirupsen/logrus"
 	"os"
 	"strings"
 	"time"
-
-	"github.com/sirupsen/logrus"
 )
 
 const (
@@ -51,6 +49,8 @@ const (
 
 	MAPLE_CHUNK_LINE_COUNT = 100
 
+	MAPLE_JUICE_LEADER_ID = 11
+
 	local_introducer_host = "localhost"
 	local_introducer_port = 34000
 	prod_introducer_host  = "fa23-cs425-0701.cs.illinois.edu"
@@ -93,29 +93,29 @@ var SDFSLocalCluster = []Node{
 }
 
 var ProdMapleJuiceCluster = []Node{
-	{1, "fa23-cs425-0701.cs.illinois.edu", MAPLEJUICE_FD_PORT, MAPLEJUICE_RPC_PORT},
-	{2, "fa23-cs425-0702.cs.illinois.edu", MAPLEJUICE_FD_PORT, MAPLEJUICE_RPC_PORT},
-	{3, "fa23-cs425-0703.cs.illinois.edu", MAPLEJUICE_FD_PORT, MAPLEJUICE_RPC_PORT},
-	{4, "fa23-cs425-0704.cs.illinois.edu", MAPLEJUICE_FD_PORT, MAPLEJUICE_RPC_PORT},
-	{5, "fa23-cs425-0705.cs.illinois.edu", MAPLEJUICE_FD_PORT, MAPLEJUICE_RPC_PORT},
-	{6, "fa23-cs425-0706.cs.illinois.edu", MAPLEJUICE_FD_PORT, MAPLEJUICE_RPC_PORT},
-	{7, "fa23-cs425-0707.cs.illinois.edu", MAPLEJUICE_FD_PORT, MAPLEJUICE_RPC_PORT},
-	{8, "fa23-cs425-0708.cs.illinois.edu", MAPLEJUICE_FD_PORT, MAPLEJUICE_RPC_PORT},
-	{9, "fa23-cs425-0709.cs.illinois.edu", MAPLEJUICE_FD_PORT, MAPLEJUICE_RPC_PORT},
-	{10, "fa23-cs425-0710.cs.illinois.edu", MAPLEJUICE_FD_PORT, MAPLEJUICE_RPC_PORT},
+	{11, "fa23-cs425-0701.cs.illinois.edu", MAPLEJUICE_FD_PORT, MAPLEJUICE_RPC_PORT},
+	{12, "fa23-cs425-0702.cs.illinois.edu", MAPLEJUICE_FD_PORT, MAPLEJUICE_RPC_PORT},
+	{13, "fa23-cs425-0703.cs.illinois.edu", MAPLEJUICE_FD_PORT, MAPLEJUICE_RPC_PORT},
+	{14, "fa23-cs425-0704.cs.illinois.edu", MAPLEJUICE_FD_PORT, MAPLEJUICE_RPC_PORT},
+	{15, "fa23-cs425-0705.cs.illinois.edu", MAPLEJUICE_FD_PORT, MAPLEJUICE_RPC_PORT},
+	{16, "fa23-cs425-0706.cs.illinois.edu", MAPLEJUICE_FD_PORT, MAPLEJUICE_RPC_PORT},
+	{17, "fa23-cs425-0707.cs.illinois.edu", MAPLEJUICE_FD_PORT, MAPLEJUICE_RPC_PORT},
+	{18, "fa23-cs425-0708.cs.illinois.edu", MAPLEJUICE_FD_PORT, MAPLEJUICE_RPC_PORT},
+	{19, "fa23-cs425-0709.cs.illinois.edu", MAPLEJUICE_FD_PORT, MAPLEJUICE_RPC_PORT},
+	{20, "fa23-cs425-0710.cs.illinois.edu", MAPLEJUICE_FD_PORT, MAPLEJUICE_RPC_PORT},
 }
 
 var LocalMapleJuiceCluster = []Node{
-	{1, "localhost", MAPLEJUICE_FD_PORT + 1, MAPLEJUICE_RPC_PORT + 1},
-	{2, "localhost", MAPLEJUICE_FD_PORT + 2, MAPLEJUICE_RPC_PORT + 2},
-	{3, "localhost", MAPLEJUICE_FD_PORT + 3, MAPLEJUICE_RPC_PORT + 3},
-	{4, "localhost", MAPLEJUICE_FD_PORT + 4, MAPLEJUICE_RPC_PORT + 4},
-	{5, "localhost", MAPLEJUICE_FD_PORT + 5, MAPLEJUICE_RPC_PORT + 5},
-	{6, "localhost", MAPLEJUICE_FD_PORT + 6, MAPLEJUICE_RPC_PORT + 6},
-	{7, "localhost", MAPLEJUICE_FD_PORT + 7, MAPLEJUICE_RPC_PORT + 7},
-	{8, "localhost", MAPLEJUICE_FD_PORT + 8, MAPLEJUICE_RPC_PORT + 8},
-	{9, "localhost", MAPLEJUICE_FD_PORT + 9, MAPLEJUICE_RPC_PORT + 9},
-	{10, "localhost", MAPLEJUICE_FD_PORT + 10, MAPLEJUICE_RPC_PORT + 10},
+	{11, "localhost", MAPLEJUICE_FD_PORT + 1, MAPLEJUICE_RPC_PORT + 1},
+	{12, "localhost", MAPLEJUICE_FD_PORT + 2, MAPLEJUICE_RPC_PORT + 2},
+	{13, "localhost", MAPLEJUICE_FD_PORT + 3, MAPLEJUICE_RPC_PORT + 3},
+	{14, "localhost", MAPLEJUICE_FD_PORT + 4, MAPLEJUICE_RPC_PORT + 4},
+	{15, "localhost", MAPLEJUICE_FD_PORT + 5, MAPLEJUICE_RPC_PORT + 5},
+	{16, "localhost", MAPLEJUICE_FD_PORT + 6, MAPLEJUICE_RPC_PORT + 6},
+	{17, "localhost", MAPLEJUICE_FD_PORT + 7, MAPLEJUICE_RPC_PORT + 7},
+	{18, "localhost", MAPLEJUICE_FD_PORT + 8, MAPLEJUICE_RPC_PORT + 8},
+	{19, "localhost", MAPLEJUICE_FD_PORT + 9, MAPLEJUICE_RPC_PORT + 9},
+	{20, "localhost", MAPLEJUICE_FD_PORT + 10, MAPLEJUICE_RPC_PORT + 10},
 }
 
 var SDFSCluster []Node
@@ -131,12 +131,12 @@ func Setup() {
 		os.Setenv("environment", "production")
 		SDFSCluster = SDFSProdCluster
 		MapleJuiceCluster = ProdMapleJuiceCluster
-		INTRODUCER_ADDRESS = fmt.Sprintf("%s:%d", prod_introducer_host, prod_introducer_port)
+		INTRODUCER_ADDRESS = GetAddress(prod_introducer_host, prod_introducer_port)
 	} else {
 		os.Setenv("environment", "development")
 		SDFSCluster = SDFSLocalCluster
 		MapleJuiceCluster = LocalMapleJuiceCluster
-		INTRODUCER_ADDRESS = fmt.Sprintf("%s:%d", local_introducer_host, local_introducer_port)
+		INTRODUCER_ADDRESS = GetAddress(local_introducer_host, local_introducer_port)
 	}
 
 	logrus.Println("Environment:", os.Getenv("environment"))
@@ -170,7 +170,7 @@ func GetNodeByHostname(hostname string, cluster []Node) *Node {
 		}
 	}
 
-	logrus.Fatal("No node with hostname:", hostname)
+	// logrus.Fatal("No node with hostname:", hostname)
 	return nil
 }
 
@@ -181,7 +181,7 @@ func GetNodeByID(ID int, cluster []Node) *Node {
 		}
 	}
 
-	logrus.Fatal("No node with ID:", ID)
+	// logrus.Fatal("No node with ID:", ID)
 	return nil
 }
 
@@ -197,7 +197,7 @@ func GetNodeByAddress(hostname string, udpPort int) *Node {
 		}
 	}
 
-	logrus.Fatalf("No node with hostname %s and udpPort %d", hostname, udpPort)
+	// logrus.Fatalf("No node with hostname %s and udpPort %d", hostname, udpPort)
 	return nil
 }
 

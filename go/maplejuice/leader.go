@@ -2,9 +2,12 @@ package maplejuice
 
 import (
 	"cs425/common"
-	log "github.com/sirupsen/logrus"
+	"cs425/filesystem/client"
+	"errors"
 	"sync"
 	"time"
+
+	log "github.com/sirupsen/logrus"
 )
 
 type Leader struct {
@@ -15,6 +18,7 @@ type Leader struct {
 	Scheduler *Scheduler
 	Jobs      []Job
 	Status    int
+	SDFSNodes []common.Node
 }
 
 type Job interface {
@@ -40,27 +44,35 @@ func NewLeader(info common.Node) *Leader {
 }
 
 func (server *Leader) HandleNodeJoin(node *common.Node) {
+	server.Mutex.Lock()
+	defer server.Mutex.Unlock()
+
 	if node == nil {
 		return
+	} else if common.IsSDFSNode(*node) {
+		log.Debug("SDFS Node joined: ", *node)
+		server.SDFSNodes = append(server.SDFSNodes, *node)
+	} else if common.IsMapleJuiceNode(*node) {
+		log.Println("MapleJuice Node joined:", *node)
+		server.Scheduler.AddWorker(node.ID)
 	}
-
-	if !common.IsMapleJuiceNode(*node) {
-		return
-	}
-
-	server.Scheduler.AddWorker(node.ID)
 }
 
 func (server *Leader) HandleNodeLeave(node *common.Node) {
 	if node == nil {
 		return
+	} else if common.IsSDFSNode(*node) {
+		log.Println("SDFS Node left:", *node)
+		for i, sdfsNode := range server.SDFSNodes {
+			if sdfsNode.ID == node.ID {
+				server.SDFSNodes = common.RemoveIndex(server.SDFSNodes, i)
+				return
+			}
+		}
+	} else if common.IsMapleJuiceNode(*node) {
+		log.Println("MapleJuice Node left:", *node)
+		server.Scheduler.RemoveWorker(node.ID)
 	}
-
-	if !common.IsMapleJuiceNode(*node) {
-		return
-	}
-
-	server.Scheduler.RemoveWorker(node.ID)
 }
 
 func (server *Leader) Start() {
@@ -98,17 +110,35 @@ func (server *Leader) runJobs() {
 	}
 }
 
-// USAGE: maple maple_exe num_maples sdfs_prefix sdfs_src_dir
 func (server *Leader) MapleRequest(args *MapParam, reply *bool) error {
-	// inputFiles := server.listDirectory(sdfs_src_dir)
-	// inputFiles := []string{} // TODO
+	sdfsClient, err := server.GetSDFSClient()
+	if err != nil {
+		return err
+	}
+
+	inputFiles, err := sdfsClient.ListDirectory(args.InputDir)
+	if err != nil {
+		return err
+	}
+
 	server.addJob(&MapJob{
 		ID:         time.Now().UnixNano(),
 		Param:      *args,
-		InputFiles: []string{"hello"},
+		InputFiles: *inputFiles,
 	})
 
 	return nil
 }
 
 // TODO: JuiceRequest
+
+func (server *Leader) GetSDFSClient() (*client.SDFSClient, error) {
+	if len(server.SDFSNodes) == 0 {
+		return nil, errors.New("No SDFS nodes are available")
+	}
+
+	serverNode := common.RandomChoice(server.SDFSNodes)
+	sdfsClient := client.NewSDFSClient(common.GetAddress(serverNode.Hostname, serverNode.RPCPort))
+
+	return sdfsClient, nil
+}

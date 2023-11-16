@@ -30,13 +30,14 @@ func main() {
 		info = *common.GetCurrentNode(common.MapleJuiceCluster)
 	}
 
-	if info.ID == 1 {
+	if info.ID == common.MAPLE_JUICE_LEADER_ID {
 		server := maplejuice.NewLeader(info)
 		go failuredetector.NewServer(info.Hostname, info.UDPPort, common.GOSSIP_PROTOCOL, server).Start()
 		go server.Start()
 	} else {
-		go failuredetector.NewServer(info.Hostname, info.UDPPort, common.GOSSIP_PROTOCOL, nil).Start()
-		go maplejuice.StartRPCServer(info.Hostname, info.RPCPort)
+		service := maplejuice.NewService(info.Hostname, info.RPCPort)
+		go failuredetector.NewServer(info.Hostname, info.UDPPort, common.GOSSIP_PROTOCOL, service).Start()
+		go service.Start()
 	}
 
 	<-make(chan bool)

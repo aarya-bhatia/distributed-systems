@@ -2,7 +2,6 @@ package server
 
 import (
 	"cs425/common"
-	"cs425/filesystem"
 	"fmt"
 	"net/rpc"
 	"testing"
@@ -54,8 +53,8 @@ func TestMetadata(t *testing.T) {
 }
 
 func TestRPC(t *testing.T) {
-	common.Cluster = common.SDFSLocalCluster
-	node := common.Cluster[0]
+	common.SDFSCluster = common.SDFSLocalCluster
+	node := common.SDFSCluster[0]
 	addr := common.GetAddress(node.Hostname, node.RPCPort)
 	fmt.Println("Server:", addr)
 	conn, err := rpc.Dial("tcp", addr)
