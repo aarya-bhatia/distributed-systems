@@ -173,6 +173,14 @@ func (s *Server) HandleNodeJoin(info *common.Node) {
 	s.Mutex.Lock()
 	defer s.Mutex.Unlock()
 
+	if info == nil {
+		return
+	}
+
+	if !common.IsSDFSNode(*info) {
+		return
+	}
+
 	log.Debug("node join: ", *info)
 	s.Nodes[info.ID] = *info
 	s.Metadata.AddNode(info.ID)
@@ -181,6 +189,14 @@ func (s *Server) HandleNodeJoin(info *common.Node) {
 func (s *Server) HandleNodeLeave(info *common.Node) {
 	s.Mutex.Lock()
 	defer s.Mutex.Unlock()
+
+	if info == nil {
+		return
+	}
+
+	if !common.IsSDFSNode(*info) {
+		return
+	}
 
 	log.Debug("node left: ", *info)
 	s.Metadata.RemoveNode(info.ID)

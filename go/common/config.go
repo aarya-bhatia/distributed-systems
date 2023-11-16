@@ -193,3 +193,11 @@ func GetNodeByAddress(hostname string, udpPort int) *Node {
 	}
 	return nil
 }
+
+func IsSDFSNode(node Node) bool {
+	return GetNodeByID(node.ID, SDFSCluster) != nil
+}
+
+func IsMapleJuiceNode(node Node) bool {
+	return GetNodeByID(node.ID, MapleJuiceCluster) != nil
+}

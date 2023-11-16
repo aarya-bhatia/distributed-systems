@@ -40,10 +40,26 @@ func NewLeader(info common.Node) *Leader {
 }
 
 func (server *Leader) HandleNodeJoin(node *common.Node) {
+	if node == nil {
+		return
+	}
+
+	if !common.IsMapleJuiceNode(*node) {
+		return
+	}
+
 	server.Scheduler.AddWorker(node.ID)
 }
 
 func (server *Leader) HandleNodeLeave(node *common.Node) {
+	if node == nil {
+		return
+	}
+
+	if !common.IsMapleJuiceNode(*node) {
+		return
+	}
+
 	server.Scheduler.RemoveWorker(node.ID)
 }
 
