@@ -19,7 +19,7 @@ type Leader struct {
 
 type Job interface {
 	Name() string
-	Run(server *Leader) bool
+	Run(server *Leader) error
 }
 
 type TaskData interface{}
@@ -73,8 +73,12 @@ func (server *Leader) runJobs() {
 		server.Mutex.Unlock()
 
 		log.Println("job started:", job.Name())
-		job.Run(server)
-		log.Println("job finished:", job.Name())
+
+		if err := job.Run(server); err != nil {
+			log.Println("job failed:", err)
+		} else {
+			log.Println("job finished:", job.Name())
+		}
 	}
 }
 
@@ -85,7 +89,7 @@ func (server *Leader) MapleRequest(args *MapParam, reply *bool) error {
 	server.addJob(&MapJob{
 		ID:         time.Now().UnixNano(),
 		Param:      *args,
-		InputFiles: []string{"./data/vm1"}, // TODO
+		InputFiles: []string{"hello"},
 	})
 
 	return nil

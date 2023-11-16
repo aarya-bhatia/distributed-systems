@@ -296,7 +296,7 @@ func (s *Server) InternalSetFileMetadata(args *FileMetadata, reply *bool) error 
 	for _, block := range args.Blocks {
 		s.Metadata.UpdateBlockMetadata(block)
 	}
-	log.Println("Metadata updated:", args.File)
+	// log.Println("Metadata updated:", args.File)
 	return nil
 }
 

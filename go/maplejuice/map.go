@@ -2,9 +2,11 @@ package maplejuice
 
 import (
 	"cs425/common"
+	"cs425/filesystem/client"
 	"fmt"
-	log "github.com/sirupsen/logrus"
 	"time"
+
+	log "github.com/sirupsen/logrus"
 )
 
 type MapParam struct {
@@ -28,27 +30,31 @@ type MapTask struct {
 }
 
 type MapArgs struct {
-	Task *MapTask
-	Data []string
+	SDFSServer string
+	Task       *MapTask
+	Data       []string
 }
 
 func (job *MapJob) Name() string {
 	return fmt.Sprintf("<%d,maple,%s>", job.ID, job.Param.MapperExe)
 }
 
-func (job *MapJob) Run(server *Leader) bool {
+func (job *MapJob) Run(server *Leader) error {
 	for _, inputFile := range job.InputFiles {
 		log.Println("Input File:", inputFile)
 
-		fs := NewFileSplitter(inputFile)
-		if fs == nil {
-			return false
+		localSDFSNode := common.SDFSCluster[0]
+		sdfsClient := client.NewSDFSClient(common.GetAddress(localSDFSNode.Hostname, localSDFSNode.RPCPort))
+		writer := client.NewByteWriter()
+		if err := sdfsClient.DownloadFile(writer, inputFile); err != nil {
+			return err
 		}
 
+		splitter := NewSplitter(writer.String())
 		offset := 0
 
 		for {
-			lines, ok := fs.Next(common.MAPLE_CHUNK_LINE_COUNT)
+			lines, ok := splitter.Next(common.MAPLE_CHUNK_LINE_COUNT)
 			if !ok {
 				break
 			}
@@ -70,14 +76,14 @@ func (job *MapJob) Run(server *Leader) bool {
 		server.Scheduler.Wait()
 	}
 
-	return true
+	return nil
 }
 
 func (task *MapTask) Start(worker int, data TaskData) bool {
 	lines := data.([]string)
 	log.Println("Started map task:", len(lines), "lines")
 
-	client, err := common.Connect(worker)
+	client, err := common.Connect(worker, common.MapleJuiceCluster)
 	if err != nil {
 		log.Println(err)
 		return false

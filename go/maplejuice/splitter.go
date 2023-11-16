@@ -2,40 +2,22 @@ package maplejuice
 
 import (
 	"bufio"
-	"os"
-	"sync"
+	"strings"
 )
 
-type FileSplitter struct {
-	Filename string
-	File     *os.File
+type Splitter struct {
 	Reader   *bufio.Reader
 	Finished bool
 }
 
-type MultiFileSplitter struct {
-	Filename  []string
-	NumLines  int
-	Splitters []*FileSplitter
-	Mutex     sync.Mutex
-}
-
-func NewFileSplitter(filename string) *FileSplitter {
-	file, err := os.Open(filename)
-	if err != nil {
-		return nil
+func NewSplitter(data string) *Splitter {
+	return &Splitter{
+		Reader:   bufio.NewReader(strings.NewReader(data)),
+		Finished: false,
 	}
-
-	fs := new(FileSplitter)
-	fs.Filename = filename
-	fs.File = file
-	fs.Reader = bufio.NewReader(file)
-	fs.Finished = false
-
-	return fs
 }
 
-func (fs *FileSplitter) Next(count int) ([]string, bool) {
+func (fs *Splitter) Next(count int) ([]string, bool) {
 	if fs.Finished {
 		return nil, false
 	}
@@ -46,7 +28,6 @@ func (fs *FileSplitter) Next(count int) ([]string, bool) {
 		line, err := fs.Reader.ReadString('\n')
 		if err != nil {
 			fs.Finished = true
-			fs.File.Close()
 			break
 		}
 
@@ -54,40 +35,4 @@ func (fs *FileSplitter) Next(count int) ([]string, bool) {
 	}
 
 	return lines, true
-}
-
-func NewMultiFileSplitter(numlines int) *MultiFileSplitter {
-	ms := new(MultiFileSplitter)
-	ms.NumLines = numlines
-	ms.Splitters = make([]*FileSplitter, 0)
-
-	return ms
-}
-
-func (ms *MultiFileSplitter) AddFile(filename string) bool {
-	ms.Mutex.Lock()
-	defer ms.Mutex.Unlock()
-
-	fs := NewFileSplitter(filename)
-	if fs == nil {
-		return false
-	}
-
-	ms.Splitters = append(ms.Splitters, fs)
-	return true
-}
-
-func (ms *MultiFileSplitter) Next() ([]string, bool) {
-	ms.Mutex.Lock()
-	defer ms.Mutex.Unlock()
-
-	for len(ms.Splitters) > 0 {
-		if lines, ok := ms.Splitters[0].Next(ms.NumLines); ok {
-			return lines, true
-		}
-
-		ms.Splitters = ms.Splitters[1:]
-	}
-
-	return nil, false
 }
