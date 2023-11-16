@@ -9,6 +9,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+// The parameters set by client
 type MapParam struct {
 	NumMapper    int
 	MapperExe    string
@@ -16,23 +17,19 @@ type MapParam struct {
 	InputDir     string
 }
 
+// A map job is a collection of map tasks
 type MapJob struct {
 	ID         int64
 	InputFiles []string
 	Param      MapParam
 }
 
+// Each map task is run by N mappers at a single worker node
 type MapTask struct {
 	Param       MapParam
 	Filename    string
 	OffsetLines int
 	CountLines  int
-}
-
-type MapArgs struct {
-	SDFSServer string
-	Task       *MapTask
-	Data       []string
 }
 
 func (job *MapJob) Name() string {
@@ -97,7 +94,7 @@ func (task *MapTask) Start(worker int, data TaskData) bool {
 
 	reply := false
 
-	if err = client.Call("Service.MapTask", args, &reply); err != nil {
+	if err = client.Call(RPC_MAP_TASK, args, &reply); err != nil {
 		log.Println(err)
 		return false
 	}

@@ -8,7 +8,19 @@ import (
 	"strings"
 )
 
+const (
+	RPC_MAP_TASK   = "Service.MapTask"
+	RPC_JUICE_TASK = "Service.JuiceTask"
+)
+
+// RPC handler
 type Service struct {
+}
+
+// Arguments for a MapTask RPC call
+type MapArgs struct {
+	Task *MapTask
+	Data []string
 }
 
 func StartRPCServer(Hostname string, Port int) {
