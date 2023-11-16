@@ -89,7 +89,7 @@ func (server *Server) Start() {
 }
 
 func GetAddressByID(id int) string {
-	node := common.GetNodeByID(id)
+	node := common.GetNodeByID(id, common.SDFSCluster)
 	return common.GetAddress(node.Hostname, node.RPCPort)
 }
 
@@ -104,14 +104,14 @@ func (s *Server) GetFiles() []File {
 }
 
 func GetNodeHash(node int) int {
-	return node % len(common.Cluster)
+	return node % len(common.SDFSCluster)
 }
 
 // node with smallest ID
 func (server *Server) GetLeaderNode() int {
 	server.Mutex.Lock()
 	defer server.Mutex.Unlock()
-	for _, node := range common.Cluster {
+	for _, node := range common.SDFSCluster {
 		if _, ok := server.Nodes[node.ID]; ok {
 			return node.ID
 		}
@@ -124,7 +124,7 @@ func (s *Server) GetMetadataReplicaNodes(count int) []int {
 	s.Mutex.Lock()
 	defer s.Mutex.Unlock()
 	res := []int{}
-	for _, node := range common.Cluster {
+	for _, node := range common.SDFSCluster {
 		if node.ID == s.ID {
 			continue
 		}
@@ -140,7 +140,7 @@ func (s *Server) GetMetadataReplicaNodes(count int) []int {
 
 // Get the `count` nearest nodes to the file hash
 func GetReplicaNodes(nodes []int, filename string, count int) []int {
-	fileHash := common.GetHash(filename, len(common.Cluster))
+	fileHash := common.GetHash(filename, len(common.SDFSCluster))
 	pq := make(priqueue.PriorityQueue, 0)
 	heap.Init(&pq)
 

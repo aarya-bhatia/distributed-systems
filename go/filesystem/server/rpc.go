@@ -175,7 +175,7 @@ func (server *Server) DeleteFile(args *DeleteArgs, reply *bool) error {
 			if node == server.ID {
 				continue
 			}
-			client, err := common.Connect(node)
+			client, err := common.Connect(node, common.SDFSCluster)
 			if err != nil {
 				log.Println(err)
 				continue
@@ -327,7 +327,7 @@ func (server *Server) InternalDeleteFile(file *File, reply *bool) error {
 func (s *Server) InternalReplicateBlocks(blocks *[]BlockMetadata, reply *[]BlockMetadata) error {
 	*reply = make([]BlockMetadata, 0)
 
-	pool := common.NewConnectionPool()
+	pool := common.NewConnectionPool(common.SDFSCluster)
 	defer pool.Close()
 
 	for _, block := range *blocks {

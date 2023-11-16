@@ -29,7 +29,7 @@ func (client *SDFSClient) TryDownloadFile(writer Writer, filename string) error 
 
 	defer writer.Close()
 
-	pool := common.NewConnectionPool()
+	pool := common.NewConnectionPool(common.SDFSCluster)
 	defer pool.Close()
 
 	leader, err := client.GetLeader()

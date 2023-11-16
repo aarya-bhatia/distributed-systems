@@ -17,31 +17,9 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func findNode(hostname string) *common.Node {
-	for _, node := range common.Cluster {
-		if node.Hostname == hostname {
-			return &node
-		}
-	}
-
-	return nil
-}
-
 // Usage: go run . [ID]
 func main() {
-	customFormatter := new(log.TextFormatter)
-	customFormatter.TimestampFormat = "2006-01-02 15:04:05"
-	customFormatter.FullTimestamp = true
-	log.SetFormatter(customFormatter)
-
-	log.SetReportCaller(false)
-	log.SetLevel(log.DebugLevel)
-	log.SetOutput(os.Stderr)
-
-	hostname, err := os.Hostname()
-	if err != nil {
-		log.Fatal(err)
-	}
+	common.Setup()
 
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -56,17 +34,11 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
-		common.Cluster = common.SDFSLocalCluster
 		dbDirectory = path.Join(path.Join(cwd, "db"), os.Args[1])
-		info = common.Cluster[id-1]
+		info = *common.GetNodeByID(id, common.SDFSCluster)
 	} else {
-		common.Cluster = common.SDFSProdCluster
 		dbDirectory = path.Join(cwd, "db")
-		found := findNode(hostname)
-		if found == nil {
-			log.Fatal("Unknown node")
-		}
-		info = *found
+		info = *common.GetCurrentNode(common.SDFSCluster)
 	}
 
 	if exec.Command("rm", "-rf", dbDirectory).Run() != nil {
@@ -78,16 +50,13 @@ func main() {
 	}
 
 	log.Info("Data directory:", dbDirectory)
-	log.Debug("Cluster:", common.Cluster)
-	log.Debug("Node Info:", info)
+	log.Debug("Node:", info)
 
 	master := server.NewServer(info, dbDirectory)
-	// fs := &server.FileServer{Directory: dbDirectory, Hostname: info.Hostname, TCPPort: info.TCPPort}
-	fd := failuredetector.NewServer(info.Hostname, info.UDPPort, common.GOSSIP_PROTOCOL, master)
+	fd := failuredetector.NewServer(common.SDFSCluster, info, common.GOSSIP_PROTOCOL, master)
 
 	go master.Start()
 	go fd.Start()
-	// go fs.Start()
 
 	go stdinListener(info, master, fd)
 

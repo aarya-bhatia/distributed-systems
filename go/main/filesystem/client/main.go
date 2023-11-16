@@ -4,12 +4,10 @@ import (
 	"cs425/common"
 	"cs425/filesystem/client"
 	"fmt"
-	"os"
-	"strconv"
-	"strings"
-
 	"github.com/jedib0t/go-pretty/table"
 	"github.com/sirupsen/logrus"
+	"os"
+	"strconv"
 )
 
 func printUsage() {
@@ -19,7 +17,6 @@ func printUsage() {
 	fmt.Println("ls <file>")
 	fmt.Println("get <remote> <local>")
 	fmt.Println("put <local> <remote>")
-	fmt.Println("append <local> <remote>")
 	fmt.Println("delete <remote>")
 	fmt.Println()
 }
@@ -30,22 +27,14 @@ func main() {
 		return
 	}
 
-	hostname, err := os.Hostname()
-	if err != nil {
-		logrus.Fatal(err)
-	}
-
-	if strings.Index(hostname, "illinois.edu") > 0 {
-		common.Cluster = common.SDFSProdCluster
-	}
-
-	logrus.Println("VM cluster:", common.Cluster)
+	common.Setup()
 
 	ID, err := strconv.Atoi(os.Args[1])
 	if err != nil {
 		logrus.Fatal(err)
 	}
-	node := common.GetNodeByID(ID)
+
+	node := common.GetNodeByID(ID, common.SDFSCluster)
 	sdfsServer := common.GetAddress(node.Hostname, node.RPCPort)
 	logrus.Println("SDFS Server:", sdfsServer)
 	sdfsClient := client.NewSDFSClient(sdfsServer)
@@ -76,7 +65,7 @@ func main() {
 		if err != nil {
 			logrus.Fatal(err)
 		}
-		if err := sdfsClient.WriteFile(reader, tokens[2], common.FILE_APPEND); err != nil {
+		if err := sdfsClient.WriteFile(reader, tokens[2], common.FILE_TRUNCATE); err != nil {
 			logrus.Fatal(err)
 		}
 

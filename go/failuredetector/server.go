@@ -60,6 +60,7 @@ type Server struct {
 	ReceiverChannel chan ReceiverEvent
 	Protocol        int
 	Notifier        common.Notifier
+	Cluster         []common.Node
 }
 
 func (s *Server) Start() {
@@ -125,8 +126,8 @@ func (server *Server) SetUniqueID() string {
 	return ID
 }
 
-func NewServer(Hostname string, Port int, Protocol int, Notifier common.Notifier) *Server {
-	addr, err := net.ResolveUDPAddr("udp", fmt.Sprintf(":%d", Port))
+func NewServer(Cluster []common.Node, Info common.Node, Protocol int, Notifier common.Notifier) *Server {
+	addr, err := net.ResolveUDPAddr("udp", fmt.Sprintf(":%d", Info.UDPPort))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -138,7 +139,7 @@ func NewServer(Hostname string, Port int, Protocol int, Notifier common.Notifier
 
 	server := &Server{}
 
-	server.Self = NewHost(Hostname, Port, "", addr)
+	server.Self = NewHost(Info.Hostname, Info.UDPPort, "", addr)
 	server.Active = false
 	server.Connection = conn
 	server.Members = make(map[string]*Host)
@@ -149,6 +150,7 @@ func NewServer(Hostname string, Port int, Protocol int, Notifier common.Notifier
 	server.ReceiverChannel = make(chan ReceiverEvent)
 	server.Protocol = Protocol
 	server.Notifier = Notifier
+	server.Cluster = Cluster
 
 	server.SetUniqueID()
 
@@ -358,7 +360,7 @@ func (s *Server) ProcessMembersList(message string) {
 
 // Fix the first node as the introducer
 func IsIntroducer(s *Server) bool {
-	return s.Self.Port == common.Cluster[0].UDPPort && s.Self.Hostname == common.Cluster[0].Hostname
+	return s.Self.Port == s.Cluster[0].UDPPort && s.Self.Hostname == s.Cluster[0].Hostname
 }
 
 // Sends membership list to random subset of peers every T_gossip period
@@ -560,7 +562,7 @@ func sendJoinRequest(s *Server) {
 	msg := s.GetJoinMessage()
 
 	if IsIntroducer(s) {
-		for _, vm := range common.Cluster {
+		for _, vm := range s.Cluster {
 			if vm.Hostname == s.Self.Hostname && vm.UDPPort == s.Self.Port {
 				continue
 			}
@@ -575,13 +577,11 @@ func sendJoinRequest(s *Server) {
 				log.Warn(err)
 				continue
 			}
-
-			// log.Debugf("Sent join request to %s:%d\n", vm.Hostname, vm.UDPPort)
 		}
 
 	} else {
 
-		introducer := common.Cluster[0]
+		introducer := s.Cluster[0]
 
 		addr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", introducer.Hostname, introducer.UDPPort))
 		if err != nil {
@@ -589,7 +589,6 @@ func sendJoinRequest(s *Server) {
 		}
 
 		s.Connection.WriteToUDP([]byte(msg), addr)
-		// log.Debugf("Sent join request to %s:%d\n", introducer.Hostname, introducer.UDPPort)
 	}
 
 	s.TimerManager.RestartTimer(JOIN_TIMER_ID, common.JOIN_RETRY_TIMEOUT)
@@ -609,8 +608,6 @@ func (s *Server) HandleRequest(e ReceiverEvent) {
 
 	header := lines[0]
 	tokens := strings.Split(header, " ")
-
-	// log.Debugf("Request %s received from: %v\n", tokens[0], e.Sender)
 
 	switch verb := strings.ToLower(tokens[0]); verb {
 	case "join":

@@ -25,31 +25,13 @@ type Notifier interface {
 	HandleNodeLeave(node *Node)
 }
 
-func GetNodeByID(ID int) *Node {
-	for _, node := range Cluster {
-		if node.ID == ID {
-			return &node
-		}
-	}
-	return nil
-}
-
-func Connect(nodeID int) (*rpc.Client, error) {
-	node := GetNodeByID(nodeID)
+func Connect(nodeID int, cluster []Node) (*rpc.Client, error) {
+	node := GetNodeByID(nodeID, cluster)
 	if node == nil {
 		return nil, errors.New("Unknown Node")
 	}
 	addr := GetAddress(node.Hostname, node.RPCPort)
 	return rpc.Dial("tcp", addr)
-}
-
-func GetNodeByAddress(hostname string, udpPort int) *Node {
-	for _, node := range Cluster {
-		if node.Hostname == hostname && node.UDPPort == udpPort {
-			return &node
-		}
-	}
-	return nil
 }
 
 // Hash string s to an integer in [0,N)

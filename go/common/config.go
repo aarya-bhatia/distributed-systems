@@ -1,7 +1,11 @@
 package common
 
 import (
+	"os"
+	"strings"
 	"time"
+
+	"github.com/sirupsen/logrus"
 )
 
 const (
@@ -106,4 +110,76 @@ var LocalMapleJuiceCluster = []Node{
 	{10, "localhost", MAPLEJUICE_FD_PORT + 10, MAPLEJUICE_RPC_PORT + 10},
 }
 
-var Cluster []Node = SDFSLocalCluster
+var SDFSCluster []Node
+var MapleJuiceCluster []Node
+
+func Setup() {
+	hostname, err := os.Hostname()
+	if err != nil {
+		os.Exit(1)
+	}
+
+	if os.Getenv("environment") == "production" || strings.Index(hostname, "illinois.edU") > 0 {
+		os.Setenv("environment", "production")
+		SDFSCluster = SDFSProdCluster
+		MapleJuiceCluster = ProdMapleJuiceCluster
+	} else {
+		os.Setenv("environment", "development")
+		SDFSCluster = SDFSLocalCluster
+		MapleJuiceCluster = LocalMapleJuiceCluster
+	}
+
+	logrus.Println("SDFS cluster:", SDFSCluster)
+	logrus.Println("MapleJuice cluster:", MapleJuiceCluster)
+
+	customFormatter := new(logrus.TextFormatter)
+	customFormatter.TimestampFormat = "2006-01-02 15:04:05"
+	customFormatter.FullTimestamp = true
+	logrus.SetFormatter(customFormatter)
+
+	logrus.SetReportCaller(false)
+	logrus.SetLevel(logrus.DebugLevel)
+	logrus.SetOutput(os.Stderr)
+}
+
+func GetCurrentNode(cluster []Node) *Node {
+	hostname, err := os.Hostname()
+	if err != nil {
+		os.Exit(1)
+	}
+
+	return GetNodeByHostname(hostname, cluster)
+}
+
+func GetNodeByHostname(hostname string, cluster []Node) *Node {
+	for _, node := range cluster {
+		if node.Hostname == hostname {
+			return &node
+		}
+	}
+	return nil
+}
+
+func GetNodeByID(ID int, cluster []Node) *Node {
+	for _, node := range cluster {
+		if node.ID == ID {
+			return &node
+		}
+	}
+	return nil
+}
+
+func GetNodeByAddress(hostname string, udpPort int) *Node {
+	for _, node := range SDFSCluster {
+		if node.Hostname == hostname && node.UDPPort == udpPort {
+			return &node
+		}
+	}
+	for _, node := range MapleJuiceCluster {
+		if node.Hostname == hostname && node.UDPPort == udpPort {
+			return &node
+		}
+	}
+	return nil
+}
+
