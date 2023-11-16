@@ -53,7 +53,7 @@ func main() {
 	log.Debug("Node:", info)
 
 	master := server.NewServer(info, dbDirectory)
-	fd := failuredetector.NewServer(common.SDFSCluster, info, common.GOSSIP_PROTOCOL, master)
+	fd := failuredetector.NewServer(info.Hostname, info.UDPPort, common.GOSSIP_PROTOCOL, master)
 
 	go master.Start()
 	go fd.Start()

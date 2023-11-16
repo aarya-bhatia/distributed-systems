@@ -1,6 +1,7 @@
 package common
 
 import (
+	"fmt"
 	"os"
 	"strings"
 	"time"
@@ -49,7 +50,14 @@ const (
 	MAPLEJUICE_RPC_PORT = 7000
 
 	MAPLE_CHUNK_LINE_COUNT = 100
+
+	local_introducer_host = "localhost"
+	local_introducer_port = 34000
+	prod_introducer_host  = "fa23-cs425-0701.cs.illinois.edu"
+	prod_introducer_port  = 34000
 )
+
+var INTRODUCER_ADDRESS string
 
 type Node struct {
 	ID       int
@@ -123,14 +131,17 @@ func Setup() {
 		os.Setenv("environment", "production")
 		SDFSCluster = SDFSProdCluster
 		MapleJuiceCluster = ProdMapleJuiceCluster
+		INTRODUCER_ADDRESS = fmt.Sprintf("%s:%d", prod_introducer_host, prod_introducer_port)
 	} else {
 		os.Setenv("environment", "development")
 		SDFSCluster = SDFSLocalCluster
 		MapleJuiceCluster = LocalMapleJuiceCluster
+		INTRODUCER_ADDRESS = fmt.Sprintf("%s:%d", local_introducer_host, local_introducer_port)
 	}
 
 	logrus.Println("SDFS cluster:", SDFSCluster)
 	logrus.Println("MapleJuice cluster:", MapleJuiceCluster)
+	logrus.Println("Introducer:", INTRODUCER_ADDRESS)
 
 	customFormatter := new(logrus.TextFormatter)
 	customFormatter.TimestampFormat = "2006-01-02 15:04:05"
@@ -182,4 +193,3 @@ func GetNodeByAddress(hostname string, udpPort int) *Node {
 	}
 	return nil
 }
-

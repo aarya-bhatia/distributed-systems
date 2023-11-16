@@ -88,10 +88,10 @@ func (server *Server) Start() {
 	}
 }
 
-func GetAddressByID(id int) string {
-	node := common.GetNodeByID(id, common.SDFSCluster)
-	return common.GetAddress(node.Hostname, node.RPCPort)
-}
+// func GetAddressByID(id int) string {
+// 	node := common.GetNodeByID(id, common.SDFSCluster)
+// 	return common.GetAddress(node.Hostname, node.RPCPort)
+// }
 
 func (s *Server) GetFiles() []File {
 	s.Mutex.Lock()

@@ -4,7 +4,6 @@ import (
 	"cs425/common"
 	"errors"
 	log "github.com/sirupsen/logrus"
-	"net/rpc"
 	"os"
 	"strings"
 )
@@ -208,7 +207,7 @@ func (s *Server) finishWrite(args *UploadStatus, reply *bool) error {
 
 	// update metadata at replicas
 	for _, addr := range s.GetMetadataReplicaNodes(common.REPLICA_FACTOR - 1) {
-		client, err := rpc.Dial("tcp", GetAddressByID(addr))
+		client, err := common.Connect(addr, common.SDFSCluster)
 		if err != nil {
 			log.Println(err)
 			return err

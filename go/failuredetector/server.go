@@ -60,7 +60,6 @@ type Server struct {
 	ReceiverChannel chan ReceiverEvent
 	Protocol        int
 	Notifier        common.Notifier
-	Cluster         []common.Node
 }
 
 func (s *Server) Start() {
@@ -101,6 +100,10 @@ func (s *Server) ChangeProtocol(protocol int) {
 	}
 }
 
+func IsIntroducer(s *Server) bool {
+	return fmt.Sprintf("%s:%d", s.Self.Hostname, s.Self.Port) == common.INTRODUCER_ADDRESS
+}
+
 func NewHost(Hostname string, Port int, ID string, Address *net.UDPAddr) *Host {
 	var host = &Host{}
 	host.ID = ID
@@ -126,8 +129,8 @@ func (server *Server) SetUniqueID() string {
 	return ID
 }
 
-func NewServer(Cluster []common.Node, Info common.Node, Protocol int, Notifier common.Notifier) *Server {
-	addr, err := net.ResolveUDPAddr("udp", fmt.Sprintf(":%d", Info.UDPPort))
+func NewServer(Hostname string, Port int, Protocol int, Notifier common.Notifier) *Server {
+	addr, err := net.ResolveUDPAddr("udp", fmt.Sprintf(":%d", Port))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -139,7 +142,7 @@ func NewServer(Cluster []common.Node, Info common.Node, Protocol int, Notifier c
 
 	server := &Server{}
 
-	server.Self = NewHost(Info.Hostname, Info.UDPPort, "", addr)
+	server.Self = NewHost(Hostname, Port, "", addr)
 	server.Active = false
 	server.Connection = conn
 	server.Members = make(map[string]*Host)
@@ -150,7 +153,6 @@ func NewServer(Cluster []common.Node, Info common.Node, Protocol int, Notifier c
 	server.ReceiverChannel = make(chan ReceiverEvent)
 	server.Protocol = Protocol
 	server.Notifier = Notifier
-	server.Cluster = Cluster
 
 	server.SetUniqueID()
 
@@ -179,7 +181,9 @@ func (server *Server) AddHost(Hostname string, Port int, ID string) (*Host, erro
 	server.MemberLock.Lock()
 
 	if server.Notifier != nil {
-		server.Notifier.HandleNodeJoin(common.GetNodeByAddress(Hostname, Port))
+		if common.GetAddress(Hostname, Port) != common.INTRODUCER_ADDRESS {
+			go server.Notifier.HandleNodeJoin(common.GetNodeByAddress(Hostname, Port))
+		}
 	}
 
 	return server.Members[ID], nil
@@ -358,11 +362,6 @@ func (s *Server) ProcessMembersList(message string) {
 	}
 }
 
-// Fix the first node as the introducer
-func IsIntroducer(s *Server) bool {
-	return s.Self.Port == s.Cluster[0].UDPPort && s.Self.Hostname == s.Cluster[0].Hostname
-}
-
 // Sends membership list to random subset of peers every T_gossip period
 // Updates own counter and timestamp before sending the membership list
 func sendPings(s *Server) {
@@ -428,11 +427,9 @@ func (s *Server) HandleTimeout(e timer.TimerEvent) {
 	if e.ID == JOIN_TIMER_ID {
 		if IsIntroducer(s) {
 			if len(s.Members) <= 1 {
-				// log.Debug("Timeout: Retrying JOIN.")
 				sendJoinRequest(s)
 			}
 		} else if !s.Active {
-			// log.Debug("Timeout: Retrying JOIN.")
 			sendJoinRequest(s)
 		}
 
@@ -446,9 +443,6 @@ func (s *Server) HandleTimeout(e timer.TimerEvent) {
 		return
 	}
 
-	// currentTime := time.Now()
-	// // Format the current time as "hour:minute:second:millisecond"
-	// timestamp := currentTime.Format("15:04:05:000")
 	timestamp := time.Now().UnixMilli()
 
 	if host.State == common.NODE_ALIVE {
@@ -456,7 +450,9 @@ func (s *Server) HandleTimeout(e timer.TimerEvent) {
 			log.Warnf("FAILURE DETECTED: (%d) Node %s is considered failed\n", timestamp, host.Signature)
 			host.State = common.NODE_FAILED
 			if s.Notifier != nil {
-				s.Notifier.HandleNodeLeave(common.GetNodeByAddress(host.Hostname, host.Port))
+				if common.GetAddress(host.Hostname, host.Port) != common.INTRODUCER_ADDRESS {
+					go s.Notifier.HandleNodeLeave(common.GetNodeByAddress(host.Hostname, host.Port))
+				}
 			}
 		} else {
 			log.Warnf("FAILURE SUSPECTED: (%d) Node %s is suspected of failure\n", timestamp, host.Signature)
@@ -468,7 +464,9 @@ func (s *Server) HandleTimeout(e timer.TimerEvent) {
 		host.State = common.NODE_FAILED
 		s.RestartTimer(e.ID, host.State)
 		if s.Notifier != nil {
-			s.Notifier.HandleNodeLeave(common.GetNodeByAddress(host.Hostname, host.Port))
+			if common.GetAddress(host.Hostname, host.Port) != common.INTRODUCER_ADDRESS {
+				go s.Notifier.HandleNodeLeave(common.GetNodeByAddress(host.Hostname, host.Port))
+			}
 		}
 	} else if host.State == common.NODE_FAILED {
 		log.Warn("Deleting node from membership list...", host.Signature)
@@ -498,7 +496,6 @@ func senderRoutine(s *Server) {
 		}
 
 		if active {
-			// ghostEntryRemover(s)
 			sendPings(s)
 		}
 	}
@@ -562,7 +559,8 @@ func sendJoinRequest(s *Server) {
 	msg := s.GetJoinMessage()
 
 	if IsIntroducer(s) {
-		for _, vm := range s.Cluster {
+		cluster := append(common.SDFSCluster, common.MapleJuiceCluster...)
+		for _, vm := range cluster {
 			if vm.Hostname == s.Self.Hostname && vm.UDPPort == s.Self.Port {
 				continue
 			}
@@ -581,9 +579,7 @@ func sendJoinRequest(s *Server) {
 
 	} else {
 
-		introducer := s.Cluster[0]
-
-		addr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", introducer.Hostname, introducer.UDPPort))
+		addr, err := net.ResolveUDPAddr("udp", common.INTRODUCER_ADDRESS)
 		if err != nil {
 			log.Fatal(err)
 		}

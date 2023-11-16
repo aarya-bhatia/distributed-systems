@@ -32,10 +32,10 @@ func main() {
 
 	if info.ID == 1 {
 		server := maplejuice.NewLeader(info)
-		go failuredetector.NewServer(common.MapleJuiceCluster, info, common.GOSSIP_PROTOCOL, server).Start()
+		go failuredetector.NewServer(info.Hostname, info.UDPPort, common.GOSSIP_PROTOCOL, server).Start()
 		go server.Start()
 	} else {
-		go failuredetector.NewServer(common.MapleJuiceCluster, info, common.GOSSIP_PROTOCOL, nil).Start()
+		go failuredetector.NewServer(info.Hostname, info.UDPPort, common.GOSSIP_PROTOCOL, nil).Start()
 		go maplejuice.StartRPCServer(info.Hostname, info.RPCPort)
 	}
 

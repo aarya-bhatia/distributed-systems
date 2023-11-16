@@ -1,6 +1,7 @@
 package client
 
 import (
+	"cs425/common"
 	"cs425/filesystem/server"
 	"fmt"
 	"net/rpc"
@@ -37,13 +38,12 @@ func (client *SDFSClient) GetLeader() (*rpc.Client, error) {
 		return nil, err
 	}
 
-	client.Leader = reply
-
-	leaderConn, err := rpc.Dial("tcp", server.GetAddressByID(reply))
+	leaderConn, err := common.Connect(reply, common.SDFSCluster)
 	if err != nil {
 		return nil, err
 	}
 
+	client.Leader = reply
 	log.Println("connect to leader:", reply)
 	return leaderConn, nil
 }

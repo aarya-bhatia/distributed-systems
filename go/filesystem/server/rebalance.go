@@ -2,10 +2,8 @@ package server
 
 import (
 	"cs425/common"
-	"net/rpc"
-	"time"
-
 	log "github.com/sirupsen/logrus"
+	"time"
 )
 
 // To periodically redistribute file blocks to replicas
@@ -42,8 +40,7 @@ func (s *Server) startRebalanceRoutine() {
 	}
 }
 func (s *Server) sendRebalanceRequests(replica int, blocks []BlockMetadata) {
-	addr := GetAddressByID(replica)
-	conn, err := rpc.Dial("tcp", addr)
+	conn, err := common.Connect(replica, common.SDFSCluster)
 	if err != nil {
 		return
 	}
@@ -68,7 +65,7 @@ func (s *Server) startMetadataRebalanceRoutine() {
 	log.Println("Starting metadata rebalance routine")
 	for {
 		for _, replica := range s.GetMetadataReplicaNodes(common.REPLICA_FACTOR - 1) {
-			client, err := rpc.Dial("tcp", GetAddressByID(replica))
+			client, err := common.Connect(replica, common.SDFSCluster)
 			if err != nil {
 				continue
 			}
