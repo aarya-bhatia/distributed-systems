@@ -1,5 +1,10 @@
 #!/bin/bash
+# NOTES:
+# - Run the ./go/shell/stopall.sh script first
+# - This only needs to be run when start.sh is changed
+# - Otherwise, run the script ./go/shell/startall.sh script.
 
+# CHANGE THESE YOUR NETID/PASSWORD IS NOT AARYAB2
 PASSWD_FILE="/home/aarya/passwd"
 NETID="aaryab2"
 HOSTS="hosts"
