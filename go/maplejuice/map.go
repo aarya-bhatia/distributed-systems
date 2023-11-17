@@ -4,8 +4,6 @@ import (
 	"cs425/common"
 	"cs425/filesystem/client"
 	"fmt"
-	"time"
-
 	log "github.com/sirupsen/logrus"
 )
 
@@ -26,10 +24,10 @@ type MapJob struct {
 
 // Each map task is run by N mappers at a single worker node
 type MapTask struct {
-	Param       MapParam
-	Filename    string
-	OffsetLines int
-	CountLines  int
+	Param    MapParam
+	Filename string
+	Offset   int
+	Length   int
 }
 
 func (job *MapJob) Name() string {
@@ -40,8 +38,9 @@ func (job *MapJob) Run(server *Leader) error {
 	for _, inputFile := range job.InputFiles {
 		log.Println("Input File:", inputFile)
 
-		localSDFSNode := common.SDFSCluster[0]
-		sdfsClient := client.NewSDFSClient(common.GetAddress(localSDFSNode.Hostname, localSDFSNode.RPCPort))
+		sdfsNode := common.RandomChoice(server.GetSDFSNodes())
+		sdfsClient := client.NewSDFSClient(common.GetAddress(sdfsNode.Hostname, sdfsNode.RPCPort))
+
 		writer := client.NewByteWriter()
 		if err := sdfsClient.DownloadFile(writer, inputFile); err != nil {
 			return err
@@ -51,23 +50,30 @@ func (job *MapJob) Run(server *Leader) error {
 		offset := 0
 
 		for {
-			lines, ok := splitter.Next(common.MAPLE_CHUNK_LINE_COUNT)
-			if !ok {
+			lines, ok := splitter.Next(1)
+			if !ok || len(lines) == 0 {
 				break
 			}
 
-			log.Println("Read", len(lines), "lines from file")
+			length := 0
 
-			mapTask := &MapTask{
-				Filename:    inputFile,
-				OffsetLines: offset,
-				CountLines:  len(lines),
-				Param:       job.Param,
+			for _, line := range lines {
+				length += len(line) + 1
 			}
 
-			offset += len(lines)
+			mapTask := &MapTask{
+				Filename: inputFile,
+				Param:    job.Param,
+				Offset:   offset,
+				Length:   length,
+			}
 
-			server.Scheduler.PutTask(mapTask, lines)
+			server.Scheduler.PutTask(mapTask)
+
+			log.Println("Map task scheduled:", mapTask) //, writer.String()[offset:offset+length])
+			log.Printf("offset:%d,length:%d", offset, length)
+
+			offset += length
 		}
 
 		server.Scheduler.Wait()
@@ -76,10 +82,7 @@ func (job *MapJob) Run(server *Leader) error {
 	return nil
 }
 
-func (task *MapTask) Start(worker int, data TaskData) bool {
-	lines := data.([]string)
-	log.Println("Started map task:", len(lines), "lines")
-
+func (task *MapTask) Start(worker int) bool {
 	client, err := common.Connect(worker, common.MapleJuiceCluster)
 	if err != nil {
 		log.Println(err)
@@ -87,23 +90,11 @@ func (task *MapTask) Start(worker int, data TaskData) bool {
 	}
 	defer client.Close()
 
-	args := &MapArgs{
-		Task: task,
-		Data: data.([]string),
-	}
-
 	reply := false
-
-	if err = client.Call(RPC_MAP_TASK, args, &reply); err != nil {
+	if err = client.Call(RPC_MAP_TASK, task, &reply); err != nil {
 		log.Println(err)
 		return false
 	}
 
 	return reply
-}
-
-// TODO
-func (task *MapTask) Restart(worker int) bool {
-	time.Sleep(1 * time.Second)
-	return true
 }

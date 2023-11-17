@@ -18,19 +18,12 @@ type Leader struct {
 	Scheduler *Scheduler
 	Jobs      []Job
 	Status    int
-	SDFSNodes []common.Node
+	Nodes     []common.Node
 }
 
 type Job interface {
 	Name() string
 	Run(server *Leader) error
-}
-
-type TaskData interface{}
-
-type Task interface {
-	Start(worker int, data TaskData) bool
-	Restart(worker int) bool
 }
 
 func NewLeader(info common.Node) *Leader {
@@ -44,14 +37,18 @@ func NewLeader(info common.Node) *Leader {
 }
 
 func (server *Leader) HandleNodeJoin(node *common.Node) {
-	server.Mutex.Lock()
-	defer server.Mutex.Unlock()
-
 	if node == nil {
 		return
-	} else if common.IsSDFSNode(*node) {
+	}
+
+	server.Mutex.Lock()
+	defer server.Mutex.Unlock()
+	defer log.Println("Nodes:", server.Nodes)
+
+	server.Nodes = append(server.Nodes, *node)
+
+	if common.IsSDFSNode(*node) {
 		log.Debug("SDFS Node joined: ", *node)
-		server.SDFSNodes = append(server.SDFSNodes, *node)
 	} else if common.IsMapleJuiceNode(*node) {
 		log.Println("MapleJuice Node joined:", *node)
 		server.Scheduler.AddWorker(node.ID)
@@ -61,14 +58,21 @@ func (server *Leader) HandleNodeJoin(node *common.Node) {
 func (server *Leader) HandleNodeLeave(node *common.Node) {
 	if node == nil {
 		return
-	} else if common.IsSDFSNode(*node) {
-		log.Println("SDFS Node left:", *node)
-		for i, sdfsNode := range server.SDFSNodes {
-			if sdfsNode.ID == node.ID {
-				server.SDFSNodes = common.RemoveIndex(server.SDFSNodes, i)
-				return
-			}
+	}
+
+	server.Mutex.Lock()
+	defer server.Mutex.Unlock()
+	defer log.Println("Nodes:", server.Nodes)
+
+	for i, prev := range server.Nodes {
+		if prev == *node {
+			server.Nodes = common.RemoveIndex(server.Nodes, i)
+			break
 		}
+	}
+
+	if common.IsSDFSNode(*node) {
+		log.Println("SDFS Node left:", *node)
 	} else if common.IsMapleJuiceNode(*node) {
 		log.Println("MapleJuice Node left:", *node)
 		server.Scheduler.RemoveWorker(node.ID)
@@ -110,17 +114,49 @@ func (server *Leader) runJobs() {
 	}
 }
 
-func (server *Leader) MapleRequest(args *MapParam, reply *bool) error {
+func (server *Leader) GetSDFSNodes() []common.Node {
 	server.Mutex.Lock()
+	defer server.Mutex.Unlock()
 
-	if len(server.SDFSNodes) == 0 {
+	res := []common.Node{}
+	for _, node := range server.Nodes {
+		if common.IsSDFSNode(node) {
+			res = append(res, node)
+		}
+	}
+	return res
+}
+
+func (server *Leader) GetMapleJuiceNodes() []common.Node {
+	server.Mutex.Lock()
+	defer server.Mutex.Unlock()
+
+	res := []common.Node{}
+	for _, node := range server.Nodes {
+		if common.IsMapleJuiceNode(node) {
+			res = append(res, node)
+		}
+	}
+	return res
+}
+
+func (server *Leader) MapleRequest(args *MapParam, reply *bool) error {
+	sdfsNodes := server.GetSDFSNodes()
+	workers := server.GetMapleJuiceNodes()
+
+	if len(sdfsNodes) == 0 {
 		return errors.New("No SDFS nodes are available")
 	}
 
-	serverNode := common.RandomChoice(server.SDFSNodes)
-	sdfsClient := client.NewSDFSClient(common.GetAddress(serverNode.Hostname, serverNode.RPCPort))
+	if len(workers) == 0 {
+		return errors.New("No MapleJuice workers are available")
+	}
 
-	server.Mutex.Unlock()
+	log.Println("sdfs nodes:", sdfsNodes)
+	log.Println("maplejuice workers:", workers)
+
+	serverNode := common.RandomChoice(sdfsNodes)
+	sdfsClient := client.NewSDFSClient(common.GetAddress(serverNode.Hostname, serverNode.RPCPort))
 
 	inputFiles, err := sdfsClient.ListDirectory(args.InputDir)
 	if err != nil {

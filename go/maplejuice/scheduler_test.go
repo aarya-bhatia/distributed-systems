@@ -9,14 +9,8 @@ import (
 
 type Example struct{}
 
-func (e Example) Start(w string, data TaskData) bool {
-	log.Println("running example task")
-	time.Sleep(3 * time.Second)
-	return true
-}
-
-func (e Example) Restart(w string) bool {
-	log.Println("running example task")
+func (e Example) Start(w int) bool {
+	log.Printf("worker %d running example task", w)
 	time.Sleep(3 * time.Second)
 	return true
 }
@@ -26,15 +20,15 @@ func TestScheduler(t *testing.T) {
 
 	s := NewScheduler()
 
-	s.AddWorker("a")
-	s.AddWorker("b")
+	s.AddWorker(12)
+	s.AddWorker(13)
 
 	e := Example{}
 
-	s.PutTask(e, nil)
-	s.PutTask(e, nil)
-	s.PutTask(e, nil)
-	s.PutTask(e, nil)
+	s.PutTask(e)
+	s.PutTask(e)
+	s.PutTask(e)
+	s.PutTask(e)
 
 	s.Wait()
 

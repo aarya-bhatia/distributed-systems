@@ -24,12 +24,6 @@ type Service struct {
 	Mutex    sync.Mutex
 }
 
-// Arguments for a MapTask RPC call
-type MapArgs struct {
-	Task *MapTask
-	Data []string
-}
-
 func (server *Service) HandleNodeJoin(node *common.Node) {
 	server.Mutex.Lock()
 	defer server.Mutex.Unlock()
@@ -66,29 +60,32 @@ func (service *Service) Start() {
 	common.StartRPCServer(service.Hostname, service.Port, service)
 }
 
-func WordCountMapper(lines []string) map[string]int {
-	res := make(map[string]int)
-	for _, line := range lines {
-		for _, word := range strings.Split(line, " ") {
-			res[word]++
-		}
-	}
-	return res
-}
-
-func (service *Service) MapTask(args *MapArgs, reply *bool) error {
-	log.Println("Recevied map task:", args.Task, len(args.Data), "lines")
+func (service *Service) MapTask(args *MapTask, reply *bool) error {
+	log.Println("Recevied map task:", args)
 
 	service.Mutex.Lock()
 	if len(service.Nodes) == 0 {
+		service.Mutex.Unlock()
 		return errors.New("No SDFS nodes are available")
 	}
-	serviceNode := common.RandomChoice(service.Nodes)
-	sdfsClient := client.NewSDFSClient(common.GetAddress(serviceNode.Hostname, serviceNode.RPCPort))
+	serverNode := common.RandomChoice(service.Nodes)
+	sdfsClient := client.NewSDFSClient(common.GetAddress(serverNode.Hostname, serverNode.RPCPort))
 	service.Mutex.Unlock()
 
-	for key, value := range WordCountMapper(args.Data) {
-		filename := args.Task.Param.OutputPrefix + "_" + common.EncodeFilename(key)
+	writer := client.NewByteWriter()
+	if err := sdfsClient.ReadFile(writer, args.Filename, args.Offset, args.Length); err != nil {
+		return err
+	}
+
+	lines := strings.Split(writer.String(), "\n")
+
+	res, err := WordCountMapper(lines)
+	if err != nil {
+		return err
+	}
+
+	for key, value := range res {
+		filename := args.Param.OutputPrefix + "_" + common.EncodeFilename(key)
 		data := fmt.Sprintf("%s:%d\n", key, value)
 		if err := sdfsClient.WriteFile(client.NewByteReader([]byte(data)), filename, common.FILE_APPEND); err != nil {
 			return err
