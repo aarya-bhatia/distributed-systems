@@ -64,20 +64,23 @@ func (s *Server) sendRebalanceRequests(replica int, blocks []BlockMetadata) {
 func (s *Server) startMetadataRebalanceRoutine() {
 	log.Println("Starting metadata rebalance routine")
 	for {
-		for _, replica := range s.GetMetadataReplicaNodes(common.REPLICA_FACTOR - 1) {
-			client, err := common.Connect(replica, common.SDFSCluster)
-			if err != nil {
-				continue
-			}
-			defer client.Close()
+		s.broadcastMetadata()
+		time.Sleep(common.METADATA_REBALANCE_INTERVAL)
+	}
+}
 
-			for _, file := range s.GetFiles() {
-				metadata := FileMetadata{}
-				s.GetFileMetadata(&file.Filename, &metadata)
-				client.Call(RPC_INTERNAL_SET_FILE_METADATA, &metadata, new(bool))
-			}
+func (s *Server) broadcastMetadata() {
+	for _, replica := range s.GetMetadataReplicaNodes(common.REPLICA_FACTOR - 1) {
+		client, err := common.Connect(replica, common.SDFSCluster)
+		if err != nil {
+			continue
 		}
+		defer client.Close()
 
-		time.Sleep(common.REBALANCE_INTERVAL)
+		for _, file := range s.GetFiles() {
+			metadata := FileMetadata{}
+			s.GetFileMetadata(&file.Filename, &metadata)
+			client.Call(RPC_INTERNAL_SET_FILE_METADATA, &metadata, new(bool))
+		}
 	}
 }

@@ -296,7 +296,8 @@ func (s *Server) InternalSetFileMetadata(args *FileMetadata, reply *bool) error 
 	for _, block := range args.Blocks {
 		s.Metadata.UpdateBlockMetadata(block)
 	}
-	// log.Println("Metadata updated:", args.File)
+
+	log.Debug("Metadata updated:", args.File)
 	return nil
 }
 
@@ -373,7 +374,7 @@ func (s *Server) InternalReplicateBlocks(blocks *[]BlockMetadata, reply *[]Block
 }
 
 func (s *Server) WriteBlock(args *WriteBlockArgs, reply *bool) error {
-	log.Println("WriteBlock():", args.File, args.Block.Num, args.Block.Name)
+	log.Printf("WriteBlock(): file:%v size:%d num:%d, name:%s", args.File, len(args.Block.Data), args.Block.Num, args.Block.Name)
 
 	filename := s.Directory + "/" + common.EncodeFilename(args.Block.Name)
 
