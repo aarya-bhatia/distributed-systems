@@ -3,9 +3,8 @@ package maplejuice
 import (
 	"cs425/common"
 	"cs425/filesystem/client"
+	"errors"
 	"fmt"
-	"net"
-	"net/rpc"
 	"strings"
 	"sync"
 
@@ -41,6 +40,9 @@ func (server *Service) HandleNodeJoin(node *common.Node) {
 }
 
 func (server *Service) HandleNodeLeave(node *common.Node) {
+	server.Mutex.Lock()
+	defer server.Mutex.Unlock()
+
 	if node != nil && common.IsSDFSNode(*node) {
 		for i, sdfsNode := range server.Nodes {
 			if sdfsNode.ID == node.ID {
@@ -60,28 +62,8 @@ func NewService(Hostname string, Port int) *Service {
 }
 
 func (service *Service) Start() {
-	if err := rpc.Register(service); err != nil {
-		log.Fatal(err)
-	}
-
-	addr := common.GetAddress(service.Hostname, service.Port)
-
-	listener, err := net.Listen("tcp", addr)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	log.Info("MapleJuice worker is running at ", addr)
-
-	for {
-		conn, err := listener.Accept()
-		if err != nil {
-			log.Println(err)
-			continue
-		}
-
-		go rpc.ServeConn(conn)
-	}
+	log.Info("Starting MapleJuice worker")
+	common.StartRPCServer(service.Hostname, service.Port, service)
 }
 
 func WordCountMapper(lines []string) map[string]int {
@@ -97,17 +79,21 @@ func WordCountMapper(lines []string) map[string]int {
 func (service *Service) MapTask(args *MapArgs, reply *bool) error {
 	log.Println("Recevied map task:", args.Task, len(args.Data), "lines")
 
-	writer := client.NewByteWriter()
+	service.Mutex.Lock()
+	if len(service.Nodes) == 0 {
+		return errors.New("No SDFS nodes are available")
+	}
+	serviceNode := common.RandomChoice(service.Nodes)
+	sdfsClient := client.NewSDFSClient(common.GetAddress(serviceNode.Hostname, serviceNode.RPCPort))
+	service.Mutex.Unlock()
 
 	for key, value := range WordCountMapper(args.Data) {
-		fname := args.Task.Param.OutputPrefix + "_" + common.EncodeFilename(key)
-		log.Println(fname, key, value)
-		if err := writer.Write([]byte(fmt.Sprintf("%s:%d\n", key, value))); err != nil {
+		filename := args.Task.Param.OutputPrefix + "_" + common.EncodeFilename(key)
+		data := fmt.Sprintf("%s:%d\n", key, value)
+		if err := sdfsClient.WriteFile(client.NewByteReader([]byte(data)), filename, common.FILE_APPEND); err != nil {
 			return err
 		}
 	}
-
-	fmt.Println(writer.String())
 
 	*reply = true
 	return nil

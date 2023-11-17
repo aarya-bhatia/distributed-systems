@@ -111,10 +111,16 @@ func (server *Leader) runJobs() {
 }
 
 func (server *Leader) MapleRequest(args *MapParam, reply *bool) error {
-	sdfsClient, err := server.GetSDFSClient()
-	if err != nil {
-		return err
+	server.Mutex.Lock()
+
+	if len(server.SDFSNodes) == 0 {
+		return errors.New("No SDFS nodes are available")
 	}
+
+	serverNode := common.RandomChoice(server.SDFSNodes)
+	sdfsClient := client.NewSDFSClient(common.GetAddress(serverNode.Hostname, serverNode.RPCPort))
+
+	server.Mutex.Unlock()
 
 	inputFiles, err := sdfsClient.ListDirectory(args.InputDir)
 	if err != nil {
@@ -131,14 +137,3 @@ func (server *Leader) MapleRequest(args *MapParam, reply *bool) error {
 }
 
 // TODO: JuiceRequest
-
-func (server *Leader) GetSDFSClient() (*client.SDFSClient, error) {
-	if len(server.SDFSNodes) == 0 {
-		return nil, errors.New("No SDFS nodes are available")
-	}
-
-	serverNode := common.RandomChoice(server.SDFSNodes)
-	sdfsClient := client.NewSDFSClient(common.GetAddress(serverNode.Hostname, serverNode.RPCPort))
-
-	return sdfsClient, nil
-}

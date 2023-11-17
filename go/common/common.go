@@ -298,7 +298,7 @@ func Shuffle[T comparable](slice []T) []T {
 }
 
 func StartRPCServer(Hostname string, Port int, Service interface{}) {
-	listener, err := net.Listen("tcp4", fmt.Sprintf("%s:%d", Hostname, Port))
+	listener, err := net.Listen("tcp4", GetAddress(Hostname, Port))
 	if err != nil {
 		log.Fatal("Error starting server: ", err)
 	}
@@ -306,6 +306,8 @@ func StartRPCServer(Hostname string, Port int, Service interface{}) {
 	if err := rpc.Register(Service); err != nil {
 		log.Fatal(err)
 	}
+
+	log.Println("Running PRC server at", GetAddress(Hostname, Port))
 
 	for {
 		conn, err := listener.Accept()
