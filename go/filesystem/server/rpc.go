@@ -45,8 +45,9 @@ type WriteBlockArgs struct {
 }
 
 type DownloadBlockArgs struct {
-	Block string
-	Size  int
+	Block  string
+	Offset int
+	Size   int
 }
 
 const (
@@ -346,7 +347,7 @@ func (s *Server) InternalReplicateBlocks(blocks *[]BlockMetadata, reply *[]Block
 		}
 
 		blockReply := Block{}
-		args := DownloadBlockArgs{Block: block.Block, Size: block.Size}
+		args := DownloadBlockArgs{Block: block.Block, Size: block.Size, Offset: 0}
 		if err = conn.Call(RPC_READ_BLOCK, args, &blockReply); err != nil {
 			log.Println(err)
 			continue
@@ -388,17 +389,28 @@ func (s *Server) WriteBlock(args *WriteBlockArgs, reply *bool) error {
 }
 
 func (s *Server) ReadBlock(args *DownloadBlockArgs, reply *Block) error {
-	log.Println("ReadBlock():", args.Block, args.Size)
+	log.Printf("ReadBlock(): name:%s, offset:%d, size:%d", args.Block, args.Offset, args.Size)
 
 	filename := s.Directory + "/" + common.DecodeFilename(args.Block)
 	if !common.FileExists(filename) {
 		return errors.New("block not found")
 	}
 
-	data, err := common.ReadFile(filename)
+	file, err := os.Open(filename)
+	if err != nil {
+		log.Warn(err)
+		return err
+	}
+
+	defer file.Close()
+
+	data := make([]byte, args.Size)
+	n, err := file.ReadAt(data, int64(args.Offset))
 	if err != nil {
 		return err
 	}
+
+	data = data[:n]
 
 	if len(data) != args.Size {
 		return errors.New("Block size mistmatch")

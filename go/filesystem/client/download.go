@@ -9,8 +9,21 @@ import (
 )
 
 func (client *SDFSClient) DownloadFile(writer Writer, filename string) error {
+	metadata, err := client.GetFile(filename)
+	if err != nil {
+		return err
+	}
+
+	return client.ReadFile(writer, filename, 0, metadata.File.FileSize)
+}
+
+func (client *SDFSClient) ReadFile(writer Writer, filename string, offset int, length int) error {
+	if offset < 0 || length == 0 {
+		return errors.New("Invalid offset or length")
+	}
+
 	for i := 0; i < common.MAX_DOWNLOAD_RETRIES; i++ {
-		err := client.TryDownloadFile(writer, filename)
+		err := client.TryReadFile(writer, filename, offset, length)
 		if err == nil {
 			return nil
 		}
@@ -21,7 +34,7 @@ func (client *SDFSClient) DownloadFile(writer Writer, filename string) error {
 	return errors.New("Max retries exceeded")
 }
 
-func (client *SDFSClient) TryDownloadFile(writer Writer, filename string) error {
+func (client *SDFSClient) TryReadFile(writer Writer, filename string, offset int, length int) error {
 	if err := writer.Open(); err != nil {
 		log.Println(err)
 		return err
@@ -57,18 +70,41 @@ func (client *SDFSClient) TryDownloadFile(writer Writer, filename string) error 
 	reply := true
 	defer leader.Call(server.RPC_FINISH_DOWNLOAD_FILE, &args, &reply)
 
+	if offset+length > fileMetadata.File.FileSize {
+		log.Printf("offset:%d,length:%d,filesize:%d", offset, length, fileMetadata.File.FileSize)
+		return errors.New("out of bounds")
+	}
+
 	log.Println("To download:", fileMetadata.File, fileMetadata.Blocks)
 
-	for _, block := range fileMetadata.Blocks {
-		if err := client.DownloadBlock(writer, block, pool); err != nil {
+	startBlock := int(offset / common.BLOCK_SIZE)
+	endBlock := int((offset + length - 1) / common.BLOCK_SIZE)
+	initialOffset := offset % common.BLOCK_SIZE
+	remaining := length
+
+	log.Debugf("To read file %s from byte %d to byte %d", filename, offset, offset+length)
+	log.Debugf("start block:%d, end block:%d, initialOffset:%d, remaining:%d", startBlock, endBlock, initialOffset, remaining)
+
+	if endBlock >= fileMetadata.File.NumBlocks {
+		return errors.New("End block is out of bounds")
+	}
+
+	for i := startBlock; i <= endBlock; i++ {
+		block := fileMetadata.Blocks[i]
+		toRead := common.Min(block.Size-initialOffset, remaining)
+
+		if err := client.ReadBlock(writer, block, initialOffset, toRead, pool); err != nil {
 			return err
 		}
+
+		remaining -= toRead
+		initialOffset = 0
 	}
 
 	return nil
 }
 
-func (client *SDFSClient) DownloadBlock(writer Writer, block server.BlockMetadata, pool *common.ConnectionPool) error {
+func (client *SDFSClient) ReadBlock(writer Writer, block server.BlockMetadata, offset int, length int, pool *common.ConnectionPool) error {
 	for _, replica := range common.Shuffle(block.Replicas) {
 		conn, err := pool.GetConnection(replica)
 		if err != nil {
@@ -77,12 +113,17 @@ func (client *SDFSClient) DownloadBlock(writer Writer, block server.BlockMetadat
 		}
 		log.Printf("Downloading block %v from replica %v", block, replica)
 		data := server.Block{}
-		if err := conn.Call(server.RPC_READ_BLOCK, &block, &data); err != nil {
+		args := server.DownloadBlockArgs{Block: block.Block, Offset: offset, Size: length}
+		if err := conn.Call(server.RPC_READ_BLOCK, &args, &data); err != nil {
 			log.Println(err)
 			continue
 		}
 		if data.Name != block.Block {
 			log.Warn("Incorrect block received")
+			continue
+		}
+		if len(data.Data) != length {
+			log.Warn("Incorrect size received")
 			continue
 		}
 		if err := writer.Write(data.Data); err != nil {

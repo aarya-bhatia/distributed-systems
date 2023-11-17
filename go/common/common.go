@@ -290,6 +290,20 @@ func Abs(x int) int {
 	return x
 }
 
+func Min[T int](a int, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func Max[T int](a int, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}
+
 func Shuffle[T comparable](slice []T) []T {
 	rand.Shuffle(len(slice), func(i, j int) {
 		slice[i], slice[j] = slice[j], slice[i]

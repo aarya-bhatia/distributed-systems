@@ -2,11 +2,13 @@ package client
 
 import (
 	"cs425/common"
-	log "github.com/sirupsen/logrus"
-	"github.com/stretchr/testify/assert"
+	"io"
 	"os"
 	"os/exec"
 	"testing"
+
+	log "github.com/sirupsen/logrus"
+	"github.com/stretchr/testify/assert"
 )
 
 func getClient() *SDFSClient {
@@ -141,4 +143,66 @@ func TestDownload(t *testing.T) {
 
 	elapsed := writer.EndTimeNano - writer.StartTimeNano
 	log.Println("Download time:", float64(elapsed)*1e-9)
+}
+
+func TestReadSmallOffsets(t *testing.T) {
+	sdfsClient := getClient()
+	outputFilename := "hello_world"
+
+	str := "Hello world"
+
+	assert.Nil(t, sdfsClient.DeleteFile(outputFilename))
+	assert.Nil(t, sdfsClient.WriteFile(NewByteReader([]byte(str)), outputFilename, common.FILE_TRUNCATE))
+
+	writer := NewByteWriter()
+
+	for i := 0; i < len(str); i++ {
+		assert.Nil(t, sdfsClient.ReadFile(writer, outputFilename, i, len(str)-i))
+		assert.Equal(t, writer.String(), str[i:])
+	}
+
+	for i := 0; i < len(str); i++ {
+		assert.Nil(t, sdfsClient.ReadFile(writer, outputFilename, i, 1))
+		assert.Equal(t, writer.String(), string(str[i]))
+	}
+}
+
+func TestReadBigOffsets(t *testing.T) {
+	sdfsClient := getClient()
+	inputFilename := "./data/vm1"
+	outputFilename := "vm1"
+
+	file, err := os.Open(inputFilename)
+	assert.Nil(t, err)
+	defer file.Close()
+
+	data, err := io.ReadAll(file)
+	assert.Nil(t, err)
+	dataCopy := make([]byte, len(data))
+	assert.Equal(t, copy(dataCopy, data), len(data))
+
+	log.Println("data size:", len(data))
+
+	assert.Nil(t, sdfsClient.DeleteFile(outputFilename))
+	assert.Nil(t, sdfsClient.WriteFile(NewByteReader(dataCopy), outputFilename, common.FILE_TRUNCATE))
+
+	writer := NewByteWriter()
+	MB := 1024 * 1024
+	var offset, length int
+
+	offset = common.BLOCK_SIZE / (2 * MB)
+	length = common.BLOCK_SIZE / (4 * MB)
+	assert.Nil(t, sdfsClient.ReadFile(writer, outputFilename, offset, length))
+	assert.Equal(t, writer.Data, data[offset:offset+length])
+
+	offset = common.BLOCK_SIZE - 512
+	length = 1024
+	assert.Nil(t, sdfsClient.ReadFile(writer, outputFilename, offset, length))
+	assert.Equal(t, len(writer.Data), length)
+	assert.Equal(t, string(writer.Data), string(data[offset:offset+length]))
+}
+
+// TODO
+func TestManyAppends(t *testing.T) {
+	return
 }

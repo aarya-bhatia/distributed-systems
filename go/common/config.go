@@ -9,7 +9,7 @@ import (
 
 const (
 	MAX_NODES       = 10
-	BLOCK_SIZE      = 16 * 1024 * 1024 // 16 MB
+	BLOCK_SIZE      = 8 * 1024 * 1024
 	MIN_BUFFER_SIZE = 1024
 	REPLICA_FACTOR  = 4
 
