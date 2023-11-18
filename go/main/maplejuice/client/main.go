@@ -12,6 +12,7 @@ import (
 
 func printUsage() {
 	fmt.Println("maple <maple_exe> <num_maples> <sdfs_intermediate_filename_prefix> <sdfs_src_directory>")
+	fmt.Println("juice <juice_exe> <num_juice> <sdfs_intermediate_filename_prefix> <sdfs_dest_file>")
 	os.Exit(1)
 }
 
@@ -45,7 +46,34 @@ func Maple(tokens []string) error {
 		InputDir:     sdfs_src_dir,
 	}
 
-	return conn.Call("Leader.MapleRequest", &args, new(bool))
+	return conn.Call(maplejuice.RPC_MAPLE_REQUEST, &args, new(bool))
+}
+
+func Juice(tokens []string) error {
+	leader := common.MapleJuiceCluster[0]
+	conn, err := common.Connect(leader.ID, common.MapleJuiceCluster)
+	checkError(err)
+
+	if len(tokens) < 5 {
+		printUsage()
+	}
+
+	juice_exe := tokens[1]
+
+	num_juices, err := strconv.Atoi(tokens[2])
+	checkError(err)
+
+	sdfs_prefix := tokens[3]
+	destfile := tokens[4]
+
+	args := maplejuice.ReduceParam{
+		ReducerExe:  juice_exe,
+		NumReducer:  num_juices,
+		InputPrefix: sdfs_prefix,
+		OutputFile:  destfile,
+	}
+
+	return conn.Call(maplejuice.RPC_JUICE_REQUEST, &args, new(bool))
 }
 
 func main() {
@@ -60,6 +88,9 @@ func main() {
 	switch tokens[0] {
 	case "maple":
 		Maple(tokens)
+
+	case "juice":
+		Juice(tokens)
 
 	default:
 		printUsage()

@@ -3,7 +3,10 @@ package maplejuice
 import (
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
+
+	log "github.com/sirupsen/logrus"
 )
 
 func WordCountMapper(lines []string) (map[string]int, error) {
@@ -25,6 +28,26 @@ func WordCountMapper(lines []string) (map[string]int, error) {
 		for _, word := range words {
 			res[word]++
 		}
+	}
+
+	return res, nil
+}
+
+func WordCountReducer(lines []string) (map[string]int, error) {
+	res := make(map[string]int)
+
+	for _, line := range lines {
+		tokens := strings.Split(line, ":")
+		if len(tokens) != 2 {
+			continue
+		}
+		key := tokens[0]
+		value, err := strconv.Atoi(tokens[1])
+		if err != nil {
+			log.Println(err)
+			continue
+		}
+		res[key] += value
 	}
 
 	return res, nil

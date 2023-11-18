@@ -17,3 +17,9 @@
 
 - client - caching on retry
 
+
+Sat Nov 18 08:35:38 AM CST 2023
+
+- maplejuice balance nummaples across worker nodes
+- testing
+- add reduce job

@@ -32,7 +32,9 @@ type WorkerAck struct {
 	TaskStatus bool
 }
 
-const RPC_MAPLE_WORKER_ACK = "Leader.MapleWorkerAck"
+const RPC_WORKER_ACK = "Leader.WorkerAck"
+const RPC_MAPLE_REQUEST = "Leader.MapleRequest"
+const RPC_JUICE_REQUEST = "Leader.JuiceRequest"
 
 func NewLeader(info common.Node) *Leader {
 	leader := new(Leader)
@@ -180,7 +182,39 @@ func (server *Leader) MapleRequest(args *MapParam, reply *bool) error {
 	return nil
 }
 
-func (server *Leader) MapleWorkerAck(args *WorkerAck, reply *bool) error {
+func (server *Leader) JuiceRequest(args *ReduceParam, reply *bool) error {
+	sdfsNodes := server.GetSDFSNodes()
+	workers := server.GetMapleJuiceNodes()
+
+	if len(sdfsNodes) == 0 {
+		return errors.New("No SDFS nodes are available")
+	}
+
+	if len(workers) == 0 {
+		return errors.New("No MapleJuice workers are available")
+	}
+
+	log.Println("sdfs nodes:", sdfsNodes)
+	log.Println("maplejuice workers:", workers)
+
+	serverNode := common.RandomChoice(sdfsNodes)
+	sdfsClient := client.NewSDFSClient(common.GetAddress(serverNode.Hostname, serverNode.RPCPort))
+
+	inputFiles, err := sdfsClient.ListDirectory(args.InputPrefix)
+	if err != nil {
+		return err
+	}
+
+	server.addJob(&ReduceJob{
+		ID:         time.Now().UnixNano(),
+		Param:      *args,
+		InputFiles: *inputFiles,
+	})
+
+	return nil
+}
+
+func (server *Leader) WorkerAck(args *WorkerAck, reply *bool) error {
 	server.Scheduler.TaskDone(args.WorkerID, args.TaskID, args.TaskStatus)
 	return nil
 }
