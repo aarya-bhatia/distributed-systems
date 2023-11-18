@@ -102,7 +102,7 @@ func (s *Server) ListDirectory(dirname *string, reply *[]string) error {
 	res := []string{}
 	for file := range s.Files {
 		// match dirname prefix with filename
-		if strings.Index(file, *dirname) == 0 {
+		if *dirname == "/" || strings.Index(file, *dirname) == 0 {
 			res = append(res, file)
 		}
 	}
