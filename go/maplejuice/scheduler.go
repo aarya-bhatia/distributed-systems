@@ -12,103 +12,79 @@ const SCHEDULER_POLL_INTERVAL = 100 * time.Millisecond
 
 type Task interface {
 	Start(worker int) bool
+	Hash() int
+	GetID() int64
 }
 
 type Scheduler struct {
-	BusyWorkers map[int]Task
-	IdleWorkers []int
-	Mutex       sync.Mutex
-	Tasks       []Task
+	Tasks    map[int64]Task
+	Workers  map[int][]int64
+	Mutex    sync.Mutex
+	NumTasks int
 }
 
 func NewScheduler() *Scheduler {
 	s := new(Scheduler)
-	s.BusyWorkers = make(map[int]Task, 0)
-	s.IdleWorkers = make([]int, 0)
-	s.Tasks = make([]Task, 0)
+	s.Workers = make(map[int][]int64)
+	s.Tasks = make(map[int64]Task)
+	s.NumTasks = 0
 	return s
-}
-
-func (s *Scheduler) StartTask(worker int, task Task) {
-	log.Println("task started")
-	defer log.Println("task finished")
-
-	if task.Start(worker) {
-		s.TaskDone(worker)
-	} else {
-		s.TaskFail(worker)
-	}
 }
 
 func (s *Scheduler) AddWorker(worker int) {
 	s.Mutex.Lock()
 	defer s.Mutex.Unlock()
-	s.IdleWorkers = append(s.IdleWorkers, worker)
 	log.Debug("Added worker", worker)
+	if _, ok := s.Workers[worker]; !ok {
+		s.Workers[worker] = make([]int64, 0)
+	}
 }
 
 func (s *Scheduler) RemoveWorker(worker int) {
 	s.Mutex.Lock()
 	defer s.Mutex.Unlock()
-	if task, ok := s.BusyWorkers[worker]; ok {
-		s.Tasks = append(s.Tasks, task)
-		delete(s.BusyWorkers, worker)
+	for _, task := range s.Workers[worker] {
+		s.AssignTask(s.Tasks[task])
 	}
-	s.IdleWorkers = common.RemoveElement(s.IdleWorkers, worker)
 	log.Debug("Removed worker", worker)
 }
 
-func (s *Scheduler) TaskDone(worker int) {
+func (s *Scheduler) AssignTask(task Task) {
 	s.Mutex.Lock()
 	defer s.Mutex.Unlock()
-	delete(s.BusyWorkers, worker)
-	if !common.HasElement(s.IdleWorkers, worker) {
-		s.IdleWorkers = append(s.IdleWorkers, worker)
+	taskID := task.GetID()
+	s.Tasks[taskID] = task
+	workers := make([]int, 0, len(s.Workers))
+	for k := range s.Workers {
+		workers = append(workers, k)
 	}
-	log.Debug("Task done by worker", worker)
+	worker := workers[task.Hash()%len(workers)]
+	s.Workers[worker] = append(s.Workers[worker], taskID)
+	s.NumTasks++
+	log.Println("Task assigned to worker", worker)
+	go task.Start(worker)
 }
 
-func (s *Scheduler) TaskFail(worker int) {
+func (s *Scheduler) TaskDone(worker int, taskID int64, status bool) {
 	s.Mutex.Lock()
 	defer s.Mutex.Unlock()
-	if t, ok := s.BusyWorkers[worker]; ok {
-		s.Tasks = append(s.Tasks, t)
-		delete(s.BusyWorkers, worker)
-		log.Debug("Task failed by worker", worker)
+	log.Printf("Ack (%v) from worker %d for task %d", status, worker, taskID)
+	s.Workers[worker] = common.RemoveElement(s.Workers[worker], taskID)
+	if status == true {
+		delete(s.Tasks, taskID)
+		s.NumTasks--
+	} else {
+		s.AssignTask(s.Tasks[taskID])
 	}
-}
-
-func (s *Scheduler) PutTask(task Task) {
-	s.Mutex.Lock()
-	defer s.Mutex.Unlock()
-	s.Tasks = append(s.Tasks, task)
-	log.Debug("Task added:", task)
 }
 
 func (s *Scheduler) Wait() {
 	for {
 		s.Mutex.Lock()
-		if len(s.BusyWorkers) == 0 && len(s.Tasks) == 0 {
-			log.Debug("all tasks finished.")
+		if s.NumTasks == 0 {
 			s.Mutex.Unlock()
 			return
 		}
-
-		log.Debug("waiting for tasks to finish...")
-
-		for len(s.Tasks) > 0 && len(s.IdleWorkers) > 0 {
-			task := s.Tasks[0]
-			worker := s.IdleWorkers[0]
-
-			s.Tasks = s.Tasks[1:]
-			s.IdleWorkers = s.IdleWorkers[1:]
-
-			s.BusyWorkers[worker] = task
-
-			log.Debug("Sending task", task, "to worker", worker)
-			go s.StartTask(worker, task)
-		}
-
 		s.Mutex.Unlock()
 		time.Sleep(SCHEDULER_POLL_INTERVAL)
 	}
