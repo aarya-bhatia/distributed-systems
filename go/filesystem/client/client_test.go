@@ -2,9 +2,12 @@ package client
 
 import (
 	"cs425/common"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
+	"strconv"
+	"strings"
 	"testing"
 
 	log "github.com/sirupsen/logrus"
@@ -202,7 +205,62 @@ func TestReadBigOffsets(t *testing.T) {
 	assert.Equal(t, string(writer.Data), string(data[offset:offset+length]))
 }
 
-// TODO
+func TestManyReads(t *testing.T) {
+	count := 100
+	sdfsClient := getClient()
+	data := "123456"
+	assert.Nil(t, sdfsClient.WriteFile(NewByteReader([]byte(data)), "manyreads", common.FILE_TRUNCATE))
+
+	done := make(chan bool)
+
+	for i := 0; i < count; i++ {
+		go func() {
+			w := NewByteWriter()
+			assert.Nil(t, sdfsClient.ReadFile(w, "manyreads", 0, 6))
+			assert.Equal(t, w.String(), "123456")
+			done <- true
+		}()
+	}
+
+	for i := 0; i < count; i++ {
+		assert.True(t, <-done)
+	}
+}
+
 func TestManyAppends(t *testing.T) {
-	return
+	count := 100
+	sdfsClient := getClient()
+
+	expectedSum := 0
+	done := make(chan bool)
+
+	assert.Nil(t, sdfsClient.DeleteFile("manyappends"))
+
+	for i := 0; i < count; i++ {
+		go func(n int) {
+			r := NewByteReader([]byte(fmt.Sprintf("%d\n", n)))
+			assert.Nil(t, sdfsClient.WriteFile(r, "manyappends", common.FILE_APPEND))
+			done <- true
+		}(i)
+		expectedSum += i
+	}
+
+	for i := 0; i < count; i++ {
+		assert.True(t, <-done)
+	}
+
+	w := NewByteWriter()
+	assert.Nil(t, sdfsClient.DownloadFile(w, "manyappends"))
+	lines := strings.Split(w.String(), "\n")
+	sum := 0
+	for _, line := range lines {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		num, err := strconv.Atoi(line)
+		assert.Nil(t, err)
+		sum += num
+	}
+
+	assert.Equal(t, sum, expectedSum)
 }
