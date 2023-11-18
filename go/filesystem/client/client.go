@@ -4,6 +4,7 @@ import (
 	"cs425/common"
 	"cs425/filesystem/server"
 	"fmt"
+	"math/rand"
 	"net/rpc"
 	"os"
 	"time"
@@ -22,7 +23,7 @@ func NewSDFSClient(SDFSServer string) *SDFSClient {
 
 func GetClientID() string {
 	hostname, _ := os.Hostname()
-	return fmt.Sprintf("%s.%d", hostname, time.Now().Unix())
+	return fmt.Sprintf("%s.%d.%d", hostname, time.Now().UnixNano(), rand.Int())
 }
 
 func (client *SDFSClient) GetLeader() (*rpc.Client, error) {
