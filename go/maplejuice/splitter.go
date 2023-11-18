@@ -1,38 +1,36 @@
 package maplejuice
 
 import (
-	"bufio"
 	"strings"
 )
 
-type Splitter struct {
-	Reader   *bufio.Reader
-	Finished bool
+type LineInfo struct {
+	Offset int
+	Length int
 }
 
-func NewSplitter(data string) *Splitter {
-	return &Splitter{
-		Reader:   bufio.NewReader(strings.NewReader(data)),
-		Finished: false,
-	}
-}
+func ProcessFileContents(fileContents string) []LineInfo {
+	var lines []LineInfo // Array of structs to store line info and data
 
-func (fs *Splitter) Next(count int) ([]string, bool) {
-	if fs.Finished {
-		return nil, false
-	}
+	offset := 0
+	lineNum := 0
 
-	lines := []string{}
+	// Split the file contents into lines
+	fileLines := strings.Split(fileContents, "\n")
 
-	for i := 0; i < count; i++ {
-		line, err := fs.Reader.ReadString('\n')
-		if err != nil {
-			fs.Finished = true
-			break
+	// Read each line and store line content, offset, and length in the array of structs
+	for _, line := range fileLines {
+		lineInfo := LineInfo{
+			Offset: offset,
+			Length: len(line),
 		}
 
-		lines = append(lines, line[:len(line)-1])
+		lines = append(lines, lineInfo)
+
+		// Update offset for the next line
+		offset += len(line) + 1 // Add 1 for newline character
+		lineNum++
 	}
 
-	return lines, true
+	return lines
 }
