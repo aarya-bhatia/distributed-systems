@@ -2,6 +2,7 @@ package maplejuice
 
 import (
 	"cs425/common"
+	"net/rpc"
 	"sync"
 	"time"
 
@@ -11,7 +12,7 @@ import (
 const SCHEDULER_POLL_INTERVAL = 100 * time.Millisecond
 
 type Task interface {
-	Start(worker int) bool
+	Start(worker int, conn *rpc.Client) bool
 	Hash() int
 	GetID() int64
 }
@@ -21,6 +22,7 @@ type Scheduler struct {
 	Workers  map[int][]int64
 	Mutex    sync.Mutex
 	NumTasks int
+	Pool     *common.ConnectionPool
 }
 
 func NewScheduler() *Scheduler {
@@ -28,6 +30,7 @@ func NewScheduler() *Scheduler {
 	s.Workers = make(map[int][]int64)
 	s.Tasks = make(map[int64]Task)
 	s.NumTasks = 0
+	s.Pool = common.NewConnectionPool(common.MapleJuiceCluster)
 	return s
 }
 
@@ -59,10 +62,15 @@ func (s *Scheduler) AssignTask(task Task) {
 		workers = append(workers, k)
 	}
 	worker := workers[task.Hash()%len(workers)]
+	conn, err := s.Pool.GetConnection(worker)
+	if err != nil {
+		log.Warn(err)
+		return
+	}
 	s.Workers[worker] = append(s.Workers[worker], taskID)
 	s.NumTasks++
 	log.Println("Task assigned to worker", worker)
-	go task.Start(worker)
+	go task.Start(worker, conn)
 }
 
 func (s *Scheduler) TaskDone(worker int, taskID int64, status bool) {
@@ -88,4 +96,8 @@ func (s *Scheduler) Wait() {
 		s.Mutex.Unlock()
 		time.Sleep(SCHEDULER_POLL_INTERVAL)
 	}
+}
+
+func (s *Scheduler) Close() {
+	s.Pool.Close()
 }

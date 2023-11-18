@@ -30,7 +30,8 @@ func (pool *ConnectionPool) GetConnection(node int) (*rpc.Client, error) {
 }
 
 func (pool *ConnectionPool) Close() {
-	for _, conn := range pool.conn {
+	for key, conn := range pool.conn {
 		conn.Close()
+		delete(pool.conn, key)
 	}
 }

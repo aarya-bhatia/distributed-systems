@@ -4,8 +4,10 @@ import (
 	"cs425/common"
 	"cs425/filesystem/client"
 	"fmt"
-	log "github.com/sirupsen/logrus"
 	"math/rand"
+	"net/rpc"
+
+	log "github.com/sirupsen/logrus"
 )
 
 // The parameters set by client
@@ -37,6 +39,8 @@ func (job *MapJob) Name() string {
 }
 
 func (job *MapJob) Run(server *Leader) error {
+	defer server.Scheduler.Close()
+
 	for _, inputFile := range job.InputFiles {
 		log.Println("Input File:", inputFile)
 
@@ -83,19 +87,11 @@ func (task *MapTask) Hash() int {
 	return common.GetHash(fmt.Sprintf("+%v", *task), common.MAX_NODES)
 }
 
-func (task *MapTask) Start(worker int) bool {
-	client, err := common.Connect(worker, common.MapleJuiceCluster)
-	if err != nil {
-		log.Println(err)
-		return false
-	}
-	defer client.Close()
-
+func (task *MapTask) Start(worker int, conn *rpc.Client) bool {
 	reply := false
-	if err = client.Call(RPC_MAP_TASK, task, &reply); err != nil {
+	if err := conn.Call(RPC_MAP_TASK, task, &reply); err != nil {
 		log.Println(err)
 		return false
 	}
-
 	return reply
 }
