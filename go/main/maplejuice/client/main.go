@@ -2,7 +2,6 @@ package main
 
 import (
 	"cs425/common"
-	"cs425/filesystem/client"
 	"cs425/maplejuice"
 	"fmt"
 	"os"
@@ -10,20 +9,6 @@ import (
 
 	log "github.com/sirupsen/logrus"
 )
-
-func test() {
-	leader := common.SDFSLocalCluster[0]
-	addr := common.GetAddress(leader.Hostname, leader.RPCPort)
-	log.Println("Connecting to SDFS server:", addr)
-
-	sdfsClient := client.NewSDFSClient(addr)
-	writer := client.NewByteWriter()
-	if err := sdfsClient.DownloadFile(writer, "hello"); err != nil {
-		log.Fatal(err)
-	}
-
-	log.Println(writer.String())
-}
 
 func printUsage() {
 	fmt.Println("maple <maple_exe> <num_maples> <sdfs_intermediate_filename_prefix> <sdfs_src_directory>")
