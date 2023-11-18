@@ -82,8 +82,8 @@ func (client *SDFSClient) TryReadFile(writer Writer, filename string, offset int
 	initialOffset := offset % common.BLOCK_SIZE
 	remaining := length
 
-	log.Debugf("To read file %s from byte %d to byte %d", filename, offset, offset+length)
-	log.Debugf("start block:%d, end block:%d, initialOffset:%d, remaining:%d", startBlock, endBlock, initialOffset, remaining)
+	// log.Debugf("To read file %s from byte %d to byte %d", filename, offset, offset+length)
+	// log.Debugf("start block:%d, end block:%d, initialOffset:%d, remaining:%d", startBlock, endBlock, initialOffset, remaining)
 
 	if endBlock >= fileMetadata.File.NumBlocks {
 		return errors.New("End block is out of bounds")

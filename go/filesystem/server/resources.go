@@ -99,7 +99,7 @@ func (rm *ResourceManager) Ping(clientID string) error {
 	defer rm.Mutex.Unlock()
 
 	if _, ok := rm.Clients[clientID]; !ok {
-		log.Warn("unauthorized")
+		log.Warnf("client %s unauthorized", clientID)
 		return errors.New("unauthorized")
 	}
 
