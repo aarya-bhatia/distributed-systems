@@ -35,7 +35,7 @@ func main() {
 		go failuredetector.NewServer(info.Hostname, info.UDPPort, common.GOSSIP_PROTOCOL, server).Start()
 		go server.Start()
 	} else {
-		service := maplejuice.NewService(info.Hostname, info.RPCPort)
+		service := maplejuice.NewService(info.ID, info.Hostname, info.RPCPort)
 		go failuredetector.NewServer(info.Hostname, info.UDPPort, common.GOSSIP_PROTOCOL, service).Start()
 		go service.Start()
 	}
