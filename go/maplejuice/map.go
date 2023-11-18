@@ -5,6 +5,7 @@ import (
 	"cs425/filesystem/client"
 	"fmt"
 	log "github.com/sirupsen/logrus"
+	"math/rand"
 )
 
 // The parameters set by client
@@ -24,6 +25,7 @@ type MapJob struct {
 
 // Each map task is run by N mappers at a single worker node
 type MapTask struct {
+	ID       int64
 	Param    MapParam
 	Filename string
 	Offset   int
@@ -42,44 +44,43 @@ func (job *MapJob) Run(server *Leader) error {
 		sdfsClient := client.NewSDFSClient(common.GetAddress(sdfsNode.Hostname, sdfsNode.RPCPort))
 
 		writer := client.NewByteWriter()
+
 		if err := sdfsClient.DownloadFile(writer, inputFile); err != nil {
 			return err
 		}
 
-		splitter := NewSplitter(writer.String())
-		offset := 0
+		lines := ProcessFileContents(writer.String())
+		log.Println(lines)
 
-		for {
-			lines, ok := splitter.Next(1)
-			if !ok || len(lines) == 0 {
-				break
-			}
-
-			length := 0
-
-			for _, line := range lines {
-				length += len(line) + 1
-			}
-
+		for _, line := range lines {
 			mapTask := &MapTask{
+				ID:       rand.Int63(),
 				Filename: inputFile,
 				Param:    job.Param,
-				Offset:   offset,
-				Length:   length,
+				Offset:   line.Offset,
+				Length:   line.Length,
 			}
 
-			server.Scheduler.PutTask(mapTask)
+			if line.Length == 0 {
+				continue
+			}
 
-			log.Println("Map task scheduled:", mapTask) //, writer.String()[offset:offset+length])
-			log.Printf("offset:%d,length:%d", offset, length)
-
-			offset += length
+			server.Scheduler.AssignTask(mapTask)
+			log.Println("Map task scheduled:", mapTask)
 		}
 
 		server.Scheduler.Wait()
 	}
 
 	return nil
+}
+
+func (task *MapTask) GetID() int64 {
+	return task.ID
+}
+
+func (task *MapTask) Hash() int {
+	return common.GetHash(fmt.Sprintf("+%v", *task), common.MAX_NODES)
 }
 
 func (task *MapTask) Start(worker int) bool {

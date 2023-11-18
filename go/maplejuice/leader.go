@@ -26,6 +26,14 @@ type Job interface {
 	Run(server *Leader) error
 }
 
+type WorkerAck struct {
+	WorkerID   int
+	TaskID     int64
+	TaskStatus bool
+}
+
+const RPC_MAPLE_WORKER_ACK = "Leader.MapleWorkerAck"
+
 func NewLeader(info common.Node) *Leader {
 	leader := new(Leader)
 	leader.Info = info
@@ -169,6 +177,11 @@ func (server *Leader) MapleRequest(args *MapParam, reply *bool) error {
 		InputFiles: *inputFiles,
 	})
 
+	return nil
+}
+
+func (server *Leader) MapleWorkerAck(args *WorkerAck, reply *bool) error {
+	server.Scheduler.TaskDone(args.WorkerID, args.TaskID, args.TaskStatus)
 	return nil
 }
 
