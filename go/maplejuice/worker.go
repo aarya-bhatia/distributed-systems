@@ -68,7 +68,7 @@ func (service *Service) MapTask(args *MapTask, reply *bool) error {
 	service.Mutex.Lock()
 	defer service.Mutex.Unlock()
 	service.Tasks = append(service.Tasks, Message{Task: args, Finish: false})
-	log.Println("Task added", service.Tasks)
+	log.Println("Task added")
 	return nil
 }
 
@@ -76,7 +76,7 @@ func (service *Service) ReduceTask(args *ReduceTask, reply *bool) error {
 	service.Mutex.Lock()
 	defer service.Mutex.Unlock()
 	service.Tasks = append(service.Tasks, Message{Task: args, Finish: false})
-	log.Println("Task added", service.Tasks)
+	log.Println("Task added")
 	return nil
 }
 
@@ -125,7 +125,6 @@ func (server *Service) StartExecutor() error {
 				return nil
 			} else {
 				log.Println("Task started")
-
 				err := message.Task.Run(client)
 				if err != nil {
 					log.Fatal(err)
