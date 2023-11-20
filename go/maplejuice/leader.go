@@ -20,7 +20,6 @@ type Task interface {
 	Run(sdfsClient *client.SDFSClient) error
 	Hash() int
 	GetID() int64
-	GetRPCHandler() string
 }
 
 type Worker struct {
@@ -237,22 +236,22 @@ func (server *Leader) JuiceRequest(args *ReduceParam, reply *bool) error {
 		return errors.New("No MapleJuice workers are available")
 	}
 
-	// log.Println("sdfs nodes:", sdfsNodes)
-	// log.Println("maplejuice workers:", workers)
-	//
-	// serverNode := common.RandomChoice(sdfsNodes)
-	// sdfsClient := client.NewSDFSClient(common.GetAddress(serverNode.Hostname, serverNode.RPCPort))
-	//
-	// inputFiles, err := sdfsClient.ListDirectory(args.InputPrefix)
-	// if err != nil {
-	// 	return err
-	// }
-	//
-	// server.addJob(&ReduceJob{
-	// 	ID:         time.Now().UnixNano(),
-	// 	Param:      *args,
-	// 	InputFiles: *inputFiles,
-	// })
+	log.Println("sdfs nodes:", sdfsNodes)
+	log.Println("maplejuice workers:", workers)
+
+	serverNode := common.RandomChoice(sdfsNodes)
+	sdfsClient := client.NewSDFSClient(common.GetAddress(serverNode.Hostname, serverNode.RPCPort))
+
+	inputFiles, err := sdfsClient.ListDirectory(args.InputPrefix)
+	if err != nil {
+		return err
+	}
+
+	server.addJob(&ReduceJob{
+		ID:         time.Now().UnixNano(),
+		Param:      *args,
+		InputFiles: *inputFiles,
+	})
 
 	return nil
 }
@@ -280,8 +279,17 @@ func (s *Leader) AssignTask(task Task) {
 	}
 
 	reply := false
-	if err := conn.Call(task.GetRPCHandler(), task.(*MapTask), &reply); err != nil {
-		log.Println(err)
+	switch task.(type) {
+	case *MapTask:
+		if err := conn.Call(RPC_MAP_TRASK, task.(*MapTask), &reply); err != nil {
+			log.Println(err)
+		}
+	case *ReduceTask:
+		if err := conn.Call(RPC_REDUCE_TASK, task.(*ReduceTask), &reply); err != nil {
+			log.Println(err)
+		}
+	default:
+		log.Fatal("Invalid type of task")
 	}
 }
 

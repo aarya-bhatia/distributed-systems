@@ -74,11 +74,8 @@ func (job *MapJob) GetTasks(sdfsClient *client.SDFSClient) ([]Task, error) {
 	}
 
 	log.Println("Created", len(res), "tasks for job", job.ID, ":", res)
-	return res, nil
-}
 
-func (task *MapTask) GetRPCHandler() string {
-	return RPC_MAP_TRASK
+	return res, nil
 }
 
 func (task *MapTask) GetID() int64 {

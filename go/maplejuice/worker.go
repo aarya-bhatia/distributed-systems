@@ -16,7 +16,7 @@ const (
 	RPC_ALLOCATE    = "Service.Allocate"
 	RPC_FREE        = "Service.Free"
 	RPC_MAP_TRASK   = "Service.MapTask"
-	RPC_JUICE_TRASK = "Service.JuiceTask"
+	RPC_REDUCE_TASK = "Service.ReduceTask"
 )
 
 type Message struct {
@@ -72,12 +72,13 @@ func (service *Service) MapTask(args *MapTask, reply *bool) error {
 	return nil
 }
 
-//	func (service *Service) ReduceTask(args *ReduceTask, reply *bool) error {
-//		service.Mutex.Lock()
-//		defer service.Mutex.Unlock()
-//		service.Tasks <- args
-//		return nil
-//	}
+func (service *Service) ReduceTask(args *ReduceTask, reply *bool) error {
+	service.Mutex.Lock()
+	defer service.Mutex.Unlock()
+	service.Tasks = append(service.Tasks, Message{Task: args, Finish: false})
+	log.Println("Task added", service.Tasks)
+	return nil
+}
 
 func (service *Service) Free(args *int, reply *bool) error {
 	service.Mutex.Lock()

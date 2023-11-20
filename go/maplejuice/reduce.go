@@ -49,7 +49,8 @@ func (job *ReduceJob) GetNumWorkers() int {
 	return job.Param.NumReducer
 }
 
-func (job *ReduceJob) Run(server *Leader) error {
+func (job *ReduceJob) GetTasks(sdfsClient *client.SDFSClient) ([]Task, error) {
+	res := []Task{}
 	for _, inputFile := range job.InputFiles {
 		log.Println("Input File:", inputFile)
 
@@ -58,11 +59,10 @@ func (job *ReduceJob) Run(server *Leader) error {
 			Param:     job.Param,
 			InputFile: inputFile,
 		}
-		// server.AssignTask(reduceTask)
-		log.Println("Reduce task scheduled:", reduceTask)
+
+		res = append(res, reduceTask)
 	}
-	server.Wait()
-	return nil
+	return res, nil
 }
 
 func WordCountReducer(lines []string) (map[string]int, error) {
@@ -85,35 +85,19 @@ func WordCountReducer(lines []string) (map[string]int, error) {
 	return res, nil
 }
 
-// TODO
 func (task *ReduceTask) Run(sdfsClient *client.SDFSClient) error {
-	return nil
-}
-
-/* func (task *ReduceTask) StartReduceExecutor(param ReduceParam, lines []string, done chan bool) {
 	writer := client.NewByteWriter()
 	if err := sdfsClient.DownloadFile(writer, task.InputFile); err != nil {
 		log.Println(err)
-		return
+		return err
 	}
 
 	lines := strings.Split(writer.String(), "\n")
 
-	done := make(chan bool)
-	go service.StartReduceExecutor(task.Param, lines, done)
-	log.Println("Waiting for executor...")
-	status = <-done
-	log.Println("Finished reduce task")
-	log.Println("Running reducer with", len(lines), "lines")
-	result := false
-	defer func() {
-		done <- result
-	}()
-
 	res, err := WordCountReducer(lines)
 	if err != nil {
 		log.Println(err)
-		return
+		return err
 	}
 
 	data := ""
@@ -121,10 +105,10 @@ func (task *ReduceTask) Run(sdfsClient *client.SDFSClient) error {
 		data += fmt.Sprintf("%s:%d\n", k, v)
 	}
 
-	if err := sdfsClient.WriteFile(client.NewByteReader([]byte(data)), param.OutputFile, common.FILE_APPEND); err != nil {
+	if err := sdfsClient.WriteFile(client.NewByteReader([]byte(data)), task.Param.OutputFile, common.FILE_APPEND); err != nil {
 		log.Println(err)
-		return
+		return err
 	}
 
-	result = true
-} */
+	return nil
+}
