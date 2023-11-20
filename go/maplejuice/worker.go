@@ -121,7 +121,6 @@ func (server *Service) StartExecutor() error {
 
 		if message != nil {
 			if message.Finish {
-				server.Tasks = append(server.Tasks, *message)
 				log.Println("Executor finished")
 				return nil
 			} else {
