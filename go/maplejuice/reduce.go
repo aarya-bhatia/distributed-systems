@@ -2,9 +2,11 @@ package maplejuice
 
 import (
 	"cs425/common"
+	"cs425/filesystem/client"
 	"fmt"
 	"math/rand"
-	"net/rpc"
+	"strconv"
+	"strings"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -31,15 +33,6 @@ type ReduceTask struct {
 	InputFile string
 }
 
-func (task *ReduceTask) Start(worker int, conn *rpc.Client) bool {
-	reply := false
-	if err := conn.Call(RPC_REDUCE_TASK, task, &reply); err != nil {
-		log.Println(err)
-		return false
-	}
-	return reply
-}
-
 func (task *ReduceTask) Hash() int {
 	return common.GetHash(fmt.Sprintf("+%v", *task), common.MAX_NODES)
 }
@@ -52,9 +45,11 @@ func (job *ReduceJob) Name() string {
 	return fmt.Sprintf("<%d,maple,%s>", job.ID, job.Param.ReducerExe)
 }
 
-func (job *ReduceJob) Run(server *Leader) error {
-	defer server.Scheduler.Close()
+func (job *ReduceJob) GetNumWorkers() int {
+	return job.Param.NumReducer
+}
 
+func (job *ReduceJob) Run(server *Leader) error {
 	for _, inputFile := range job.InputFiles {
 		log.Println("Input File:", inputFile)
 
@@ -63,11 +58,73 @@ func (job *ReduceJob) Run(server *Leader) error {
 			Param:     job.Param,
 			InputFile: inputFile,
 		}
-
-		server.Scheduler.AssignTask(reduceTask)
+		// server.AssignTask(reduceTask)
 		log.Println("Reduce task scheduled:", reduceTask)
 	}
-	server.Scheduler.Wait()
-
+	server.Wait()
 	return nil
 }
+
+func WordCountReducer(lines []string) (map[string]int, error) {
+	res := make(map[string]int)
+
+	for _, line := range lines {
+		tokens := strings.Split(line, ":")
+		if len(tokens) != 2 {
+			continue
+		}
+		key := tokens[0]
+		value, err := strconv.Atoi(tokens[1])
+		if err != nil {
+			log.Println(err)
+			continue
+		}
+		res[key] += value
+	}
+
+	return res, nil
+}
+
+// TODO
+func (task *ReduceTask) Run(sdfsClient *client.SDFSClient) error {
+	return nil
+}
+
+/* func (task *ReduceTask) StartReduceExecutor(param ReduceParam, lines []string, done chan bool) {
+	writer := client.NewByteWriter()
+	if err := sdfsClient.DownloadFile(writer, task.InputFile); err != nil {
+		log.Println(err)
+		return
+	}
+
+	lines := strings.Split(writer.String(), "\n")
+
+	done := make(chan bool)
+	go service.StartReduceExecutor(task.Param, lines, done)
+	log.Println("Waiting for executor...")
+	status = <-done
+	log.Println("Finished reduce task")
+	log.Println("Running reducer with", len(lines), "lines")
+	result := false
+	defer func() {
+		done <- result
+	}()
+
+	res, err := WordCountReducer(lines)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+
+	data := ""
+	for k, v := range res {
+		data += fmt.Sprintf("%s:%d\n", k, v)
+	}
+
+	if err := sdfsClient.WriteFile(client.NewByteReader([]byte(data)), param.OutputFile, common.FILE_APPEND); err != nil {
+		log.Println(err)
+		return
+	}
+
+	result = true
+} */

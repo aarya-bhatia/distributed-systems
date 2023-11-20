@@ -3,25 +3,145 @@ package maplejuice
 import (
 	"cs425/common"
 	"cs425/filesystem/client"
-	"fmt"
-	"strings"
+	"errors"
 	"sync"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 )
 
+const EXECUTOR_POLL_INTERVAL = 100 * time.Millisecond
+
 const (
-	RPC_MAP_TASK    = "Service.MapTask"
-	RPC_REDUCE_TASK = "Service.ReduceTask"
+	RPC_ALLOCATE    = "Service.Allocate"
+	RPC_FREE        = "Service.Free"
+	RPC_MAP_TRASK   = "Service.MapTask"
+	RPC_JUICE_TRASK = "Service.JuiceTask"
 )
 
-// RPC handler
+type Message struct {
+	Task   Task
+	Finish bool
+}
+
 type Service struct {
 	ID       int
 	Hostname string
 	Port     int
 	Nodes    []common.Node
 	Mutex    sync.Mutex
+
+	NumExecutor int
+	Tasks       []Message
+}
+
+func NewService(ID int, Hostname string, Port int) *Service {
+	service := new(Service)
+	service.ID = ID
+	service.Nodes = make([]common.Node, 0)
+	service.Hostname = Hostname
+	service.Port = Port
+	service.Tasks = make([]Message, 0)
+
+	return service
+}
+
+func (service *Service) Start() {
+	log.Info("Starting MapleJuice worker")
+	common.StartRPCServer(service.Hostname, service.Port, service)
+}
+
+func (service *Service) Allocate(args *int, reply *bool) error {
+	service.Mutex.Lock()
+	defer service.Mutex.Unlock()
+
+	for i := 0; i < *args; i++ {
+		go service.StartExecutor()
+	}
+	log.Println("Allocated", *args, "workers")
+
+	service.NumExecutor += *args
+	return nil
+}
+
+func (service *Service) MapTask(args *MapTask, reply *bool) error {
+	service.Mutex.Lock()
+	defer service.Mutex.Unlock()
+	service.Tasks = append(service.Tasks, Message{Task: args, Finish: false})
+	log.Println("Task added", service.Tasks)
+	return nil
+}
+
+//	func (service *Service) ReduceTask(args *ReduceTask, reply *bool) error {
+//		service.Mutex.Lock()
+//		defer service.Mutex.Unlock()
+//		service.Tasks <- args
+//		return nil
+//	}
+
+func (service *Service) Free(args *int, reply *bool) error {
+	service.Mutex.Lock()
+	defer service.Mutex.Unlock()
+
+	for i := 0; i < service.NumExecutor; i++ {
+		service.Tasks = append(service.Tasks, Message{Task: nil, Finish: true})
+	}
+
+	log.Println("Deallocated", service.NumExecutor, "workers")
+	service.NumExecutor = 0
+
+	return nil
+}
+
+func (server *Service) StartExecutor() error {
+	// Connect to leader
+	conn, err := common.Connect(common.MAPLE_JUICE_LEADER_ID, common.MapleJuiceCluster)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	client, err := server.getSDFSClient()
+	if err != nil {
+		return err
+	}
+
+	for {
+		server.Mutex.Lock()
+
+		var message *Message = nil
+
+		if len(server.Tasks) > 0 {
+			message = &server.Tasks[0]
+			server.Tasks = server.Tasks[1:]
+		}
+
+		server.Mutex.Unlock()
+
+		if message != nil {
+			if message.Finish {
+				server.Tasks = append(server.Tasks, *message)
+				log.Println("Executor finished")
+				return nil
+			} else {
+				log.Println("Task started")
+
+				err := message.Task.Run(client)
+				if err != nil {
+					log.Fatal(err)
+				}
+
+				log.Debug("Task finished")
+				args := WorkerAck{WorkerID: server.ID, TaskID: message.Task.GetID(), TaskStatus: true}
+				err = conn.Call(RPC_WORKER_ACK, &args, new(bool))
+				if err != nil {
+					log.Fatal(err)
+				}
+			}
+		}
+
+		time.Sleep(EXECUTOR_POLL_INTERVAL)
+	}
 }
 
 func (server *Service) HandleNodeJoin(node *common.Node) {
@@ -47,211 +167,14 @@ func (server *Service) HandleNodeLeave(node *common.Node) {
 	}
 }
 
-func NewService(ID int, Hostname string, Port int) *Service {
-	service := new(Service)
-	service.ID = ID
-	service.Nodes = make([]common.Node, 0)
-	service.Hostname = Hostname
-	service.Port = Port
-	return service
-}
-
-// Start rpc server
-func (service *Service) Start() {
-	log.Info("Starting MapleJuice worker")
-	common.StartRPCServer(service.Hostname, service.Port, service)
-}
-
-// Recevie a map task from leader
-func (service *Service) MapTask(args *MapTask, reply *bool) error {
-	log.Println("Recevied map task:", args)
-	service.StartMapTask(*args)
-	return nil
-}
-
-// Recevie a reduce task from leader
-func (service *Service) ReduceTask(args *ReduceTask, reply *bool) error {
-	log.Println("Recevied reduce task:", args)
-	service.StartReduceTask(*args)
-	return nil
-}
-
-// Schedule and run map task
-func (service *Service) StartMapTask(task MapTask) {
-	status := false
-	defer service.FinishTask(task.ID, status)
-
-	if task.Param.NumMapper <= 0 {
-		log.Println("num mappers should be a positive number")
-		return
-	}
-
+func (service *Service) getSDFSClient() (*client.SDFSClient, error) {
 	service.Mutex.Lock()
+	defer service.Mutex.Unlock()
+
 	if len(service.Nodes) == 0 {
-		service.Mutex.Unlock()
-		log.Println("No SDFS nodes are available")
-		return
+		return nil, errors.New("No SDFS nodes are available")
 	}
 	serverNode := common.RandomChoice(service.Nodes)
 	sdfsClient := client.NewSDFSClient(common.GetAddress(serverNode.Hostname, serverNode.RPCPort))
-	service.Mutex.Unlock()
-
-	writer := client.NewByteWriter()
-	if err := sdfsClient.ReadFile(writer, task.Filename, task.Offset, task.Length); err != nil {
-		log.Println(err)
-		return
-	}
-
-	lines := strings.Split(writer.String(), "\n")
-
-	done := make(chan bool)
-	go service.StartMapExecutor(task.Param, lines, done)
-	log.Println("Waiting for executor...")
-	status = <-done
-	log.Println("Finished map task")
-
-	// linesPerMapper := common.Max(1, int(len(lines)/task.Param.NumMapper))
-	// done := make(chan bool)
-	// count := 0
-	//
-	// log.Println("Recevied", len(lines), "lines")
-	//
-	// for i := 0; i < task.Param.NumMapper; i++ {
-	// 	numLines := common.Min(linesPerMapper, len(lines))
-	// 	if numLines == 0 {
-	// 		break
-	// 	}
-	//
-	// 	go service.StartMapExecutor(task.Param, lines[:numLines], done)
-	// 	lines = lines[numLines:]
-	// 	count++
-	// }
-	//
-	// status = true
-	// for i := 0; i < count; i++ {
-	// 	if !(<-done) {
-	// 		status = false
-	// 	}
-	// }
-}
-
-// Schedule and run reduce task
-func (service *Service) StartReduceTask(task ReduceTask) {
-	status := false
-	defer service.FinishTask(task.ID, status)
-
-	if task.Param.NumReducer <= 0 {
-		log.Println("num reducers should be a positive number")
-		return
-	}
-
-	service.Mutex.Lock()
-	if len(service.Nodes) == 0 {
-		service.Mutex.Unlock()
-		log.Println("No SDFS nodes are available")
-		return
-	}
-	serverNode := common.RandomChoice(service.Nodes)
-	sdfsClient := client.NewSDFSClient(common.GetAddress(serverNode.Hostname, serverNode.RPCPort))
-	service.Mutex.Unlock()
-
-	writer := client.NewByteWriter()
-	if err := sdfsClient.DownloadFile(writer, task.InputFile); err != nil {
-		log.Println(err)
-		return
-	}
-
-	lines := strings.Split(writer.String(), "\n")
-
-	done := make(chan bool)
-	go service.StartReduceExecutor(task.Param, lines, done)
-	log.Println("Waiting for executor...")
-	status = <-done
-	log.Println("Finished reduce task")
-}
-
-// Send task status to leader
-func (service *Service) FinishTask(taskID int64, status bool) {
-	conn, err := common.Connect(common.MAPLE_JUICE_LEADER_ID, common.MapleJuiceCluster)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer conn.Close()
-
-	args := WorkerAck{WorkerID: service.ID, TaskID: taskID, TaskStatus: true}
-	err = conn.Call(RPC_WORKER_ACK, &args, new(bool))
-	if err != nil {
-		log.Fatal(err)
-	}
-}
-
-// Run mapper and save output in sdfs
-func (service *Service) StartMapExecutor(param MapParam, lines []string, done chan bool) {
-	log.Println("Running mapper with", len(lines), "lines")
-	result := false
-	defer func() {
-		done <- result
-	}()
-
-	service.Mutex.Lock()
-	if len(service.Nodes) == 0 {
-		service.Mutex.Unlock()
-		return
-	}
-	serverNode := common.RandomChoice(service.Nodes)
-	sdfsClient := client.NewSDFSClient(common.GetAddress(serverNode.Hostname, serverNode.RPCPort))
-	service.Mutex.Unlock()
-
-	res, err := WordCountMapper(lines)
-	if err != nil {
-		log.Println(err)
-		return
-	}
-
-	for key, value := range res {
-		filename := param.OutputPrefix + "_" + common.EncodeFilename(key)
-		data := fmt.Sprintf("%s:%d\n", key, value)
-		if err := sdfsClient.WriteFile(client.NewByteReader([]byte(data)), filename, common.FILE_APPEND); err != nil {
-			log.Println(err)
-			return
-		}
-	}
-
-	result = true
-}
-
-// Run reducer and save output in sdfs
-func (service *Service) StartReduceExecutor(param ReduceParam, lines []string, done chan bool) {
-	log.Println("Running reducer with", len(lines), "lines")
-	result := false
-	defer func() {
-		done <- result
-	}()
-
-	service.Mutex.Lock()
-	if len(service.Nodes) == 0 {
-		service.Mutex.Unlock()
-		return
-	}
-	serverNode := common.RandomChoice(service.Nodes)
-	sdfsClient := client.NewSDFSClient(common.GetAddress(serverNode.Hostname, serverNode.RPCPort))
-	service.Mutex.Unlock()
-
-	res, err := WordCountReducer(lines)
-	if err != nil {
-		log.Println(err)
-		return
-	}
-
-	data := ""
-	for k, v := range res {
-		data += fmt.Sprintf("%s:%d\n", k, v)
-	}
-
-	if err := sdfsClient.WriteFile(client.NewByteReader([]byte(data)), param.OutputFile, common.FILE_APPEND); err != nil {
-		log.Println(err)
-		return
-	}
-
-	result = true
+	return sdfsClient, nil
 }

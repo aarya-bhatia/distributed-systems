@@ -99,7 +99,7 @@ func SendAll(conn net.Conn, buffer []byte, count int) int {
 }
 
 // Remove element at index i from slice and return new slice
-func RemoveIndex[T comparable](arr []T, i int) []T {
+func RemoveIndex[T any](arr []T, i int) []T {
 	if i < 0 || i >= len(arr) {
 		return arr
 	}
