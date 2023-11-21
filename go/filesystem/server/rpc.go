@@ -374,7 +374,7 @@ func (s *Server) InternalReplicateBlocks(blocks *[]BlockMetadata, reply *[]Block
 }
 
 func (s *Server) WriteBlock(args *WriteBlockArgs, reply *bool) error {
-	log.Printf("WriteBlock(): file:%v size:%d num:%d, name:%s", args.File, len(args.Block.Data), args.Block.Num, args.Block.Name)
+	log.Debug("WriteBlock()") // : file:%v size:%d num:%d, name:%s", args.File, len(args.Block.Data), args.Block.Num, args.Block.Name)
 
 	filename := s.Directory + "/" + common.EncodeFilename(args.Block.Name)
 
@@ -390,7 +390,7 @@ func (s *Server) WriteBlock(args *WriteBlockArgs, reply *bool) error {
 }
 
 func (s *Server) ReadBlock(args *DownloadBlockArgs, reply *Block) error {
-	log.Printf("ReadBlock(): name:%s, offset:%d, size:%d", args.Block, args.Offset, args.Size)
+	log.Debug("ReadBlock()") // : name:%s, offset:%d, size:%d", args.Block, args.Offset, args.Size)
 
 	filename := s.Directory + "/" + common.DecodeFilename(args.Block)
 	if !common.FileExists(filename) {

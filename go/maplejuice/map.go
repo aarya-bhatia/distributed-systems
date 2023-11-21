@@ -65,11 +65,11 @@ func (job *MapJob) GetTasks(sdfsClient *client.SDFSClient) ([]Task, error) {
 				Length:   line.Length,
 			}
 
-			res = append(res, mapTask)
-
 			if line.Length == 0 {
 				continue
 			}
+
+			res = append(res, mapTask)
 		}
 	}
 
@@ -86,29 +86,25 @@ func (task *MapTask) Hash() int {
 	return common.GetHash(fmt.Sprintf("+%v", *task), common.MAX_NODES)
 }
 
-// Run mapper and save output in sdfs
-func (task *MapTask) Run(sdfsClient *client.SDFSClient) error {
+func (task *MapTask) Run(sdfsClient *client.SDFSClient) (map[string][]string, error) {
 	writer := client.NewByteWriter()
 	if err := sdfsClient.ReadFile(writer, task.Filename, task.Offset, task.Length); err != nil {
-		return nil
+		return nil, err
 	}
 
 	lines := strings.Split(writer.String(), "\n")
 	log.Println("Running mapper with", len(lines), "lines")
 	res, err := WordCountMapper(lines)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	for key, value := range res {
-		filename := task.Param.OutputPrefix + "_" + common.EncodeFilename(key)
-		data := fmt.Sprintf("%s:%d\n", key, value)
-		if err := sdfsClient.WriteFile(client.NewByteReader([]byte(data)), filename, common.FILE_APPEND); err != nil {
-			return err
-		}
+	output := make(map[string][]string)
+	for k, v := range res {
+		output[k] = []string{fmt.Sprintf("%d", v)}
 	}
 
-	return nil
+	return output, nil
 }
 
 func WordCountMapper(lines []string) (map[string]int, error) {

@@ -4,6 +4,8 @@ import (
 	"cs425/common"
 	"cs425/filesystem/client"
 	"errors"
+	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -17,7 +19,7 @@ type Job interface {
 }
 
 type Task interface {
-	Run(sdfsClient *client.SDFSClient) error
+	Run(sdfsClient *client.SDFSClient) (map[string][]string, error)
 	Hash() int
 	GetID() int64
 }
@@ -40,6 +42,8 @@ type Leader struct {
 
 	Workers map[int]*Worker
 	Pool    *common.ConnectionPool
+
+	TaskOutput map[string][]string
 }
 
 type WorkerAck struct {
@@ -51,6 +55,7 @@ type WorkerAck struct {
 const RPC_WORKER_ACK = "Leader.WorkerAck"
 const RPC_MAPLE_REQUEST = "Leader.MapleRequest"
 const RPC_JUICE_REQUEST = "Leader.JuiceRequest"
+const RPC_EMIT = "Leader.Emit"
 
 func NewLeader(info common.Node) *Leader {
 	leader := new(Leader)
@@ -60,6 +65,7 @@ func NewLeader(info common.Node) *Leader {
 	leader.TaskCV = *sync.NewCond(&leader.Mutex)
 	leader.JobCV = *sync.NewCond(&leader.Mutex)
 	leader.Pool = common.NewConnectionPool(common.MapleJuiceCluster)
+	leader.TaskOutput = make(map[string][]string)
 
 	for _, node := range common.MapleJuiceCluster {
 		leader.Workers[node.ID] = &Worker{NumExecutors: 0, Tasks: make([]Task, 0)}
@@ -163,6 +169,32 @@ func (server *Leader) runJobs() {
 		server.Wait()
 		server.Free()
 		log.Println("job finished:", job.Name())
+
+		switch job.(type) {
+		case *MapJob:
+			log.Println("Writing map output to SDFS...")
+			for k, v := range server.TaskOutput {
+				filename := job.(*MapJob).Param.OutputPrefix + "_" + k
+				if err := sdfsClient.WriteFile(client.NewByteReader([]byte(strings.Join(v, "\n"))), filename, common.FILE_TRUNCATE); err != nil {
+					log.Println(err)
+				}
+				delete(server.TaskOutput, k)
+			}
+
+		case *ReduceJob:
+			log.Println("Writing reduce output to SDFS...")
+			filename := job.(*ReduceJob).Param.OutputFile
+			data := ""
+
+			for k, v := range server.TaskOutput {
+				data += fmt.Sprintf("%s:%s\n", k, v[0])
+				delete(server.TaskOutput, k)
+			}
+
+			if err := sdfsClient.WriteFile(client.NewByteReader([]byte(data)), filename, common.FILE_TRUNCATE); err != nil {
+				log.Println(err)
+			}
+		}
 	}
 }
 
@@ -370,4 +402,19 @@ func (server *Leader) Free() {
 		}
 		worker.NumExecutors = 0
 	}
+}
+
+func (server *Leader) Emit(args *map[string][]string, reply *bool) error {
+	server.Mutex.Lock()
+	defer server.Mutex.Unlock()
+
+	log.Println("Recevied emit:", *args)
+
+	for k, v := range *args {
+		for _, s := range v {
+			server.TaskOutput[k] = append(server.TaskOutput[k], s)
+		}
+	}
+
+	return nil
 }

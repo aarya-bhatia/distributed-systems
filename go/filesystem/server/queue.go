@@ -55,7 +55,7 @@ func (q *Queue) TryPop() bool {
 			res := q.Reads[0]
 			q.Reads = q.Reads[1:]
 			q.NumReader++
-			log.Debug("A read task was dequeued!")
+			// log.Debug("A read task was dequeued!")
 			res <- true
 			return true
 		}
@@ -69,7 +69,7 @@ func (q *Queue) TryPop() bool {
 			res := q.Writes[0]
 			q.Writes = q.Writes[1:]
 			q.NumWriter++
-			log.Debug("A write task was dequeued!")
+			// log.Debug("A write task was dequeued!")
 			res <- true
 			return true
 		}
@@ -88,7 +88,7 @@ func (q *Queue) ReadDone() {
 	}
 	q.Count++
 	q.NumReader--
-	log.Debug("A read task was completed!")
+	// log.Debug("A read task was completed!")
 }
 
 // Must call this after writer is done
@@ -101,5 +101,5 @@ func (q *Queue) WriteDone() {
 	}
 	q.Count++
 	q.NumWriter--
-	log.Debug("A write task was completed!")
+	// log.Debug("A write task was completed!")
 }

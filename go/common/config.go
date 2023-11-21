@@ -13,7 +13,7 @@ const (
 	MIN_BUFFER_SIZE = 1024
 	REPLICA_FACTOR  = 4
 
-	POLL_INTERVAL               = 200 * time.Millisecond
+	POLL_INTERVAL               = 10 * time.Millisecond
 	REBALANCE_INTERVAL          = 5 * time.Second
 	METADATA_REBALANCE_INTERVAL = 20 * time.Second
 

@@ -3,6 +3,7 @@ package maplejuice
 import (
 	"cs425/common"
 	"cs425/filesystem/client"
+	"errors"
 	"fmt"
 	"math/rand"
 	"strconv"
@@ -65,50 +66,36 @@ func (job *ReduceJob) GetTasks(sdfsClient *client.SDFSClient) ([]Task, error) {
 	return res, nil
 }
 
-func WordCountReducer(lines []string) (map[string]int, error) {
-	res := make(map[string]int)
+func (task *ReduceTask) Run(sdfsClient *client.SDFSClient) (map[string][]string, error) {
+	writer := client.NewByteWriter()
+	if err := sdfsClient.DownloadFile(writer, task.InputFile); err != nil {
+		log.Println(err)
+		return nil, err
+	}
 
+	if err := sdfsClient.DeleteFile(task.InputFile); err != nil {
+		log.Println(err)
+	}
+
+	index := strings.LastIndex(task.InputFile, "_")
+	if index < 0 {
+		return nil, errors.New("input file is invalid")
+	}
+
+	key := task.InputFile[index+1:]
+	lines := strings.Split(writer.String(), "\n")
+
+	// word count
+	count := 0
 	for _, line := range lines {
-		tokens := strings.Split(line, ":")
-		if len(tokens) != 2 {
-			continue
-		}
-		key := tokens[0]
-		value, err := strconv.Atoi(tokens[1])
+		value, err := strconv.Atoi(line)
 		if err != nil {
 			log.Println(err)
 			continue
 		}
-		res[key] += value
+		count += value
 	}
 
-	return res, nil
-}
-
-func (task *ReduceTask) Run(sdfsClient *client.SDFSClient) error {
-	writer := client.NewByteWriter()
-	if err := sdfsClient.DownloadFile(writer, task.InputFile); err != nil {
-		log.Println(err)
-		return err
-	}
-
-	lines := strings.Split(writer.String(), "\n")
-
-	res, err := WordCountReducer(lines)
-	if err != nil {
-		log.Println(err)
-		return err
-	}
-
-	data := ""
-	for k, v := range res {
-		data += fmt.Sprintf("%s:%d\n", k, v)
-	}
-
-	if err := sdfsClient.WriteFile(client.NewByteReader([]byte(data)), task.Param.OutputFile, common.FILE_APPEND); err != nil {
-		log.Println(err)
-		return err
-	}
-
-	return nil
+	values := []string{fmt.Sprintf("%d", count)}
+	return map[string][]string{key: values}, nil
 }
