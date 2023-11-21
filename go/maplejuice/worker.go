@@ -17,6 +17,7 @@ const (
 	RPC_FREE        = "Service.Free"
 	RPC_MAP_TRASK   = "Service.MapTask"
 	RPC_REDUCE_TASK = "Service.ReduceTask"
+	RPC_UPLOAD_TASK = "Service.UploadTask"
 )
 
 type Message struct {
@@ -80,6 +81,14 @@ func (service *Service) ReduceTask(args *ReduceTask, reply *bool) error {
 	return nil
 }
 
+func (service *Service) UploadTask(args *UploadTask, reply *bool) error {
+	service.Mutex.Lock()
+	defer service.Mutex.Unlock()
+	service.Tasks = append(service.Tasks, Message{Task: args, Finish: false})
+	log.Println("Task added", *args)
+	return nil
+}
+
 func (service *Service) Free(args *int, reply *bool) error {
 	service.Mutex.Lock()
 	defer service.Mutex.Unlock()
@@ -130,9 +139,11 @@ func (server *Service) StartExecutor() error {
 					log.Fatal(err)
 				}
 
-				reply := false
-				if err := conn.Call(RPC_EMIT, &res, &reply); err != nil {
-					log.Fatal(err)
+				if res != nil {
+					reply := false
+					if err := conn.Call(RPC_EMIT, &res, &reply); err != nil {
+						log.Fatal(err)
+					}
 				}
 
 				log.Debug("Task finished")

@@ -5,24 +5,11 @@ import (
 	"cs425/filesystem/client"
 	"errors"
 	"fmt"
-	"strings"
 	"sync"
 	"time"
 
 	log "github.com/sirupsen/logrus"
 )
-
-type Job interface {
-	Name() string
-	GetTasks(sdfsClient *client.SDFSClient) ([]Task, error)
-	GetNumWorkers() int
-}
-
-type Task interface {
-	Run(sdfsClient *client.SDFSClient) (map[string][]string, error)
-	Hash() int
-	GetID() int64
-}
 
 type Worker struct {
 	NumExecutors int
@@ -167,19 +154,23 @@ func (server *Leader) runJobs() {
 		}
 
 		server.Wait()
-		server.Free()
 		log.Println("job finished:", job.Name())
 
 		switch job.(type) {
 		case *MapJob:
-			log.Println("Writing map output to SDFS...")
-			for k, v := range server.TaskOutput {
-				filename := job.(*MapJob).Param.OutputPrefix + "_" + k
-				if err := sdfsClient.WriteFile(client.NewByteReader([]byte(strings.Join(v, "\n"))), filename, common.FILE_TRUNCATE); err != nil {
-					log.Println(err)
-				}
-				delete(server.TaskOutput, k)
+			mapJob := job.(*MapJob)
+			uploadJob := NewUploadJob(server.TaskOutput, mapJob.Param.NumMapper, mapJob.Param.OutputPrefix)
+			tasks, _ := uploadJob.GetTasks(sdfsClient)
+
+			log.Println("job started:", uploadJob.Name())
+
+			for _, task := range tasks {
+				server.AssignTask(task)
+				log.Println("Map task scheduled:", task)
 			}
+
+			server.Wait()
+			log.Println("job finished:", job.Name())
 
 		case *ReduceJob:
 			log.Println("Writing reduce output to SDFS...")
@@ -195,6 +186,12 @@ func (server *Leader) runJobs() {
 				log.Println(err)
 			}
 		}
+
+		for k := range server.TaskOutput {
+			delete(server.TaskOutput, k)
+		}
+
+		server.Free()
 	}
 }
 
@@ -320,6 +317,10 @@ func (s *Leader) AssignTask(task Task) {
 		if err := conn.Call(RPC_REDUCE_TASK, task.(*ReduceTask), &reply); err != nil {
 			log.Println(err)
 		}
+	case *UploadTask:
+		if err := conn.Call(RPC_UPLOAD_TASK, task.(*UploadTask), &reply); err != nil {
+			log.Println(err)
+		}
 	default:
 		log.Fatal("Invalid type of task")
 	}
@@ -407,8 +408,6 @@ func (server *Leader) Free() {
 func (server *Leader) Emit(args *map[string][]string, reply *bool) error {
 	server.Mutex.Lock()
 	defer server.Mutex.Unlock()
-
-	log.Println("Recevied emit:", *args)
 
 	for k, v := range *args {
 		for _, s := range v {

@@ -10,6 +10,13 @@ const (
 	WRITING = 1
 )
 
+const (
+	MAX_PARALLEL_READERS    = 4
+	MAX_PARALLEL_WRITERS    = 1
+	MAX_CONSECUTIVE_READERS = 4
+	MAX_CONSECUTIVE_WRITERS = 4
+)
+
 // The queue is enforces the following polices:
 // 1. At most one writer at a time per file
 // 2. At most two readers at a time per file
@@ -43,33 +50,31 @@ func (q *Queue) TryPop() bool {
 	q.Mutex.Lock()
 	defer q.Mutex.Unlock()
 
-	if q.NumReader == 2 || q.NumWriter == 1 {
+	if q.NumReader == MAX_PARALLEL_READERS || q.NumWriter == MAX_PARALLEL_WRITERS {
 		return false
 	}
 
 	if q.Mode == READING {
-		if len(q.Reads) == 0 || q.Count >= 4 {
+		if len(q.Reads) == 0 || q.Count >= MAX_CONSECUTIVE_READERS {
 			q.Mode = WRITING
 			q.Count = 0
 		} else if q.NumWriter == 0 {
 			res := q.Reads[0]
 			q.Reads = q.Reads[1:]
 			q.NumReader++
-			// log.Debug("A read task was dequeued!")
 			res <- true
 			return true
 		}
 	}
 
 	if q.Mode == WRITING {
-		if len(q.Writes) == 0 || q.Count >= 4 {
+		if len(q.Writes) == 0 || q.Count >= MAX_CONSECUTIVE_WRITERS {
 			q.Mode = READING
 			q.Count = 0
 		} else if q.NumReader == 0 {
 			res := q.Writes[0]
 			q.Writes = q.Writes[1:]
 			q.NumWriter++
-			// log.Debug("A write task was dequeued!")
 			res <- true
 			return true
 		}
