@@ -3,12 +3,9 @@ package maplejuice
 import (
 	"cs425/common"
 	"cs425/filesystem/client"
-	"errors"
 	"fmt"
-	"strconv"
-	"strings"
-
 	log "github.com/sirupsen/logrus"
+	"strings"
 )
 
 // The parameters set by client
@@ -37,7 +34,7 @@ func (task *ReduceTask) GetID() int64 {
 func (task *ReduceTask) Run(sdfsClient *client.SDFSClient) (map[string][]string, error) {
 	writer := client.NewByteWriter()
 	if err := sdfsClient.DownloadFile(writer, task.InputFile); err != nil {
-		log.Println(err)
+		log.Println("Error downloading input file for reduce task")
 		return nil, err
 	}
 
@@ -45,25 +42,22 @@ func (task *ReduceTask) Run(sdfsClient *client.SDFSClient) (map[string][]string,
 		log.Println(err)
 	}
 
-	index := strings.LastIndex(task.InputFile, "_")
-	if index < 0 {
-		return nil, errors.New("input file is invalid")
-	}
-
-	key := task.InputFile[index+1:]
 	lines := strings.Split(writer.String(), "\n")
 
-	// word count
-	count := 0
-	for _, line := range lines {
-		value, err := strconv.Atoi(line)
+	if !common.FileExists(task.Param.ReducerExe) {
+		// Download reducer executable
+		fileWriter, err := client.NewFileWriterWithOpts(task.Param.ReducerExe, 0777)
 		if err != nil {
-			log.Println(err)
-			continue
+			log.Warn("Error creating file writer")
+			return nil, err
 		}
-		count += value
+
+		if err := sdfsClient.DownloadFile(fileWriter, task.Param.ReducerExe); err != nil {
+			log.Warn("Error downloading reduce exectuable")
+			return nil, err
+		}
 	}
 
-	values := []string{fmt.Sprintf("%d", count)}
-	return map[string][]string{key: values}, nil
+	// Execute executable process and parse output as key-value map
+	return ExecuteAndGetOutput("./"+task.Param.ReducerExe, lines)
 }

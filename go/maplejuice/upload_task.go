@@ -26,6 +26,12 @@ func (task *UploadTask) GetID() int64 {
 
 func (task *UploadTask) Run(sdfsClient *client.SDFSClient) (map[string][]string, error) {
 	filename := task.OutputPrefix + "_" + task.Key
+
+	// Save output lines as key:value
+	for i, value := range task.Values {
+		task.Values[i] = task.Key + ":" + value
+	}
+
 	if err := sdfsClient.WriteFile(client.NewByteReader([]byte(strings.Join(task.Values, "\n"))), filename, common.FILE_TRUNCATE); err != nil {
 		log.Println(err)
 		return nil, err

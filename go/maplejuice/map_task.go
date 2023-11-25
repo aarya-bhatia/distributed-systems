@@ -4,9 +4,9 @@ import (
 	"cs425/common"
 	"cs425/filesystem/client"
 	"fmt"
-	log "github.com/sirupsen/logrus"
-	"regexp"
 	"strings"
+
+	log "github.com/sirupsen/logrus"
 )
 
 // The parameters set by client
@@ -35,46 +35,33 @@ func (task *MapTask) Hash() int {
 }
 
 func (task *MapTask) Run(sdfsClient *client.SDFSClient) (map[string][]string, error) {
+	// Download input file chunk
 	writer := client.NewByteWriter()
 	if err := sdfsClient.ReadFile(writer, task.Filename, task.Offset, task.Length); err != nil {
+		log.Warn("Error downloading input file for map task")
 		return nil, err
 	}
 
 	lines := strings.Split(writer.String(), "\n")
-	log.Println("Running mapper with", len(lines), "lines")
-	res, err := WordCountMapper(lines)
-	if err != nil {
+
+	if err := CleanInputLines(lines); err != nil {
 		return nil, err
 	}
 
-	output := make(map[string][]string)
-	for k, v := range res {
-		output[k] = []string{fmt.Sprintf("%d", v)}
-	}
+	if !common.FileExists(task.Param.MapperExe) {
+		// Download mapper executable
+		fileWriter, err := client.NewFileWriterWithOpts(task.Param.MapperExe, 0777)
+		if err != nil {
+			log.Warn("Error creating file writer")
+			return nil, err
+		}
 
-	return output, nil
-}
-
-func WordCountMapper(lines []string) (map[string]int, error) {
-	res := make(map[string]int)
-	// Define a regular expression pattern to match special characters
-	reg, err := regexp.Compile("[^a-zA-Z0-9\\s]+")
-	if err != nil {
-		fmt.Println("Error compiling regex:", err)
-		return nil, err
-	}
-
-	for _, line := range lines {
-		// Remove special characters from the line
-		cleanedLine := reg.ReplaceAllString(line, " ")
-
-		// Split the cleaned line into words
-		words := strings.Fields(cleanedLine)
-
-		for _, word := range words {
-			res[word]++
+		if err := sdfsClient.DownloadFile(fileWriter, task.Param.MapperExe); err != nil {
+			log.Warn("Error downloading map exectuable")
+			return nil, err
 		}
 	}
 
-	return res, nil
+	// Execute executable process and parse output as key-value map
+	return ExecuteAndGetOutput("./"+task.Param.MapperExe, lines)
 }

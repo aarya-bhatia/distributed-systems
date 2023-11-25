@@ -1,10 +1,12 @@
 package client
 
 import (
-	log "github.com/sirupsen/logrus"
 	"io"
+	"io/fs"
 	"os"
 	"time"
+
+	log "github.com/sirupsen/logrus"
 )
 
 type Writer interface {
@@ -23,6 +25,7 @@ type TestWriter struct {
 type FileWriter struct {
 	filename string
 	file     *os.File
+	mode     fs.FileMode
 }
 
 type ByteWriter struct {
@@ -51,6 +54,14 @@ func (w *TestWriter) Open() error {
 func NewFileWriter(filename string) (*FileWriter, error) {
 	w := new(FileWriter)
 	w.filename = filename
+	w.mode = 0666
+	return w, nil
+}
+
+func NewFileWriterWithOpts(filename string, filemode fs.FileMode) (*FileWriter, error) {
+	w := new(FileWriter)
+	w.filename = filename
+	w.mode = filemode
 	return w, nil
 }
 
@@ -65,7 +76,7 @@ func (w *FileWriter) Open() error {
 		return nil
 	}
 
-	file, err := os.OpenFile(w.filename, os.O_WRONLY|os.O_TRUNC|os.O_CREATE, 0666)
+	file, err := os.OpenFile(w.filename, os.O_WRONLY|os.O_TRUNC|os.O_CREATE, w.mode)
 	if err != nil {
 		return err
 	}
