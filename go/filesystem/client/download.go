@@ -75,7 +75,7 @@ func (client *SDFSClient) TryReadFile(writer Writer, filename string, offset int
 		return errors.New("out of bounds")
 	}
 
-	// log.Println("To download:", fileMetadata.File, fileMetadata.Blocks)
+	log.Println("To download:", fileMetadata.File, fileMetadata.Blocks)
 
 	startBlock := int(offset / common.BLOCK_SIZE)
 	endBlock := int((offset + length - 1) / common.BLOCK_SIZE)
@@ -111,7 +111,7 @@ func (client *SDFSClient) ReadBlock(writer Writer, block server.BlockMetadata, o
 			log.Println(err)
 			continue
 		}
-		log.Printf("Downloading block %v from replica %v", block, replica)
+		// log.Printf("Downloading block %v from replica %v", block, replica)
 		data := server.Block{}
 		args := server.DownloadBlockArgs{Block: block.Block, Offset: offset, Size: length}
 		if err := conn.Call(server.RPC_READ_BLOCK, &args, &data); err != nil {

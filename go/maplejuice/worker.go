@@ -173,11 +173,13 @@ func (server *Service) FinishReduceJob(outputFile *string, reply *bool) error {
 			data += key + ":" + values[0] + "\n"
 		}
 
-		reader := client.NewByteReader([]byte(data))
-		*outputFile = fmt.Sprintf("%s:%d", *outputFile, server.ID)
-		err = sdfsClient.WriteFile(reader, *outputFile, common.FILE_TRUNCATE)
-		if err != nil {
-			log.Fatal(err)
+		if len(data) > 0 {
+			reader := client.NewByteReader([]byte(data))
+			*outputFile = fmt.Sprintf("%s:%d", *outputFile, server.ID)
+			err = sdfsClient.WriteFile(reader, *outputFile, common.FILE_TRUNCATE)
+			if err != nil {
+				log.Fatal(err)
+			}
 		}
 
 		server.Data = make(map[string][]string)
@@ -228,6 +230,8 @@ func (server *Service) StartExecutor() error {
 		return err
 	}
 
+	log.Println("Executor started")
+
 	for {
 		server.Mutex.Lock()
 		if len(server.Tasks) == 0 {
@@ -245,7 +249,7 @@ func (server *Service) StartExecutor() error {
 			return nil
 		}
 
-		log.Println("Task started")
+		// log.Println("Task started")
 
 		server.downloadExecutable(sdfsClient, message.Task.GetExecutable())
 
@@ -260,7 +264,7 @@ func (server *Service) StartExecutor() error {
 			server.Mutex.Unlock()
 		}
 
-		log.Debug("Task finished")
+		// log.Debug("Task finished")
 
 		reply := false
 		if err = conn.Call(RPC_WORKER_ACK, &server.ID, &reply); err != nil {

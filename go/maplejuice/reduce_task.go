@@ -18,9 +18,10 @@ type ReduceParam struct {
 
 // Each reduce task is run by N reducers at a single worker node
 type ReduceTask struct {
-	ID        int64
-	Param     ReduceParam
-	InputFile string
+	ID         int64
+	Param      ReduceParam
+	Key        string
+	InputFiles []string
 }
 
 func (task *ReduceTask) Hash() int {
@@ -32,15 +33,17 @@ func (task *ReduceTask) GetID() int64 {
 }
 
 func (task *ReduceTask) Run(sdfsClient *client.SDFSClient) (map[string][]string, error) {
-	writer := client.NewByteWriter()
-	if err := sdfsClient.DownloadFile(writer, task.InputFile); err != nil {
-		log.Println("Error downloading input file for reduce task")
-		return nil, err
-	}
+	lines := []string{}
 
-	lines := strings.Split(writer.String(), "\n")
-	tokens := strings.Split(task.InputFile, ":")
-	key := tokens[len(tokens)-1]
+	for _, file := range task.InputFiles {
+		writer := client.NewByteWriter()
+		if err := sdfsClient.DownloadFile(writer, file); err != nil {
+			log.Println("Error downloading input file for reduce task")
+			return nil, err
+		}
+
+		lines = append(lines, strings.Split(writer.String(), "\n")...)
+	}
 
 	output, err := ExecuteAndGetOutput("./"+task.Param.ReducerExe, lines)
 	if err != nil {
@@ -48,7 +51,7 @@ func (task *ReduceTask) Run(sdfsClient *client.SDFSClient) (map[string][]string,
 		return nil, err
 	}
 
-	return map[string][]string{key: output}, nil
+	return map[string][]string{task.Key: output}, nil
 }
 
 func (task *ReduceTask) GetExecutable() string {

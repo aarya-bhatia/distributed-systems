@@ -63,7 +63,7 @@ func (client *SDFSClient) TryWrite(reader Reader, filename string, mode int, res
 	go h.Start()
 	defer h.Stop()
 
-	// log.Println("To upload:", uploadReply.File)
+	log.Println("To upload:", uploadReply.File)
 
 	for i, block := range uploadReply.Blocks {
 		freeSpace := common.BLOCK_SIZE - block.Size
@@ -108,7 +108,7 @@ func (client *SDFSClient) UploadBlock(args server.WriteBlockArgs, replicas []int
 		if err != nil {
 			return err
 		}
-		log.Printf("Uploading block %v to replica %v", args.Block.Name, replica)
+		// log.Printf("Uploading block %v to replica %v", args.Block.Name, replica)
 		reply := true
 		if err := conn.Call(server.RPC_WRITE_BLOCK, &args, &reply); err != nil {
 			return err

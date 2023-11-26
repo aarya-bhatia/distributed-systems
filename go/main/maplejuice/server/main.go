@@ -58,6 +58,11 @@ func leaderStdinHandler(info common.Node, server *maplejuice.Leader) {
 			for _, job := range server.Jobs {
 				fmt.Println(job.Name())
 			}
+			for id, worker := range server.Workers {
+				fmt.Printf("worker %d: %d executors, %d tasks\n", id, worker.NumExecutors, len(worker.Tasks))
+			}
+			fmt.Println("NumTasks:", server.NumTasks)
+			fmt.Println("Nodes:", server.Nodes)
 			server.Mutex.Unlock()
 		case "help":
 			fmt.Println("jobs: list maplejuice jobs")
@@ -74,6 +79,12 @@ func workerStdinHandler(info common.Node, server *maplejuice.Service) {
 		switch strings.ToLower(command) {
 		case "info":
 			fmt.Println("MapleJuice Worker node: ", info)
+		case "data":
+			server.Mutex.Lock()
+			for k := range server.Data {
+				fmt.Println(k)
+			}
+			server.Mutex.Unlock()
 		case "help":
 			fmt.Println("info: display node info")
 		}

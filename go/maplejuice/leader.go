@@ -359,6 +359,7 @@ func (server *Leader) Allocate(size int) bool {
 			log.Println(err)
 			return false
 		}
+		server.Workers[node.ID].NumExecutors = size
 	}
 	return true
 }
@@ -380,6 +381,7 @@ func (server *Leader) Free() {
 		log.Println("deallocating workers at node", node.ID)
 		if err := conn.Call(RPC_FREE, &args, &reply); err != nil {
 			log.Println(err)
+			continue
 		}
 		worker.NumExecutors = 0
 	}
@@ -423,6 +425,14 @@ func (server *Leader) runJobs() {
 	}
 }
 
+func (server *Leader) taskSender(tasks chan Task, done chan bool) {
+	for task := range tasks {
+		server.AssignTask(task)
+	}
+
+	done <- true
+}
+
 func (server *Leader) runJob(job Job) error {
 	if !server.Allocate(job.GetNumWorkers()) {
 		return errors.New("Failed to allocate worker")
@@ -449,8 +459,25 @@ func (server *Leader) runJob(job Job) error {
 		return nil
 	}
 
+	taskChan := make(chan Task)
+	done := make(chan bool)
+
+	// create thread pool to assign tasks
+	for i := 0; i < len(sdfsNodes); i++ {
+		go server.taskSender(taskChan, done)
+	}
+
+	// send all tasks
 	for _, task := range tasks {
-		server.AssignTask(task)
+		taskChan <- task
+	}
+
+	// to signal no more tasks
+	close(taskChan)
+
+	// wait for all tasks to be assigned
+	for i := 0; i < len(sdfsNodes); i++ {
+		<-done
 	}
 
 	// wait for workers to read and process all input data
