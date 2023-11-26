@@ -8,8 +8,7 @@ import (
 	"net/rpc"
 	"os"
 	"time"
-
-	log "github.com/sirupsen/logrus"
+	// log "github.com/sirupsen/logrus"
 )
 
 type SDFSClient struct {
@@ -45,7 +44,7 @@ func (client *SDFSClient) GetLeader() (*rpc.Client, error) {
 	}
 
 	client.Leader = reply
-	log.Println("connect to leader:", reply)
+	// log.Debug("connect to leader:", reply)
 	return leaderConn, nil
 }
 
@@ -63,6 +62,27 @@ func (client *SDFSClient) DeleteFile(filename string) error {
 	clientID := GetClientID()
 	deleteArgs := server.DeleteArgs{ClientID: clientID, File: file.File}
 	return leader.Call(server.RPC_DELETE_FILE, &deleteArgs, &reply)
+}
+
+func (client *SDFSClient) DeleteAll(prefix string) error {
+	leader, err := client.GetLeader()
+	if err != nil {
+		return err
+	}
+	defer leader.Close()
+
+	files, err := client.ListDirectory(prefix)
+	if err != nil {
+		return err
+	}
+
+	for _, file := range *files {
+		if err := client.DeleteFile(file); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (client *SDFSClient) GetFile(filename string) (*server.FileMetadata, error) {
