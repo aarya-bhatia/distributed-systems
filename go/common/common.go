@@ -1,6 +1,7 @@
 package common
 
 import (
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"hash"
@@ -272,11 +273,16 @@ func GetAddress(hostname string, port int) string {
 }
 
 func EncodeFilename(name string) string {
-	return strings.ReplaceAll(name, "/", "%2F")
+	return base64.StdEncoding.EncodeToString([]byte(name))
 }
 
 func DecodeFilename(name string) string {
-	return strings.ReplaceAll(name, "%2F", "/")
+	decodedBytes, err := base64.StdEncoding.DecodeString(name)
+	if err != nil {
+		log.Warn("Error decoding string:", err)
+		return ""
+	}
+	return string(decodedBytes)
 }
 
 func RandomChoice[T comparable](arr []T) T {
