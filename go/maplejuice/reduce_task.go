@@ -38,10 +38,6 @@ func (task *ReduceTask) Run(sdfsClient *client.SDFSClient) (map[string][]string,
 		return nil, err
 	}
 
-	if err := sdfsClient.DeleteFile(task.InputFile); err != nil {
-		log.Println(err)
-	}
-
 	lines := strings.Split(writer.String(), "\n")
 
 	if !common.FileExists(task.Param.ReducerExe) {
@@ -58,6 +54,14 @@ func (task *ReduceTask) Run(sdfsClient *client.SDFSClient) (map[string][]string,
 		}
 	}
 
-	// Execute executable process and parse output as key-value map
-	return ExecuteAndGetOutput("./"+task.Param.ReducerExe, lines)
+	tokens := strings.Split(task.InputFile, ":")
+	key := tokens[len(tokens)-1]
+
+	output, err := ExecuteAndGetOutput("./"+task.Param.ReducerExe, lines)
+	if err != nil {
+		log.Warn("Error running reducer executable")
+		return nil, err
+	}
+
+	return map[string][]string{key: output}, nil
 }

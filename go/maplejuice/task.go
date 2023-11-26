@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"cs425/filesystem/client"
 	"fmt"
-	"io"
 	"os/exec"
 	"regexp"
 	"strings"
@@ -34,7 +33,22 @@ func CleanInputLines(lines []string) error {
 	return nil
 }
 
-func ExecuteAndGetOutput(executable string, inputLines []string) (map[string][]string, error) {
+func ParseMapOutput(output []string) map[string][]string {
+	res := make(map[string][]string)
+
+	for _, line := range output {
+		parts := strings.Split(strings.TrimSpace(line), ":")
+		if len(parts) == 2 {
+			key := parts[0]
+			value := parts[1]
+			res[key] = append(res[key], value)
+		}
+	}
+
+	return res
+}
+
+func ExecuteAndGetOutput(executable string, inputLines []string) ([]string, error) {
 	// Initialize the command
 	cmd := exec.Command(executable)
 
@@ -68,24 +82,20 @@ func ExecuteAndGetOutput(executable string, inputLines []string) (map[string][]s
 	stdin.Close() // Close the input pipe after writing input
 
 	// Read the command's output
-	outputMap := make(map[string][]string)
+	output := []string{}
+
 	reader := bufio.NewReader(stdout)
 	for {
 		line, err := reader.ReadString('\n')
 		if err != nil {
-			if err != io.EOF {
-				log.Println("Error reading command output:", err)
-			}
 			break
 		}
 
-		// Process output line and extract key-value pairs
-		parts := strings.Split(strings.TrimSpace(line), ":")
-		if len(parts) == 2 {
-			key := parts[0]
-			value := parts[1]
-			outputMap[key] = append(outputMap[key], value)
+		if len(line) == 0 {
+			continue
 		}
+
+		output = append(output, line[:len(line)-1])
 	}
 
 	// Wait for the command to finish
@@ -94,5 +104,5 @@ func ExecuteAndGetOutput(executable string, inputLines []string) (map[string][]s
 		return nil, err
 	}
 
-	return outputMap, nil
+	return output, nil
 }

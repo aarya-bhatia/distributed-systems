@@ -62,6 +62,10 @@ func (task *MapTask) Run(sdfsClient *client.SDFSClient) (map[string][]string, er
 		}
 	}
 
-	// Execute executable process and parse output as key-value map
-	return ExecuteAndGetOutput("./"+task.Param.MapperExe, lines)
+	output, err := ExecuteAndGetOutput("./"+task.Param.MapperExe, lines)
+	if err != nil {
+		return nil, err
+	}
+
+	return ParseMapOutput(output), nil
 }

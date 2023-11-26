@@ -1,15 +1,10 @@
 #!/usr/bin/env python3
-
 import sys
 
-d = {}
+count = 0
 
 for line in sys.stdin:
     line = line.strip()
-    key, value = line.split(":")
-    if not key in d:
-        d[key] = 0
-    d[key] += int(value)
+    count += int(line)
 
-for key, value in d.items():
-    print(f"{key}:{value}")
+print(count)
