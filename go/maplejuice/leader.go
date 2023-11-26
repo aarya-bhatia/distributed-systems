@@ -24,7 +24,6 @@ type Leader struct {
 	JobCV    sync.Cond
 	TaskCV   sync.Cond
 	Jobs     []Job
-	Status   int
 	Nodes    []common.Node
 	NumTasks int
 	Workers  map[int]*Worker
@@ -269,7 +268,7 @@ func (s *Leader) tryAssignTask(task Task) bool {
 	s.NumTasks++
 	s.Mutex.Unlock()
 
-	log.Println("Task", task, "assigned to worker", worker)
+	log.Println("Task", task.GetID(), "assigned to worker", worker)
 	return true
 }
 
@@ -352,25 +351,26 @@ func (server *Leader) reset() {
 
 func (server *Leader) runJobs() {
 	for {
-		log.Println("waiting for jobs...")
-
 		server.Mutex.Lock()
-		for len(server.Jobs) == 0 {
-			server.JobCV.Wait()
+
+		if len(server.Jobs) > 0 {
+			job := server.Jobs[0]
+			server.Mutex.Unlock()
+			server.reset()
+			log.Warn("job started:", job.Name())
+
+			if err := server.runJob(job); err != nil {
+				log.Warn("job failed:", err)
+			} else {
+				log.Warn("job finished:", job.Name())
+			}
+
+			server.Mutex.Lock()
+			server.Jobs = server.Jobs[1:]
 		}
-		job := server.Jobs[0]
-		server.Jobs = server.Jobs[1:]
+
 		server.Mutex.Unlock()
-
-		server.reset()
-
-		log.Warn("job started:", job.Name())
-
-		if err := server.runJob(job); err != nil {
-			log.Warn("job failed:", err)
-		} else {
-			log.Warn("job finished:", job.Name())
-		}
+		time.Sleep(time.Second)
 	}
 }
 

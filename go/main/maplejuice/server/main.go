@@ -1,11 +1,14 @@
 package main
 
 import (
+	"bufio"
 	"cs425/common"
 	"cs425/failuredetector"
 	"cs425/maplejuice"
+	"fmt"
 	"os"
 	"strconv"
+	"strings"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -34,11 +37,48 @@ func main() {
 		server := maplejuice.NewLeader(info)
 		go failuredetector.NewServer(info.Hostname, info.UDPPort, common.GOSSIP_PROTOCOL, server).Start()
 		go server.Start()
+		go leaderStdinHandler(info, server)
 	} else {
 		service := maplejuice.NewService(info.ID, info.Hostname, info.RPCPort)
 		go failuredetector.NewServer(info.Hostname, info.UDPPort, common.GOSSIP_PROTOCOL, service).Start()
 		go service.Start()
+		go workerStdinHandler(info, service)
 	}
 
 	<-make(chan bool)
+}
+
+func leaderStdinHandler(info common.Node, server *maplejuice.Leader) {
+	scanner := bufio.NewScanner(os.Stdin)
+
+	for scanner.Scan() {
+		command := strings.TrimSpace(scanner.Text())
+		switch strings.ToLower(command) {
+		case "info":
+			fmt.Println("MapleJuice Leader node: ", info)
+		case "jobs":
+			server.Mutex.Lock()
+			for _, job := range server.Jobs {
+				fmt.Println(job.Name())
+			}
+			server.Mutex.Unlock()
+		case "help":
+			fmt.Println("jobs: list maplejuice jobs")
+			fmt.Println("info: display node info")
+		}
+	}
+}
+
+func workerStdinHandler(info common.Node, server *maplejuice.Service) {
+	scanner := bufio.NewScanner(os.Stdin)
+
+	for scanner.Scan() {
+		command := strings.TrimSpace(scanner.Text())
+		switch strings.ToLower(command) {
+		case "info":
+			fmt.Println("MapleJuice Worker node: ", info)
+		case "help":
+			fmt.Println("info: display node info")
+		}
+	}
 }
