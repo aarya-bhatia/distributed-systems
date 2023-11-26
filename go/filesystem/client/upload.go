@@ -63,7 +63,7 @@ func (client *SDFSClient) TryWrite(reader Reader, filename string, mode int, res
 	go h.Start()
 	defer h.Stop()
 
-	log.Println("To upload:", uploadReply.File)
+	// log.Println("To upload:", uploadReply.File)
 
 	for i, block := range uploadReply.Blocks {
 		freeSpace := common.BLOCK_SIZE - block.Size

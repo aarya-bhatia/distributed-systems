@@ -48,24 +48,14 @@ func (task *MapTask) Run(sdfsClient *client.SDFSClient) (map[string][]string, er
 		return nil, err
 	}
 
-	if !common.FileExists(task.Param.MapperExe) {
-		// Download mapper executable
-		fileWriter, err := client.NewFileWriterWithOpts(task.Param.MapperExe, client.DEFAULT_FILE_FLAGS, 0777)
-		if err != nil {
-			log.Warn("Error creating file writer")
-			return nil, err
-		}
-
-		if err := sdfsClient.DownloadFile(fileWriter, task.Param.MapperExe); err != nil {
-			log.Warn("Error downloading map exectuable")
-			return nil, err
-		}
-	}
-
 	output, err := ExecuteAndGetOutput("./"+task.Param.MapperExe, lines)
 	if err != nil {
 		return nil, err
 	}
 
 	return ParseMapOutput(output), nil
+}
+
+func (task *MapTask) GetExecutable() string {
+	return task.Param.MapperExe
 }

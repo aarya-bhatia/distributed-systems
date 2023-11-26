@@ -71,11 +71,11 @@ func (client *SDFSClient) TryReadFile(writer Writer, filename string, offset int
 	defer leader.Call(server.RPC_FINISH_DOWNLOAD_FILE, &args, &reply)
 
 	if offset+length > fileMetadata.File.FileSize {
-		log.Printf("offset:%d,length:%d,filesize:%d", offset, length, fileMetadata.File.FileSize)
+		log.Warnf("offset:%d,length:%d,filesize:%d", offset, length, fileMetadata.File.FileSize)
 		return errors.New("out of bounds")
 	}
 
-	log.Println("To download:", fileMetadata.File, fileMetadata.Blocks)
+	// log.Println("To download:", fileMetadata.File, fileMetadata.Blocks)
 
 	startBlock := int(offset / common.BLOCK_SIZE)
 	endBlock := int((offset + length - 1) / common.BLOCK_SIZE)

@@ -2,6 +2,7 @@ package maplejuice
 
 import (
 	"cs425/common"
+	"cs425/failuredetector"
 	"cs425/filesystem/client"
 	"errors"
 	"fmt"
@@ -12,7 +13,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-const EXECUTOR_POLL_INTERVAL = 100 * time.Millisecond
+const EXECUTOR_POLL_INTERVAL = 20 * time.Millisecond
 
 const (
 	RPC_ALLOCATE    = "Service.Allocate"
@@ -37,26 +38,31 @@ type Service struct {
 	Nodes    []common.Node
 	Mutex    sync.Mutex
 
+	FD *failuredetector.Server
+
 	NumExecutor int
 	Tasks       []Message
 	Data        map[string][]string
 }
 
-func NewService(ID int, Hostname string, Port int) *Service {
+func NewService(info common.Node) *Service {
 	service := new(Service)
-	service.ID = ID
+	service.ID = info.ID
 	service.Nodes = make([]common.Node, 0)
-	service.Hostname = Hostname
-	service.Port = Port
+	service.Hostname = info.Hostname
+	service.Port = info.RPCPort
 	service.Tasks = make([]Message, 0)
 	service.Data = make(map[string][]string)
+	service.FD = failuredetector.NewServer(info.Hostname, info.UDPPort, common.GOSSIP_PROTOCOL, service)
 
 	return service
 }
 
 func (service *Service) Start() {
 	log.Info("Starting MapleJuice worker")
-	common.StartRPCServer(service.Hostname, service.Port, service)
+	go common.StartRPCServer(service.Hostname, service.Port, service)
+	time.Sleep(time.Second)
+	go service.FD.Start()
 }
 
 func merge(m1 map[string][]string, m2 map[string][]string) map[string][]string {
@@ -193,6 +199,22 @@ func (server *Service) FinishReduceJob(outputFile *string, reply *bool) error {
 	return nil
 }
 
+func (server *Service) downloadExecutable(sdfsClient *client.SDFSClient, filename string) {
+	server.Mutex.Lock()
+	defer server.Mutex.Unlock()
+
+	if !common.FileExists(filename) {
+		fileWriter, err := client.NewFileWriterWithOpts(filename, client.DEFAULT_FILE_FLAGS, 0777)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		if err := sdfsClient.DownloadFile(fileWriter, filename); err != nil {
+			log.Fatal(err)
+		}
+	}
+}
+
 func (server *Service) StartExecutor() error {
 	// Connect to leader
 	conn, err := common.Connect(common.MAPLE_JUICE_LEADER_ID, common.MapleJuiceCluster)
@@ -201,50 +223,50 @@ func (server *Service) StartExecutor() error {
 	}
 	defer conn.Close()
 
-	client, err := server.getSDFSClient()
+	sdfsClient, err := server.getSDFSClient()
 	if err != nil {
 		return err
 	}
 
 	for {
 		server.Mutex.Lock()
-
-		var message *Message = nil
-
-		if len(server.Tasks) > 0 {
-			message = &server.Tasks[0]
-			server.Tasks = server.Tasks[1:]
+		if len(server.Tasks) == 0 {
+			server.Mutex.Unlock()
+			time.Sleep(EXECUTOR_POLL_INTERVAL)
+			continue
 		}
 
+		message := server.Tasks[0]
+		server.Tasks = server.Tasks[1:]
 		server.Mutex.Unlock()
 
-		if message != nil {
-			if message.Finish {
-				log.Println("Executor finished")
-				return nil
-			} else {
-				log.Println("Task started")
-				res, err := message.Task.Run(client)
-				if err != nil {
-					log.Fatal(err)
-				}
-
-				if res != nil {
-					server.Mutex.Lock()
-					server.Data = merge(server.Data, res)
-					server.Mutex.Unlock()
-				}
-
-				log.Debug("Task finished")
-
-				reply := false
-				if err = conn.Call(RPC_WORKER_ACK, &server.ID, &reply); err != nil {
-					log.Fatal(err)
-				}
-			}
+		if message.Finish {
+			log.Println("Executor finished")
+			return nil
 		}
 
-		time.Sleep(EXECUTOR_POLL_INTERVAL)
+		log.Println("Task started")
+
+		server.downloadExecutable(sdfsClient, message.Task.GetExecutable())
+
+		res, err := message.Task.Run(sdfsClient)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		if res != nil {
+			server.Mutex.Lock()
+			server.Data = merge(server.Data, res)
+			server.Mutex.Unlock()
+		}
+
+		log.Debug("Task finished")
+
+		reply := false
+		if err = conn.Call(RPC_WORKER_ACK, &server.ID, &reply); err != nil {
+			log.Fatal(err)
+		}
+
 	}
 }
 

@@ -2,6 +2,7 @@ package maplejuice
 
 import (
 	"cs425/common"
+	"cs425/failuredetector"
 	"cs425/filesystem/client"
 	"errors"
 	"strconv"
@@ -21,8 +22,7 @@ type Leader struct {
 	ID       int
 	Info     common.Node
 	Mutex    sync.Mutex
-	JobCV    sync.Cond
-	TaskCV   sync.Cond
+	FD       *failuredetector.Server
 	Jobs     []Job
 	Nodes    []common.Node
 	NumTasks int
@@ -39,32 +39,91 @@ func NewLeader(info common.Node) *Leader {
 	leader.Info = info
 	leader.Jobs = make([]Job, 0)
 	leader.Workers = make(map[int]*Worker)
-	leader.TaskCV = *sync.NewCond(&leader.Mutex)
-	leader.JobCV = *sync.NewCond(&leader.Mutex)
 	leader.Pool = common.NewConnectionPool(common.MapleJuiceCluster)
+	leader.FD = failuredetector.NewServer(info.Hostname, info.UDPPort, common.GOSSIP_PROTOCOL, leader)
 
-	for _, node := range common.MapleJuiceCluster {
-		leader.Workers[node.ID] = &Worker{NumExecutors: 0, Tasks: make([]Task, 0)}
+	// for _, node := range common.MapleJuiceCluster {
+	// 	leader.Workers[node.ID] = &Worker{NumExecutors: 0, Tasks: make([]Task, 0)}
+	// }
+	//
+	return leader
+}
+
+func (server *Leader) addNode(node common.Node) {
+	server.Mutex.Lock()
+	defer server.Mutex.Unlock()
+
+	// check if node exists
+	for _, cur := range server.Nodes {
+		if cur.ID == node.ID {
+			return
+		}
 	}
 
-	return leader
+	server.Nodes = append(server.Nodes, node)
+}
+
+func (server *Leader) removeNode(node common.Node) {
+	server.Mutex.Lock()
+	defer server.Mutex.Unlock()
+
+	for i, prev := range server.Nodes {
+		if prev.ID == node.ID {
+			server.Nodes = common.RemoveIndex(server.Nodes, i)
+			break
+		}
+	}
+}
+
+func (server *Leader) addWorker(workerID int) {
+	server.Mutex.Lock()
+	defer server.Mutex.Unlock()
+
+	// check if worker exists
+	if _, ok := server.Workers[workerID]; ok {
+		return
+	}
+
+	server.Workers[workerID] = &Worker{NumExecutors: 0, Tasks: make([]Task, 0)}
+}
+
+func (server *Leader) removeWorker(workerID int) {
+	server.Mutex.Lock()
+	worker, ok := server.Workers[workerID]
+	if !ok {
+		server.Mutex.Unlock()
+		return
+	}
+	numExecutors := worker.NumExecutors
+	tasks := worker.Tasks
+	delete(server.Workers, workerID)
+	server.Mutex.Unlock()
+
+	// Reallocate executors to another worker (TODO)
+	server.Allocate(numExecutors)
+
+	// Reassigning tasks of failed worker
+	for _, task := range tasks {
+		log.Println("Reassinging task", task)
+		server.AssignTask(task) // Will update NumTasks
+	}
+
+	server.Mutex.Lock()
+	server.NumTasks -= len(worker.Tasks) // Remove task count for failed worker
+	server.Mutex.Unlock()
 }
 
 func (server *Leader) HandleNodeJoin(node *common.Node) {
 	if node == nil {
 		return
 	}
-
-	server.Mutex.Lock()
-	defer server.Mutex.Unlock()
-	defer log.Println("Nodes:", server.Nodes)
-
-	server.Nodes = append(server.Nodes, *node)
+	server.addNode(*node)
 
 	if common.IsSDFSNode(*node) {
 		log.Debug("SDFS Node joined: ", *node)
 	} else if common.IsMapleJuiceNode(*node) {
 		log.Println("MapleJuice Node joined:", *node)
+		server.addWorker(node.ID)
 	}
 }
 
@@ -72,29 +131,13 @@ func (server *Leader) HandleNodeLeave(node *common.Node) {
 	if node == nil {
 		return
 	}
-
-	server.Mutex.Lock()
-	defer server.Mutex.Unlock()
-	defer log.Println("Nodes:", server.Nodes)
-
-	for i, prev := range server.Nodes {
-		if prev == *node {
-			server.Nodes = common.RemoveIndex(server.Nodes, i)
-			break
-		}
-	}
+	server.removeNode(*node)
 
 	if common.IsSDFSNode(*node) {
 		log.Println("SDFS Node left:", *node)
 	} else if common.IsMapleJuiceNode(*node) {
 		log.Println("MapleJuice Node left:", *node)
-		if worker, ok := server.Workers[node.ID]; !ok {
-			server.Allocate(worker.NumExecutors)
-			for _, task := range worker.Tasks {
-				server.AssignTask(task)
-			}
-			delete(server.Workers, node.ID)
-		}
+		server.removeWorker(node.ID)
 	}
 }
 
@@ -102,6 +145,8 @@ func (server *Leader) Start() {
 	log.Infof("MapleJuice leader is running at %s:%d...\n", server.Info.Hostname, server.Info.RPCPort)
 	go server.runJobs()
 	go common.StartRPCServer(server.Info.Hostname, server.Info.RPCPort, server)
+	time.Sleep(time.Second)
+	go server.FD.Start()
 }
 
 func (server *Leader) addJob(job Job) {
@@ -109,7 +154,6 @@ func (server *Leader) addJob(job Job) {
 	defer server.Mutex.Unlock()
 	server.Jobs = append(server.Jobs, job)
 	log.Info("job added:", job.Name())
-	server.JobCV.Broadcast()
 }
 
 func (server *Leader) GetSDFSNodes() []common.Node {
@@ -227,7 +271,6 @@ func (server *Leader) WorkerAck(args *int, reply *bool) error {
 	defer server.Mutex.Unlock()
 	log.Printf("Ack from worker %d", *args)
 	server.NumTasks--
-	server.TaskCV.Broadcast()
 	return nil
 }
 
@@ -294,8 +337,12 @@ func (server *Leader) Wait() {
 	}
 }
 
-func (server *Leader) Allocate(size int) {
+func (server *Leader) Allocate(size int) bool {
 	nodes := server.GetMapleJuiceNodes()
+	if len(nodes) == 0 {
+		return false
+	}
+
 	server.Mutex.Lock()
 	defer server.Mutex.Unlock()
 
@@ -310,8 +357,10 @@ func (server *Leader) Allocate(size int) {
 		log.Println("allocating", size, "workers to node", node.ID)
 		if err := conn.Call(RPC_ALLOCATE, &args, &reply); err != nil {
 			log.Println(err)
+			return false
 		}
 	}
+	return true
 }
 
 func (server *Leader) Free() {
@@ -353,10 +402,10 @@ func (server *Leader) runJobs() {
 	for {
 		server.Mutex.Lock()
 
-		if len(server.Jobs) > 0 {
+		for len(server.Jobs) > 0 {
 			job := server.Jobs[0]
 			server.Mutex.Unlock()
-			server.reset()
+
 			log.Warn("job started:", job.Name())
 
 			if err := server.runJob(job); err != nil {
@@ -375,15 +424,29 @@ func (server *Leader) runJobs() {
 }
 
 func (server *Leader) runJob(job Job) error {
-	server.Allocate(job.GetNumWorkers())
-	defer server.Free()
+	if !server.Allocate(job.GetNumWorkers()) {
+		return errors.New("Failed to allocate worker")
+	}
 
-	sdfsNode := common.RandomChoice(server.GetSDFSNodes())
+	defer server.Free()
+	defer server.reset()
+
+	sdfsNodes := server.GetSDFSNodes()
+	if len(sdfsNodes) == 0 {
+		return errors.New("No sdfs nodes are online")
+	}
+
+	sdfsNode := common.RandomChoice(sdfsNodes)
 	sdfsClient := client.NewSDFSClient(common.GetAddress(sdfsNode.Hostname, sdfsNode.RPCPort))
 
 	tasks, err := job.GetTasks(sdfsClient)
 	if err != nil {
 		return err
+	}
+
+	if len(tasks) == 0 {
+		log.Println("No tasks")
+		return nil
 	}
 
 	for _, task := range tasks {

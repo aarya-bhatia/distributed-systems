@@ -3,7 +3,6 @@ package main
 import (
 	"bufio"
 	"cs425/common"
-	"cs425/failuredetector"
 	"cs425/maplejuice"
 	"fmt"
 	"os"
@@ -35,12 +34,10 @@ func main() {
 
 	if info.ID == common.MAPLE_JUICE_LEADER_ID {
 		server := maplejuice.NewLeader(info)
-		go failuredetector.NewServer(info.Hostname, info.UDPPort, common.GOSSIP_PROTOCOL, server).Start()
 		go server.Start()
 		go leaderStdinHandler(info, server)
 	} else {
-		service := maplejuice.NewService(info.ID, info.Hostname, info.RPCPort)
-		go failuredetector.NewServer(info.Hostname, info.UDPPort, common.GOSSIP_PROTOCOL, service).Start()
+		service := maplejuice.NewService(info)
 		go service.Start()
 		go workerStdinHandler(info, service)
 	}

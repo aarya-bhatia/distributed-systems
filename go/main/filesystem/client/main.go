@@ -91,6 +91,8 @@ func main() {
 			return
 		}
 
+		os.Remove(tokens[2])
+
 		files, err := sdfsClient.ListDirectory(tokens[1])
 		if err != nil {
 			log.Fatal(err)

@@ -1,5 +1,0 @@
-go run . 1 put data/sample sample
-go run . 1 put data/vm1 vm1
-go run . 1 put wordcount_mapper.py wordcount_mapper.py
-go run . 1 put wordcount_reducer.py wordcount_reducer.py
-

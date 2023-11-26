@@ -39,21 +39,6 @@ func (task *ReduceTask) Run(sdfsClient *client.SDFSClient) (map[string][]string,
 	}
 
 	lines := strings.Split(writer.String(), "\n")
-
-	if !common.FileExists(task.Param.ReducerExe) {
-		// Download reducer executable
-		fileWriter, err := client.NewFileWriterWithOpts(task.Param.ReducerExe, client.DEFAULT_FILE_FLAGS, 0777)
-		if err != nil {
-			log.Warn("Error creating file writer")
-			return nil, err
-		}
-
-		if err := sdfsClient.DownloadFile(fileWriter, task.Param.ReducerExe); err != nil {
-			log.Warn("Error downloading reduce exectuable")
-			return nil, err
-		}
-	}
-
 	tokens := strings.Split(task.InputFile, ":")
 	key := tokens[len(tokens)-1]
 
@@ -64,4 +49,8 @@ func (task *ReduceTask) Run(sdfsClient *client.SDFSClient) (map[string][]string,
 	}
 
 	return map[string][]string{key: output}, nil
+}
+
+func (task *ReduceTask) GetExecutable() string {
+	return task.Param.ReducerExe
 }
