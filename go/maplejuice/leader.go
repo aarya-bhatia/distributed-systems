@@ -353,6 +353,7 @@ func (server *Leader) reset() {
 func (server *Leader) runJobs() {
 	for {
 		log.Println("waiting for jobs...")
+
 		server.Mutex.Lock()
 		for len(server.Jobs) == 0 {
 			server.JobCV.Wait()
@@ -363,12 +364,12 @@ func (server *Leader) runJobs() {
 
 		server.reset()
 
-		log.Println("job started:", job.Name())
+		log.Warn("job started:", job.Name())
 
 		if err := server.runJob(job); err != nil {
-			log.Println("job failed:", err)
+			log.Warn("job failed:", err)
 		} else {
-			log.Println("job finished:", job.Name())
+			log.Warn("job finished:", job.Name())
 		}
 	}
 }
@@ -406,12 +407,10 @@ func (server *Leader) runJob(job Job) error {
 		switch job.(type) {
 		case *MapJob:
 			if err = conn.Call(RPC_FINISH_MAP_JOB, &job.(*MapJob).Param.OutputPrefix, &reply); err != nil {
-				log.Println("job failed:", err)
 				return err
 			}
 		case *ReduceJob:
 			if err = conn.Call(RPC_FINISH_REDUCE_JOB, &job.(*ReduceJob).Param.OutputFile, &reply); err != nil {
-				log.Println("job failed:", err)
 				return err
 			}
 		}
@@ -425,7 +424,7 @@ func (server *Leader) runJob(job Job) error {
 	server.Wait()
 
 	// cleanup output files
-	switch job.(type) {
+	/* switch job.(type) {
 	case *MapJob:
 
 	case *ReduceJob:
@@ -434,7 +433,7 @@ func (server *Leader) runJob(job Job) error {
 				log.Println(err)
 			}
 		}
-	}
+	} */
 
 	return nil
 }

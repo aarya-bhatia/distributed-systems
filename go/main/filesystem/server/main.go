@@ -124,7 +124,8 @@ func stdinListener(info common.Node, fs *server.Server, fd *failuredetector.Serv
 			t.AppendHeader(table.Row{"Filename", "Block", "Size"})
 
 			for _, f := range files {
-				tokens := strings.Split(f.Name, ":")
+				decodedFilename := common.DecodeFilename(f.Name)
+				tokens := strings.Split(decodedFilename, ":")
 				t.AppendRow(table.Row{
 					tokens[0],
 					tokens[1],

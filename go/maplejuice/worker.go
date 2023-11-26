@@ -169,7 +169,6 @@ func (server *Service) FinishReduceJob(outputFile *string, reply *bool) error {
 
 		reader := client.NewByteReader([]byte(data))
 		*outputFile = fmt.Sprintf("%s:%d", *outputFile, server.ID)
-		log.Println("Writing reduce output to file:", *outputFile)
 		err = sdfsClient.WriteFile(reader, *outputFile, common.FILE_TRUNCATE)
 		if err != nil {
 			log.Fatal(err)

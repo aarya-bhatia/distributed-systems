@@ -231,6 +231,14 @@ func (s *Server) startWrite(args *UploadArgs, reply *FileMetadata, mode int) err
 	filename := args.Filename
 	size := args.FileSize
 
+	if len(filename) == 0 {
+		return errors.New("Filename must be a non-zero string")
+	}
+
+	if size <= 0 {
+		return errors.New("Filesize must be a positive integer")
+	}
+
 	if err := s.ResourceManager.Acquire(clientID, filename, WRITE); err != nil {
 		return err
 	}
@@ -297,7 +305,7 @@ func (s *Server) InternalSetFileMetadata(args *FileMetadata, reply *bool) error 
 		s.Metadata.UpdateBlockMetadata(block)
 	}
 
-	log.Debug("Metadata updated:", args.File)
+	// log.Debug("Metadata updated:", args.File)
 	return nil
 }
 
@@ -374,8 +382,7 @@ func (s *Server) InternalReplicateBlocks(blocks *[]BlockMetadata, reply *[]Block
 }
 
 func (s *Server) WriteBlock(args *WriteBlockArgs, reply *bool) error {
-	log.Debug("WriteBlock()") // : file:%v size:%d num:%d, name:%s", args.File, len(args.Block.Data), args.Block.Num, args.Block.Name)
-
+	log.Debugf("WriteBlock(%s, size=%d)", args.Block.Name, len(args.Block.Data))
 	filename := s.Directory + "/" + common.EncodeFilename(args.Block.Name)
 
 	if args.Mode == common.FILE_APPEND {
@@ -390,9 +397,8 @@ func (s *Server) WriteBlock(args *WriteBlockArgs, reply *bool) error {
 }
 
 func (s *Server) ReadBlock(args *DownloadBlockArgs, reply *Block) error {
-	log.Debug("ReadBlock()") // : name:%s, offset:%d, size:%d", args.Block, args.Offset, args.Size)
-
-	filename := s.Directory + "/" + common.DecodeFilename(args.Block)
+	log.Debugf("ReadBlock(%s, offset=%d, size=%d)", args.Block, args.Offset, args.Size)
+	filename := s.Directory + "/" + common.EncodeFilename(args.Block)
 	if !common.FileExists(filename) {
 		return errors.New("block not found")
 	}

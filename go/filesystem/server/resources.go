@@ -121,10 +121,10 @@ func (rm *ResourceManager) Acquire(clientID string, resource string, mode int) e
 
 	rm.Mutex.Unlock()
 	if mode == READ {
-		log.Debug("Waiting for read lock...")
+		// log.Debug("Waiting for read lock...")
 		rm.getReadLock(resource)
 	} else {
-		log.Debug("Waiting for write lock...")
+		// log.Debug("Waiting for write lock...")
 		rm.getWriteLock(resource)
 	}
 	rm.Mutex.Lock()
@@ -135,7 +135,7 @@ func (rm *ResourceManager) Acquire(clientID string, resource string, mode int) e
 		Heartbeat: time.Now().UnixNano(),
 	}
 
-	log.Println("Resource was acquired:", resource)
+	// log.Debug("Resource was acquired:", resource)
 	return nil
 }
 
@@ -164,6 +164,6 @@ func (rm *ResourceManager) Release(clientID string, resource string) error {
 	rm.Mutex.Lock()
 
 	delete(rm.Clients, clientID)
-	log.Println("Resource was released:", resource)
+	// log.Debug("Resource was released:", resource)
 	return nil
 }

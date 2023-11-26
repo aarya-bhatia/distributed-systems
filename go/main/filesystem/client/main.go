@@ -18,6 +18,7 @@ func printUsage() {
 	fmt.Println("get <remote> <local>")
 	fmt.Println("put <local> <remote>")
 	fmt.Println("delete <remote>")
+	fmt.Println("rmdir <remote>")
 	fmt.Println()
 }
 
@@ -90,6 +91,16 @@ func main() {
 		}
 
 		if err := sdfsClient.DeleteFile(tokens[1]); err != nil {
+			logrus.Fatal(err)
+		}
+
+	case "rmdir":
+		if len(tokens) != 2 {
+			printUsage()
+			return
+		}
+
+		if err := sdfsClient.DeleteAll(tokens[1]); err != nil {
 			logrus.Fatal(err)
 		}
 
