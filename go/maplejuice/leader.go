@@ -5,6 +5,7 @@ import (
 	"cs425/failuredetector"
 	"cs425/filesystem/client"
 	"errors"
+	"net/rpc"
 	"strconv"
 	"strings"
 	"sync"
@@ -14,8 +15,11 @@ import (
 )
 
 type Worker struct {
+	ID           int
 	NumExecutors int
+	Pending      []Task
 	Tasks        []Task
+	Conn         *rpc.Client
 }
 
 type Leader struct {
@@ -42,10 +46,6 @@ func NewLeader(info common.Node) *Leader {
 	leader.Pool = common.NewConnectionPool(common.MapleJuiceCluster)
 	leader.FD = failuredetector.NewServer(info.Hostname, info.UDPPort, common.GOSSIP_PROTOCOL, leader)
 
-	// for _, node := range common.MapleJuiceCluster {
-	// 	leader.Workers[node.ID] = &Worker{NumExecutors: 0, Tasks: make([]Task, 0)}
-	// }
-	//
 	return leader
 }
 
@@ -75,42 +75,20 @@ func (server *Leader) removeNode(node common.Node) {
 	}
 }
 
-func (server *Leader) addWorker(workerID int) {
+func (server *Leader) removeWorker(workerID int) {
 	server.Mutex.Lock()
 	defer server.Mutex.Unlock()
 
-	// check if worker exists
-	if _, ok := server.Workers[workerID]; ok {
-		return
-	}
-
-	server.Workers[workerID] = &Worker{NumExecutors: 0, Tasks: make([]Task, 0)}
-}
-
-func (server *Leader) removeWorker(workerID int) {
-	server.Mutex.Lock()
 	worker, ok := server.Workers[workerID]
 	if !ok {
-		server.Mutex.Unlock()
 		return
 	}
-	numExecutors := worker.NumExecutors
+
 	tasks := worker.Tasks
+	server.NumTasks -= len(tasks)
 	delete(server.Workers, workerID)
-	server.Mutex.Unlock()
 
-	// Reallocate executors to another worker (TODO)
-	server.Allocate(numExecutors)
-
-	// Reassigning tasks of failed worker
-	for _, task := range tasks {
-		log.Println("Reassinging task", task)
-		server.AssignTask(task) // Will update NumTasks
-	}
-
-	server.Mutex.Lock()
-	server.NumTasks -= len(worker.Tasks) // Remove task count for failed worker
-	server.Mutex.Unlock()
+	log.Warn("TODO: Reschedule tasks") // TODO
 }
 
 func (server *Leader) HandleNodeJoin(node *common.Node) {
@@ -123,7 +101,6 @@ func (server *Leader) HandleNodeJoin(node *common.Node) {
 		log.Debug("SDFS Node joined: ", *node)
 	} else if common.IsMapleJuiceNode(*node) {
 		log.Println("MapleJuice Node joined:", *node)
-		server.addWorker(node.ID)
 	}
 }
 
@@ -194,6 +171,10 @@ func (server *Leader) MapleRequest(args *MapParam, reply *bool) error {
 		return errors.New("No MapleJuice workers are available")
 	}
 
+	if args.NumMapper <= 0 {
+		return errors.New("Number of workers must be greater than 0")
+	}
+
 	log.Println("sdfs nodes:", sdfsNodes)
 	log.Println("maplejuice workers:", workers)
 
@@ -226,6 +207,10 @@ func (server *Leader) JuiceRequest(args *ReduceParam, reply *bool) error {
 		return errors.New("No MapleJuice workers are available")
 	}
 
+	if args.NumReducer <= 0 {
+		return errors.New("Number of workers must be greater than 0")
+	}
+
 	log.Println("sdfs nodes:", sdfsNodes)
 	log.Println("maplejuice workers:", workers)
 
@@ -239,6 +224,7 @@ func (server *Leader) JuiceRequest(args *ReduceParam, reply *bool) error {
 
 	filtered := []string{}
 
+	// TODO
 	for _, inputFile := range *inputFiles {
 		tokens := strings.Split(inputFile, ":")
 		if len(tokens) < 2 { // filename:workerID:...
@@ -269,56 +255,112 @@ func (server *Leader) JuiceRequest(args *ReduceParam, reply *bool) error {
 func (server *Leader) WorkerAck(args *int, reply *bool) error {
 	server.Mutex.Lock()
 	defer server.Mutex.Unlock()
-	log.Printf("Ack from worker %d", *args)
-	server.NumTasks--
+	if _, ok := server.Workers[*args]; ok {
+		log.Println("Ack")
+		server.NumTasks--
+	}
 	return nil
 }
 
-func (s *Leader) tryAssignTask(task Task) bool {
-	workers := s.GetMapleJuiceNodes()
-	if len(workers) == 0 {
-		return false
-	}
+func (s *Leader) AssignAndAllocateTasks(numWorkers int, tasks []Task) bool {
+	pending := tasks
 
-	worker := workers[task.Hash()%len(workers)]
-
-	s.Mutex.Lock()
-	conn, err := s.Pool.GetConnection(worker.ID)
-	s.Mutex.Unlock()
-	if err != nil {
-		log.Warn(err)
-		return false
-	}
-
+	s.Workers = make(map[int]*Worker)
+	available := []int{}
 	reply := false
-	switch task.(type) {
-	case *MapTask:
-		if err := conn.Call(RPC_MAP_TRASK, task.(*MapTask), &reply); err != nil {
+
+	for _, node := range s.GetMapleJuiceNodes() {
+		conn, err := s.Pool.GetConnection(node.ID)
+		if err != nil {
 			log.Println(err)
-			return false
+			continue
 		}
-	case *ReduceTask:
-		if err := conn.Call(RPC_REDUCE_TASK, task.(*ReduceTask), &reply); err != nil {
+
+		if err := conn.Call(RPC_ALLOCATE, &numWorkers, &reply); err != nil {
 			log.Println(err)
-			return false
+			continue
 		}
-	default:
-		log.Fatal("Invalid type of task")
+
+		log.Println("Allocated", numWorkers, "executors to worker", node.ID)
+		s.Workers[node.ID] = &Worker{ID: node.ID, Conn: conn, Tasks: make([]Task, 0), NumExecutors: numWorkers}
+		available = append(available, node.ID)
 	}
 
-	s.Mutex.Lock()
-	s.Workers[worker.ID].Tasks = append(s.Workers[worker.ID].Tasks, task)
-	s.NumTasks++
-	s.Mutex.Unlock()
+	for len(available) > 0 && len(pending) > 0 {
+		log.Println("To assign", len(pending), "tasks to", len(available), "workers")
 
-	log.Println("Task", task.GetID(), "assigned to worker", worker)
+		for _, task := range pending {
+			assignee := available[task.Hash()%len(available)]
+			s.Workers[assignee].Pending = append(s.Workers[assignee].Pending, task)
+		}
+
+		done := make(chan int)
+
+		for _, worker := range s.Workers {
+			go s.sendTasks(worker, done)
+		}
+
+		pending = []Task{}
+
+		for i := 0; i < len(s.Workers); i++ {
+			id := <-done
+			worker := s.Workers[id]
+			if len(worker.Pending) > 0 {
+				log.Println("Failed to schedule", len(worker.Pending), "tasks on worker", id)
+				pending = append(pending, worker.Pending...)
+				available = common.RemoveElement(available, worker.ID)
+			}
+		}
+
+		if len(pending) == 0 {
+			break
+		}
+
+		log.Println("Retrying assignment...")
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	if len(pending) > 0 {
+		log.Println("Failed to schedule", len(pending), "tasks")
+		return false
+	}
+
+	s.NumTasks = 0
+	for _, worker := range s.Workers {
+		s.NumTasks += len(worker.Tasks)
+	}
+
 	return true
 }
 
-func (s *Leader) AssignTask(task Task) {
-	for !s.tryAssignTask(task) {
-		log.Println("Retrying AssignTask()...")
-		time.Sleep(time.Second)
+func (s *Leader) sendTasks(worker *Worker, done chan int) {
+	defer func() {
+		log.Println("Scheduled", len(worker.Tasks), "tasks on worker", worker.ID)
+		done <- worker.ID
+	}()
+
+	reply := false
+
+	for len(worker.Pending) > 0 {
+		task := worker.Pending[0]
+
+		switch task.(type) {
+		case *MapTask:
+			if err := worker.Conn.Call(RPC_MAP_TRASK, task.(*MapTask), &reply); err != nil {
+				log.Println(err)
+				return
+			}
+		case *ReduceTask:
+			if err := worker.Conn.Call(RPC_REDUCE_TASK, task.(*ReduceTask), &reply); err != nil {
+				log.Println(err)
+				return
+			}
+		default:
+			log.Fatal("Invalid type of task")
+		}
+
+		worker.Pending = worker.Pending[1:]
+		worker.Tasks = append(worker.Tasks, task)
 	}
 }
 
@@ -333,71 +375,22 @@ func (server *Leader) Wait() {
 			return
 		}
 
-		time.Sleep(time.Second)
+		time.Sleep(100 * time.Millisecond)
 	}
-}
-
-func (server *Leader) Allocate(size int) bool {
-	nodes := server.GetMapleJuiceNodes()
-	if len(nodes) == 0 {
-		return false
-	}
-
-	server.Mutex.Lock()
-	defer server.Mutex.Unlock()
-
-	for _, node := range nodes {
-		conn, err := server.Pool.GetConnection(node.ID)
-		if err != nil {
-			log.Println(err)
-			continue
-		}
-		args := size
-		reply := false
-		log.Println("allocating", size, "workers to node", node.ID)
-		if err := conn.Call(RPC_ALLOCATE, &args, &reply); err != nil {
-			log.Println(err)
-			return false
-		}
-		server.Workers[node.ID].NumExecutors = size
-	}
-	return true
 }
 
 func (server *Leader) Free() {
-	nodes := server.GetMapleJuiceNodes()
 	server.Mutex.Lock()
 	defer server.Mutex.Unlock()
-
-	for _, node := range nodes {
-		conn, err := server.Pool.GetConnection(node.ID)
-		if err != nil {
-			log.Println(err)
-			continue
-		}
-		worker := server.Workers[node.ID]
-		args := worker.NumExecutors
-		reply := false
-		log.Println("deallocating workers at node", node.ID)
-		if err := conn.Call(RPC_FREE, &args, &reply); err != nil {
-			log.Println(err)
-			continue
-		}
-		worker.NumExecutors = 0
-	}
-}
-
-func (server *Leader) reset() {
-	server.Mutex.Lock()
-	defer server.Mutex.Unlock()
-
-	server.Pool.Close()
 
 	for _, worker := range server.Workers {
-		worker.Tasks = make([]Task, 0)
+		reply := false
+		log.Println("deallocating workers at worker", worker.ID)
+		if err := worker.Conn.Call(RPC_FREE, &worker.NumExecutors, &reply); err != nil {
+			log.Println(err)
+			continue
+		}
 	}
-
-	server.NumTasks = 0
 }
 
 func (server *Leader) runJobs() {
@@ -425,21 +418,9 @@ func (server *Leader) runJobs() {
 	}
 }
 
-func (server *Leader) taskSender(tasks chan Task, done chan bool) {
-	for task := range tasks {
-		server.AssignTask(task)
-	}
-
-	done <- true
-}
-
 func (server *Leader) runJob(job Job) error {
-	if !server.Allocate(job.GetNumWorkers()) {
-		return errors.New("Failed to allocate worker")
-	}
-
+	defer server.Pool.Close()
 	defer server.Free()
-	defer server.reset()
 
 	sdfsNodes := server.GetSDFSNodes()
 	if len(sdfsNodes) == 0 {
@@ -459,71 +440,43 @@ func (server *Leader) runJob(job Job) error {
 		return nil
 	}
 
-	taskChan := make(chan Task)
-	done := make(chan bool)
-
-	// create thread pool to assign tasks
-	for i := 0; i < len(sdfsNodes); i++ {
-		go server.taskSender(taskChan, done)
-	}
-
-	// send all tasks
-	for _, task := range tasks {
-		taskChan <- task
-	}
-
-	// to signal no more tasks
-	close(taskChan)
-
-	// wait for all tasks to be assigned
-	for i := 0; i < len(sdfsNodes); i++ {
-		<-done
-	}
-
 	// wait for workers to read and process all input data
+	server.AssignAndAllocateTasks(job.GetNumWorkers(), tasks)
 	server.Wait()
-
-	workerNodes := server.GetMapleJuiceNodes()
-	reply := false
-
-	for _, node := range workerNodes {
-		server.Mutex.Lock()
-		conn, err := server.Pool.GetConnection(node.ID)
-		server.Mutex.Unlock()
-		if err != nil {
-			return err
-		}
-
-		switch job.(type) {
-		case *MapJob:
-			if err = conn.Call(RPC_FINISH_MAP_JOB, &job.(*MapJob).Param.OutputPrefix, &reply); err != nil {
-				return err
-			}
-		case *ReduceJob:
-			if err = conn.Call(RPC_FINISH_REDUCE_JOB, &job.(*ReduceJob).Param.OutputFile, &reply); err != nil {
-				return err
-			}
-		}
-
-		server.Mutex.Lock()
-		server.NumTasks++
-		server.Mutex.Unlock()
-	}
 
 	// wait for workers to write all output data
+	server.finishJob(job)
+	log.Println("waiting for finish job...")
 	server.Wait()
 
-	// cleanup output files
-	/* switch job.(type) {
-	case *MapJob:
+	// TODO: cleanup output files
+	return nil
+}
 
-	case *ReduceJob:
-		for _, file := range job.(*ReduceJob).InputFiles {
-			if err := sdfsClient.DeleteFile(file); err != nil {
+func (server *Leader) finishJob(job Job) error {
+	server.Mutex.Lock()
+	defer server.Mutex.Unlock()
+
+	reply := false
+
+	// TODO: Reschedule failed tasks
+
+	for _, worker := range server.Workers {
+		switch job.(type) {
+		case *MapJob:
+			if err := worker.Conn.Call(RPC_FINISH_MAP_JOB, &job.(*MapJob).Param.OutputPrefix, &reply); err != nil {
 				log.Println(err)
+				continue
+			}
+		case *ReduceJob:
+			if err := worker.Conn.Call(RPC_FINISH_REDUCE_JOB, &job.(*ReduceJob).Param.OutputFile, &reply); err != nil {
+				log.Println(err)
+				continue
 			}
 		}
-	} */
+
+		server.NumTasks++
+	}
 
 	return nil
 }
