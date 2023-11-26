@@ -9,6 +9,9 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+const DEFAULT_MODE_BITS = 0666
+const DEFAULT_FILE_FLAGS = os.O_WRONLY | os.O_TRUNC | os.O_CREATE
+
 type Writer interface {
 	Write([]byte) error // consume next chunk of data
 	Close()
@@ -26,6 +29,7 @@ type FileWriter struct {
 	filename string
 	file     *os.File
 	mode     fs.FileMode
+	flags    int
 }
 
 type ByteWriter struct {
@@ -54,13 +58,15 @@ func (w *TestWriter) Open() error {
 func NewFileWriter(filename string) (*FileWriter, error) {
 	w := new(FileWriter)
 	w.filename = filename
-	w.mode = 0666
+	w.flags = DEFAULT_FILE_FLAGS
+	w.mode = DEFAULT_MODE_BITS
 	return w, nil
 }
 
-func NewFileWriterWithOpts(filename string, filemode fs.FileMode) (*FileWriter, error) {
+func NewFileWriterWithOpts(filename string, flags int, filemode fs.FileMode) (*FileWriter, error) {
 	w := new(FileWriter)
 	w.filename = filename
+	w.flags = flags
 	w.mode = filemode
 	return w, nil
 }
@@ -76,7 +82,7 @@ func (w *FileWriter) Open() error {
 		return nil
 	}
 
-	file, err := os.OpenFile(w.filename, os.O_WRONLY|os.O_TRUNC|os.O_CREATE, w.mode)
+	file, err := os.OpenFile(w.filename, w.flags, w.mode)
 	if err != nil {
 		return err
 	}

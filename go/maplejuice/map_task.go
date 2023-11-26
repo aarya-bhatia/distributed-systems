@@ -50,7 +50,7 @@ func (task *MapTask) Run(sdfsClient *client.SDFSClient) (map[string][]string, er
 
 	if !common.FileExists(task.Param.MapperExe) {
 		// Download mapper executable
-		fileWriter, err := client.NewFileWriterWithOpts(task.Param.MapperExe, 0777)
+		fileWriter, err := client.NewFileWriterWithOpts(task.Param.MapperExe, client.DEFAULT_FILE_FLAGS, 0777)
 		if err != nil {
 			log.Warn("Error creating file writer")
 			return nil, err

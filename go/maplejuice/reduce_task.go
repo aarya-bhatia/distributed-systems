@@ -42,7 +42,7 @@ func (task *ReduceTask) Run(sdfsClient *client.SDFSClient) (map[string][]string,
 
 	if !common.FileExists(task.Param.ReducerExe) {
 		// Download reducer executable
-		fileWriter, err := client.NewFileWriterWithOpts(task.Param.ReducerExe, 0777)
+		fileWriter, err := client.NewFileWriterWithOpts(task.Param.ReducerExe, client.DEFAULT_FILE_FLAGS, 0777)
 		if err != nil {
 			log.Warn("Error creating file writer")
 			return nil, err
