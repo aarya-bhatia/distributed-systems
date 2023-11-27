@@ -3,7 +3,7 @@ package maplejuice
 import (
 	"bufio"
 	"cs425/filesystem/client"
-	"fmt"
+	"io"
 	"os/exec"
 	"regexp"
 	"strings"
@@ -38,72 +38,144 @@ func ParseKeyValuePairs(output []string) map[string][]string {
 	res := make(map[string][]string)
 
 	for _, line := range output {
-		parts := strings.Split(strings.TrimSpace(line), ":")
-		if len(parts) == 2 {
-			key := parts[0]
-			value := parts[1]
-			res[key] = append(res[key], value)
+		line = strings.TrimSpace(line)
+		keySeparator := strings.Index(line, ":")
+		if keySeparator < 0 {
+			continue
 		}
+		key := line[:keySeparator]
+		value := line[keySeparator+1:]
+
+		res[key] = append(res[key], value)
+
+		// parts := strings.Split(strings.TrimSpace(line), ":")
+		// if len(parts) == 2 {
+		// 	key := parts[0]
+		// 	value := parts[1]
+		// 	res[key] = append(res[key], value)
+		// }
 	}
+
+	log.Debug("Got ", len(res), " tuples")
 
 	return res
 }
 
 func ExecuteAndGetOutput(executable string, args []string, inputLines []string) ([]string, error) {
-	// Initialize the command
 	cmd := exec.Command(executable, args...)
 
-	// Create a pipe for the command's stdin
-	stdin, err := cmd.StdinPipe()
-	if err != nil {
-		log.Println("Error creating StdinPipe:", err)
-		return nil, err
-	}
+	stdinPipeReader, stdinPipeWriter := io.Pipe()
+	stdoutPipeReader, stdoutPipeWriter := io.Pipe()
 
-	// Create a pipe for the command's stdout
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		log.Println("Error creating StdoutPipe:", err)
-		return nil, err
-	}
+	cmd.Stdin = stdinPipeReader
+	cmd.Stdout = stdoutPipeWriter
 
 	// Start the command
-	if err := cmd.Start(); err != nil {
-		log.Println("Error starting command:", err)
+	err := cmd.Start()
+	if err != nil {
+		log.Warn("Error starting command:", err)
 		return nil, err
 	}
 
-	// Write input lines to the command's stdin
-	for _, line := range inputLines {
-		if _, err := fmt.Fprintln(stdin, line); err != nil {
-			log.Println("Error writing to stdin:", err)
-			return nil, err
+	// Write input lines to the stdin pipe of the subprocess
+	go func() {
+		defer stdinPipeWriter.Close()
+		for _, line := range inputLines {
+			_, err := io.WriteString(stdinPipeWriter, line+"\n")
+			if err != nil {
+				log.Warn("Error writing to stdin pipe:", err)
+				return
+			}
 		}
-	}
-	stdin.Close() // Close the input pipe after writing input
+	}()
 
-	// Read the command's output
-	output := []string{}
+	outputLines := []string{}
 
-	reader := bufio.NewReader(stdout)
-	for {
-		line, err := reader.ReadString('\n')
-		if err != nil {
-			break
+	// Read output lines from the stdout pipe of the subprocess
+	go func() {
+		defer stdoutPipeReader.Close()
+		scanner := bufio.NewScanner(stdoutPipeReader)
+		for scanner.Scan() {
+			outputLine := scanner.Text()
+			outputLines = append(outputLines, outputLine)
 		}
-
-		if len(line) == 0 {
-			continue
+		if err := scanner.Err(); err != nil {
+			log.Warn("Error reading from stdout pipe:", err)
+			return
 		}
-
-		output = append(output, line[:len(line)-1])
-	}
+	}()
 
 	// Wait for the command to finish
-	if err := cmd.Wait(); err != nil {
-		log.Println("Error waiting for command:", err)
+	err = cmd.Wait()
+	if err != nil {
+		log.Warn("Command execution error:", err)
 		return nil, err
 	}
 
-	return output, nil
+	return outputLines, nil
+
+	// // Create a pipe for the command's stdin
+	// stdin, err := cmd.StdinPipe()
+	// if err != nil {
+	// 	log.Warn("Error creating StdinPipe:", err)
+	// 	return nil, err
+	// }
+	//
+	// // Create a pipe for the command's stdout
+	// stdout, err := cmd.StdoutPipe()
+	// if err != nil {
+	// 	log.Warn("Error creating StdoutPipe:", err)
+	// 	return nil, err
+	// }
+	//
+	// log.Debug("Starting process...")
+	//
+	// // Start the command
+	// if err := cmd.Start(); err != nil {
+	// 	log.Warn("Error starting command:", err)
+	// 	return nil, err
+	// }
+	//
+	// log.Debug("sending input to process...")
+	//
+	// // Write input lines to the command's stdin
+	// for _, line := range inputLines {
+	// 	if _, err := fmt.Fprintln(stdin, line); err != nil {
+	// 		log.Warn("Error writing to stdin:", err)
+	// 		return nil, err
+	// 	}
+	// }
+	//
+	// stdin.Close() // Close the input pipe after writing input
+	//
+	// // Read the command's output
+	// output := []string{}
+	//
+	// log.Debug("reading output from process...")
+	//
+	// reader := bufio.NewReader(stdout)
+	// for {
+	// 	line, err := reader.ReadString('\n')
+	// 	if err != nil {
+	// 		break
+	// 	}
+	//
+	// 	if len(line) == 0 {
+	// 		continue
+	// 	}
+	//
+	// 	output = append(output, line[:len(line)-1])
+	// }
+	//
+	// log.Debug("Waiting for process to exit...")
+	//
+	// // Wait for the command to finish
+	// if err := cmd.Wait(); err != nil {
+	// 	log.Warn("Error waiting for command:", err)
+	// 	return nil, err
+	// }
+	//
+	// log.Debug("all done")
+	//
+	// return output, nil
 }

@@ -47,12 +47,16 @@ func (task *ReduceTask) Run(sdfsClient *client.SDFSClient) (map[string][]string,
 		lines = append(lines, strings.Split(writer.String(), "\n")...)
 	}
 
+	// log.Debug("Running reducer with ", len(lines), " lines")
+
 	args := append([]string{task.Key}, task.Param.Args...)
 	output, err := ExecuteAndGetOutput("./"+task.Param.ReducerExe, args, lines)
 	if err != nil {
 		log.Warn("Error running reducer executable")
 		return nil, err
 	}
+
+	// log.Debug("Recevied ", len(output), " pairs of tuples from reducer.")
 
 	return ParseKeyValuePairs(output), nil
 }
