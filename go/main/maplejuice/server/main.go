@@ -15,11 +15,6 @@ import (
 func main() {
 	common.Setup()
 
-	if len(os.Args) < 2 {
-		log.Fatal("Usage: maplejuice <ID>")
-		return
-	}
-
 	var info common.Node
 
 	if len(os.Args) > 1 {
