@@ -11,8 +11,8 @@ import (
 )
 
 func printUsage() {
-	fmt.Println("maple <maple_exe> <num_maples> <sdfs_intermediate_filename_prefix> <sdfs_src_directory>")
-	fmt.Println("juice <juice_exe> <num_juice> <sdfs_intermediate_filename_prefix> <sdfs_dest_file>")
+	fmt.Println("maple <maple_exe> <num_maples> <sdfs_intermediate_filename_prefix> <sdfs_src_directory> <args...?")
+	fmt.Println("juice <juice_exe> <num_juice> <sdfs_intermediate_filename_prefix> <sdfs_dest_file> <args...>")
 	os.Exit(1)
 }
 
@@ -39,14 +39,17 @@ func Maple(tokens []string) error {
 	sdfs_prefix := tokens[3]
 	sdfs_src_dir := tokens[4]
 
-	args := maplejuice.MapParam{
+	args := tokens[5:]
+
+	param := maplejuice.MapParam{
 		MapperExe:    maple_exe,
 		NumMapper:    num_maples,
 		OutputPrefix: sdfs_prefix,
 		InputDir:     sdfs_src_dir,
+		Args:         args,
 	}
 
-	return conn.Call(maplejuice.RPC_MAPLE_REQUEST, &args, new(bool))
+	return conn.Call(maplejuice.RPC_MAPLE_REQUEST, &param, new(bool))
 }
 
 func Juice(tokens []string) error {
@@ -66,14 +69,17 @@ func Juice(tokens []string) error {
 	sdfs_prefix := tokens[3]
 	destfile := tokens[4]
 
-	args := maplejuice.ReduceParam{
+	args := tokens[5:]
+
+	param := maplejuice.ReduceParam{
 		ReducerExe:  juice_exe,
 		NumReducer:  num_juices,
 		InputPrefix: sdfs_prefix,
 		OutputFile:  destfile,
+		Args:        args,
 	}
 
-	return conn.Call(maplejuice.RPC_JUICE_REQUEST, &args, new(bool))
+	return conn.Call(maplejuice.RPC_JUICE_REQUEST, &param, new(bool))
 }
 
 func main() {

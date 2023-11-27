@@ -49,9 +49,9 @@ func ParseMapOutput(output []string) map[string][]string {
 	return res
 }
 
-func ExecuteAndGetOutput(executable string, inputLines []string) ([]string, error) {
+func ExecuteAndGetOutput(executable string, args []string, inputLines []string) ([]string, error) {
 	// Initialize the command
-	cmd := exec.Command(executable)
+	cmd := exec.Command(executable, args...)
 
 	// Create a pipe for the command's stdin
 	stdin, err := cmd.StdinPipe()

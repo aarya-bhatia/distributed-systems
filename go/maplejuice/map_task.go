@@ -15,6 +15,7 @@ type MapParam struct {
 	MapperExe    string
 	OutputPrefix string
 	InputDir     string
+	Args         []string
 }
 
 // A map task is run by an executor on a worker node
@@ -48,7 +49,7 @@ func (task *MapTask) Run(sdfsClient *client.SDFSClient) (map[string][]string, er
 		return nil, err
 	}
 
-	output, err := ExecuteAndGetOutput("./"+task.Param.MapperExe, lines)
+	output, err := ExecuteAndGetOutput("./"+task.Param.MapperExe, task.Param.Args, lines)
 	if err != nil {
 		return nil, err
 	}

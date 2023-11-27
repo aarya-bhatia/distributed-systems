@@ -14,6 +14,7 @@ type ReduceParam struct {
 	ReducerExe  string
 	InputPrefix string
 	OutputFile  string
+	Args        []string
 }
 
 // Each reduce task is run by N reducers at a single worker node
@@ -45,7 +46,8 @@ func (task *ReduceTask) Run(sdfsClient *client.SDFSClient) (map[string][]string,
 		lines = append(lines, strings.Split(writer.String(), "\n")...)
 	}
 
-	output, err := ExecuteAndGetOutput("./"+task.Param.ReducerExe, lines)
+	args := append([]string{task.Key}, task.Param.Args...)
+	output, err := ExecuteAndGetOutput("./"+task.Param.ReducerExe, args, lines)
 	if err != nil {
 		log.Warn("Error running reducer executable")
 		return nil, err
