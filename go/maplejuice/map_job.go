@@ -75,7 +75,7 @@ func (job *MapJob) GetTasks(sdfsClient *client.SDFSClient) ([]Task, error) {
 		}
 	}
 
-	log.Println("Created", len(res), "tasks for job", job.ID, ":", res)
+	log.Println("Created", len(res), "tasks for job", job.ID)
 
 	return res, nil
 }

@@ -1,6 +1,8 @@
 package maplejuice
 
-import "cs425/filesystem/client"
+import (
+	"cs425/filesystem/client"
+)
 
 type Job interface {
 	Name() string

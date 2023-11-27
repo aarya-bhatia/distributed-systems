@@ -338,3 +338,19 @@ func StartRPCServer(Hostname string, Port int, Service interface{}) {
 		go rpc.ServeConn(conn)
 	}
 }
+
+func GetKeys[T comparable, U any](m map[T]U) []T {
+	keys := []T{}
+	for k := range m {
+		keys = append(keys, k)
+	}
+	return keys
+}
+
+func GetValues[T comparable, U any](m map[T]U) []U {
+	values := []U{}
+	for _, v := range m {
+		values = append(values, v)
+	}
+	return values
+}

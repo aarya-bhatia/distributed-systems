@@ -14,37 +14,62 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+const RESET_CONNECTION_TIMEOUT = 30 * time.Second
+const THREAD_POOL_SIZE = 4
+const WAIT_INTERVAL = 100 * time.Millisecond
+
 type Worker struct {
 	ID           int
 	NumExecutors int
-	Pending      []Task
 	Tasks        []Task
-	Conn         *rpc.Client
+	NumAcks      int
 }
 
 type Leader struct {
-	ID       int
-	Info     common.Node
-	Mutex    sync.Mutex
-	FD       *failuredetector.Server
-	Jobs     []Job
-	Nodes    []common.Node
-	NumTasks int
-	Workers  map[int]*Worker
-	Pool     *common.ConnectionPool
+	ID         int
+	Info       common.Node
+	Mutex      sync.Mutex
+	FD         *failuredetector.Server
+	Jobs       []Job
+	Nodes      []common.Node
+	Workers    map[int]*Worker
+	NumTasks   int
+	Tasks      chan Task
+	JobFailure chan bool
 }
 
 const RPC_WORKER_ACK = "Leader.WorkerAck"
 const RPC_MAPLE_REQUEST = "Leader.MapleRequest"
 const RPC_JUICE_REQUEST = "Leader.JuiceRequest"
 
+func (s *Leader) GetAvailableWorkers() []int {
+	s.Mutex.Lock()
+	defer s.Mutex.Unlock()
+	return common.GetKeys(s.Workers)
+}
+
+func (s *Leader) getSDFSClient() (*client.SDFSClient, error) {
+	sdfsNodes := s.GetSDFSNodes()
+	if len(sdfsNodes) == 0 {
+		return nil, errors.New("No SDFS nodes available")
+	}
+
+	serverNode := common.RandomChoice(sdfsNodes)
+	sdfsClient := client.NewSDFSClient(common.GetAddress(serverNode.Hostname, serverNode.RPCPort))
+
+	return sdfsClient, nil
+}
+
 func NewLeader(info common.Node) *Leader {
 	leader := new(Leader)
 	leader.Info = info
 	leader.Jobs = make([]Job, 0)
+	leader.Nodes = make([]common.Node, 0)
 	leader.Workers = make(map[int]*Worker)
-	leader.Pool = common.NewConnectionPool(common.MapleJuiceCluster)
 	leader.FD = failuredetector.NewServer(info.Hostname, info.UDPPort, common.GOSSIP_PROTOCOL, leader)
+	leader.Tasks = make(chan Task)
+	leader.JobFailure = make(chan bool)
+	leader.NumTasks = 0
 
 	return leader
 }
@@ -77,18 +102,24 @@ func (server *Leader) removeNode(node common.Node) {
 
 func (server *Leader) removeWorker(workerID int) {
 	server.Mutex.Lock()
-	defer server.Mutex.Unlock()
-
 	worker, ok := server.Workers[workerID]
 	if !ok {
+		server.Mutex.Unlock()
 		return
 	}
-
-	tasks := worker.Tasks
-	server.NumTasks -= len(tasks)
 	delete(server.Workers, workerID)
+	server.Mutex.Unlock()
 
-	log.Warn("TODO: Reschedule tasks") // TODO
+	log.Warn("Rescheduling tasks of worker", workerID)
+
+	for _, task := range worker.Tasks {
+		server.Tasks <- task
+	}
+
+	server.Mutex.Lock()
+	server.NumTasks -= len(worker.Tasks)
+	server.NumTasks += worker.NumAcks
+	server.Mutex.Unlock()
 }
 
 func (server *Leader) HandleNodeJoin(node *common.Node) {
@@ -120,17 +151,15 @@ func (server *Leader) HandleNodeLeave(node *common.Node) {
 
 func (server *Leader) Start() {
 	log.Infof("MapleJuice leader is running at %s:%d...\n", server.Info.Hostname, server.Info.RPCPort)
-	go server.runJobs()
-	go common.StartRPCServer(server.Info.Hostname, server.Info.RPCPort, server)
-	time.Sleep(time.Second)
-	go server.FD.Start()
-}
 
-func (server *Leader) addJob(job Job) {
-	server.Mutex.Lock()
-	defer server.Mutex.Unlock()
-	server.Jobs = append(server.Jobs, job)
-	log.Info("job added:", job.Name())
+	go common.StartRPCServer(server.Info.Hostname, server.Info.RPCPort, server)
+
+	for i := 0; i < THREAD_POOL_SIZE; i++ {
+		go server.scheduler()
+	}
+
+	go server.runJobs()
+	go server.FD.Start()
 }
 
 func (server *Leader) GetSDFSNodes() []common.Node {
@@ -255,142 +284,143 @@ func (server *Leader) JuiceRequest(args *ReduceParam, reply *bool) error {
 func (server *Leader) WorkerAck(args *int, reply *bool) error {
 	server.Mutex.Lock()
 	defer server.Mutex.Unlock()
-	if _, ok := server.Workers[*args]; ok {
-		log.Println("Ack")
+	if worker, ok := server.Workers[*args]; ok {
+		// log.Println("Ack")
+		worker.NumAcks++
 		server.NumTasks--
 	}
 	return nil
 }
 
-func (s *Leader) AssignAndAllocateTasks(numWorkers int, tasks []Task) bool {
-	pending := tasks
+func (s *Leader) allocate(numWorkers int) []int {
+	nodes := s.GetMapleJuiceNodes()
 
+	s.Mutex.Lock()
+	defer s.Mutex.Unlock()
+
+	s.NumTasks = 0
 	s.Workers = make(map[int]*Worker)
 	available := []int{}
 	reply := false
 
-	for _, node := range s.GetMapleJuiceNodes() {
-		conn, err := s.Pool.GetConnection(node.ID)
+	for _, node := range nodes {
+		conn, err := common.Connect(node.ID, common.MapleJuiceCluster)
 		if err != nil {
 			log.Println(err)
 			continue
 		}
-
+		defer conn.Close()
 		if err := conn.Call(RPC_ALLOCATE, &numWorkers, &reply); err != nil {
 			log.Println(err)
 			continue
 		}
-
 		log.Println("Allocated", numWorkers, "executors to worker", node.ID)
-		s.Workers[node.ID] = &Worker{ID: node.ID, Conn: conn, Tasks: make([]Task, 0), NumExecutors: numWorkers}
+		s.Workers[node.ID] = &Worker{ID: node.ID, Tasks: make([]Task, 0), NumExecutors: numWorkers}
 		available = append(available, node.ID)
 	}
 
-	for len(available) > 0 && len(pending) > 0 {
-		log.Println("To assign", len(pending), "tasks to", len(available), "workers")
-
-		for _, task := range pending {
-			assignee := available[task.Hash()%len(available)]
-			s.Workers[assignee].Pending = append(s.Workers[assignee].Pending, task)
-		}
-
-		done := make(chan int)
-
-		for _, worker := range s.Workers {
-			go s.sendTasks(worker, done)
-		}
-
-		pending = []Task{}
-
-		for i := 0; i < len(s.Workers); i++ {
-			id := <-done
-			worker := s.Workers[id]
-			if len(worker.Pending) > 0 {
-				log.Println("Failed to schedule", len(worker.Pending), "tasks on worker", id)
-				pending = append(pending, worker.Pending...)
-				available = common.RemoveElement(available, worker.ID)
-			}
-		}
-
-		if len(pending) == 0 {
-			break
-		}
-
-		log.Println("Retrying assignment...")
-		time.Sleep(100 * time.Millisecond)
-	}
-
-	if len(pending) > 0 {
-		log.Println("Failed to schedule", len(pending), "tasks")
-		return false
-	}
-
-	s.NumTasks = 0
-	for _, worker := range s.Workers {
-		s.NumTasks += len(worker.Tasks)
-	}
-
-	return true
+	return available
 }
 
-func (s *Leader) sendTasks(worker *Worker, done chan int) {
-	defer func() {
-		log.Println("Scheduled", len(worker.Tasks), "tasks on worker", worker.ID)
-		done <- worker.ID
-	}()
-
-	reply := false
-
-	for len(worker.Pending) > 0 {
-		task := worker.Pending[0]
-
-		switch task.(type) {
-		case *MapTask:
-			if err := worker.Conn.Call(RPC_MAP_TRASK, task.(*MapTask), &reply); err != nil {
-				log.Println(err)
-				return
-			}
-		case *ReduceTask:
-			if err := worker.Conn.Call(RPC_REDUCE_TASK, task.(*ReduceTask), &reply); err != nil {
-				log.Println(err)
-				return
-			}
-		default:
-			log.Fatal("Invalid type of task")
-		}
-
-		worker.Pending = worker.Pending[1:]
-		worker.Tasks = append(worker.Tasks, task)
-	}
-}
-
-func (server *Leader) Wait() {
-	log.Println("waiting for tasks to finish...")
-	for {
-		server.Mutex.Lock()
-		n := server.NumTasks
-		server.Mutex.Unlock()
-
-		if n == 0 {
-			return
-		}
-
-		time.Sleep(100 * time.Millisecond)
-	}
-}
-
-func (server *Leader) Free() {
+func (server *Leader) free() {
 	server.Mutex.Lock()
 	defer server.Mutex.Unlock()
 
 	for _, worker := range server.Workers {
 		reply := false
 		log.Println("deallocating workers at worker", worker.ID)
-		if err := worker.Conn.Call(RPC_FREE, &worker.NumExecutors, &reply); err != nil {
+		if worker.NumExecutors == 0 {
+			continue
+		}
+		conn, err := common.Connect(worker.ID, common.MapleJuiceCluster)
+		if err != nil {
+			log.Println(err)
+			continue
+		}
+		defer conn.Close()
+		if err := conn.Call(RPC_FREE, &worker.NumExecutors, &reply); err != nil {
 			log.Println(err)
 			continue
 		}
 	}
+}
+
+func assign(task Task, conn *rpc.Client) bool {
+	reply := false
+
+	switch task.(type) {
+	case *MapTask:
+		if err := conn.Call(RPC_MAP_TRASK, task.(*MapTask), &reply); err != nil {
+			log.Println(err)
+			return false
+		}
+	case *ReduceTask:
+		if err := conn.Call(RPC_REDUCE_TASK, task.(*ReduceTask), &reply); err != nil {
+			log.Println(err)
+			return false
+		}
+	default:
+		log.Fatal("Invalid type of task")
+	}
+
+	return true
+}
+
+func (s *Leader) schedule(task Task, pool *common.ConnectionPool) bool {
+	available := s.GetAvailableWorkers()
+
+	for len(available) > 0 {
+		hash := task.Hash() % len(available)
+		assignee := available[hash]
+
+		conn, err := pool.GetConnection(assignee)
+		if err != nil {
+			log.Println(err)
+			available = common.RemoveElement(available, assignee)
+			continue
+		}
+
+		if !assign(task, conn) {
+			available = common.RemoveElement(available, assignee)
+			continue
+		}
+
+		s.Mutex.Lock()
+		s.Workers[assignee].Tasks = append(s.Workers[assignee].Tasks, task)
+		s.NumTasks++
+		s.Mutex.Unlock()
+
+		log.Debug("Assigned task ", task.GetID(), " to worker", assignee)
+
+		return true
+	}
+
+	return false
+}
+
+func (s *Leader) scheduler() {
+	pool := common.NewConnectionPool(common.MapleJuiceCluster)
+	log.Println("Started scheduler routine...")
+	for {
+		select {
+		case task := <-s.Tasks:
+			if !s.schedule(task, pool) {
+				log.Warn("Failed to schedule task...")
+				s.JobFailure <- true
+			}
+
+		case <-time.After(RESET_CONNECTION_TIMEOUT):
+			log.Warn("Reset connection pool")
+			pool.Close()
+		}
+	}
+}
+
+func (server *Leader) addJob(job Job) {
+	server.Mutex.Lock()
+	defer server.Mutex.Unlock()
+	server.Jobs = append(server.Jobs, job)
+	log.Info("job added:", job.Name())
 }
 
 func (server *Leader) runJobs() {
@@ -417,39 +447,41 @@ func (server *Leader) runJobs() {
 		time.Sleep(time.Second)
 	}
 }
+func (s *Leader) runJob(job Job) error {
+	defer s.free()
 
-func (server *Leader) runJob(job Job) error {
-	defer server.Pool.Close()
-	defer server.Free()
-
-	sdfsNodes := server.GetSDFSNodes()
-	if len(sdfsNodes) == 0 {
-		return errors.New("No sdfs nodes are online")
+	available := s.allocate(job.GetNumWorkers())
+	if len(available) == 0 {
+		return errors.New("No workers are available")
 	}
 
-	sdfsNode := common.RandomChoice(sdfsNodes)
-	sdfsClient := client.NewSDFSClient(common.GetAddress(sdfsNode.Hostname, sdfsNode.RPCPort))
+	sdfsClient, err := s.getSDFSClient()
+	if err != nil {
+		return err
+	}
 
 	tasks, err := job.GetTasks(sdfsClient)
 	if err != nil {
 		return err
 	}
 
-	if len(tasks) == 0 {
-		log.Println("No tasks")
-		return nil
+	for _, task := range tasks {
+		s.Tasks <- task
 	}
 
-	// wait for workers to read and process all input data
-	server.AssignAndAllocateTasks(job.GetNumWorkers(), tasks)
-	server.Wait()
+	if !s.wait() {
+		return errors.New("job failure")
+	}
 
-	// wait for workers to write all output data
-	server.finishJob(job)
-	log.Println("waiting for finish job...")
-	server.Wait()
+	err = s.finishJob(job)
+	if err != nil {
+		return err
+	}
 
-	// TODO: cleanup output files
+	if !s.wait() {
+		return errors.New("job failure")
+	}
+
 	return nil
 }
 
@@ -457,20 +489,29 @@ func (server *Leader) finishJob(job Job) error {
 	server.Mutex.Lock()
 	defer server.Mutex.Unlock()
 
+	log.Println("finishJob()")
 	reply := false
 
-	// TODO: Reschedule failed tasks
-
 	for _, worker := range server.Workers {
+		conn, err := common.Connect(worker.ID, common.MapleJuiceCluster)
+		if err != nil {
+			log.Println(err)
+			continue
+		}
+
+		defer conn.Close()
+
 		switch job.(type) {
 		case *MapJob:
-			if err := worker.Conn.Call(RPC_FINISH_MAP_JOB, &job.(*MapJob).Param.OutputPrefix, &reply); err != nil {
+			if err := conn.Call(RPC_FINISH_MAP_JOB, &job.(*MapJob).Param.OutputPrefix, &reply); err != nil {
 				log.Println(err)
+				go server.removeWorker(worker.ID)
 				continue
 			}
 		case *ReduceJob:
-			if err := worker.Conn.Call(RPC_FINISH_REDUCE_JOB, &job.(*ReduceJob).Param.OutputFile, &reply); err != nil {
+			if err := conn.Call(RPC_FINISH_REDUCE_JOB, &job.(*ReduceJob).Param.OutputFile, &reply); err != nil {
 				log.Println(err)
+				go server.removeWorker(worker.ID)
 				continue
 			}
 		}
@@ -479,4 +520,22 @@ func (server *Leader) finishJob(job Job) error {
 	}
 
 	return nil
+}
+
+func (s *Leader) wait() bool {
+	log.Println("Waiting for tasks to finish...")
+	for {
+		select {
+		case <-s.JobFailure:
+			return false
+
+		case <-time.After(WAIT_INTERVAL):
+			s.Mutex.Lock()
+			n := s.NumTasks
+			s.Mutex.Unlock()
+			if n == 0 {
+				return true
+			}
+		}
+	}
 }
