@@ -56,8 +56,6 @@ func ParseKeyValuePairs(output []string) map[string][]string {
 		// }
 	}
 
-	log.Debug("Got ", len(res), " tuples")
-
 	return res
 }
 
