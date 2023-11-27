@@ -13,6 +13,7 @@ go mod tidy
 if pgrep -f 'go run' >/dev/null; then
 	echo KILL >/dev/tcp/localhost/3000
 	echo KILL >/dev/udp/localhost/4000
+	echo KILL >/dev/udp/localhost/9000
 fi
 
 cd $HOME/cs425/go/main/filesystem/server
