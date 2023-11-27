@@ -14,7 +14,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-const RESET_CONNECTION_TIMEOUT = 60 * time.Second
+const RESET_CONNECTION_TIMEOUT = 120 * time.Second
 const THREAD_POOL_SIZE = 4
 const WAIT_INTERVAL = 100 * time.Millisecond
 const MAX_JOB_RETRY = 3

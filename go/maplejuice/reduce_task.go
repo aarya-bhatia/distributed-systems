@@ -5,7 +5,6 @@ import (
 	"cs425/filesystem/client"
 	"fmt"
 	log "github.com/sirupsen/logrus"
-	"strings"
 )
 
 // The parameters set by client
@@ -34,7 +33,7 @@ func (task *ReduceTask) GetID() int64 {
 }
 
 func (task *ReduceTask) Run(sdfsClient *client.SDFSClient) (map[string][]string, error) {
-	lines := []string{} // Combined lines from all input files
+	lines := "" // Combined lines from all input files
 
 	// All parts of the input file correspond to the same key
 	for _, file := range task.InputFiles {
@@ -44,10 +43,8 @@ func (task *ReduceTask) Run(sdfsClient *client.SDFSClient) (map[string][]string,
 			return nil, err
 		}
 
-		lines = append(lines, strings.Split(writer.String(), "\n")...)
+		lines += writer.String() + "\n"
 	}
-
-	// log.Debug("Running reducer with ", len(lines), " lines")
 
 	args := append([]string{task.Key}, task.Param.Args...)
 	output, err := ExecuteAndGetOutput("./"+task.Param.ReducerExe, args, lines)
@@ -55,8 +52,6 @@ func (task *ReduceTask) Run(sdfsClient *client.SDFSClient) (map[string][]string,
 		log.Warn("Error running reducer executable")
 		return nil, err
 	}
-
-	// log.Debug("Recevied ", len(output), " pairs of tuples from reducer.")
 
 	return ParseKeyValuePairs(output), nil
 }

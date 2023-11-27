@@ -4,7 +4,6 @@ import (
 	"cs425/common"
 	"cs425/filesystem/client"
 	"fmt"
-	"strings"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -43,13 +42,11 @@ func (task *MapTask) Run(sdfsClient *client.SDFSClient) (map[string][]string, er
 		return nil, err
 	}
 
-	lines := strings.Split(writer.String(), "\n")
+	lines := writer.String()
 
 	// if err := CleanInputLines(lines); err != nil {
 	// 	return nil, err
 	// }
-
-	// log.Debug("Running mapper with ", len(lines), " lines")
 
 	args := append([]string{task.Filename}, task.Param.Args...)
 	output, err := ExecuteAndGetOutput("./"+task.Param.MapperExe, args, lines)
@@ -57,8 +54,6 @@ func (task *MapTask) Run(sdfsClient *client.SDFSClient) (map[string][]string, er
 		log.Warn("Error running map executable")
 		return nil, err
 	}
-
-	// log.Debug("Mapper output", len(output), "tuples")
 
 	return ParseKeyValuePairs(output), nil
 }
