@@ -49,12 +49,14 @@ func (task *MapTask) Run(sdfsClient *client.SDFSClient) (map[string][]string, er
 		return nil, err
 	}
 
-	output, err := ExecuteAndGetOutput("./"+task.Param.MapperExe, task.Param.Args, lines)
+	args := append([]string{task.Filename}, task.Param.Args...)
+	output, err := ExecuteAndGetOutput("./"+task.Param.MapperExe, args, lines)
 	if err != nil {
+		log.Warn("Error running map executable")
 		return nil, err
 	}
 
-	return ParseMapOutput(output), nil
+	return ParseKeyValuePairs(output), nil
 }
 
 func (task *MapTask) GetExecutable() string {

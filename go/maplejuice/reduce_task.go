@@ -34,8 +34,9 @@ func (task *ReduceTask) GetID() int64 {
 }
 
 func (task *ReduceTask) Run(sdfsClient *client.SDFSClient) (map[string][]string, error) {
-	lines := []string{}
+	lines := []string{} // Combined lines from all input files
 
+	// All parts of the input file correspond to the same key
 	for _, file := range task.InputFiles {
 		writer := client.NewByteWriter()
 		if err := sdfsClient.DownloadFile(writer, file); err != nil {
@@ -53,7 +54,7 @@ func (task *ReduceTask) Run(sdfsClient *client.SDFSClient) (map[string][]string,
 		return nil, err
 	}
 
-	return map[string][]string{task.Key: output}, nil
+	return ParseKeyValuePairs(output), nil
 }
 
 func (task *ReduceTask) GetExecutable() string {

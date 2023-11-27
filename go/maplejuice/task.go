@@ -34,7 +34,7 @@ func CleanInputLines(lines []string) error {
 	return nil
 }
 
-func ParseMapOutput(output []string) map[string][]string {
+func ParseKeyValuePairs(output []string) map[string][]string {
 	res := make(map[string][]string)
 
 	for _, line := range output {

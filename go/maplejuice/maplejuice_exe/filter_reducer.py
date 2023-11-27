@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 import sys
 
-# pass key through first arg
+# arg 1: key
+# identity reducer
 if __name__ == "__main__":
     if len(sys.argv) < 2:
         exit(1)
@@ -9,6 +10,4 @@ if __name__ == "__main__":
     key = sys.argv[1]
 
     for line in sys.stdin:
-        pass
-
-    print(1)
+        print(f"{key}:{line}")

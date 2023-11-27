@@ -1,0 +1,6 @@
+Notes
+
+- Mapper Args: (filename, user args...)
+- Reducer Args: (key, user args...)
+
+
