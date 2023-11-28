@@ -19,6 +19,10 @@ type ReduceJob struct {
 	Args        []string
 }
 
+func (job *ReduceJob) GetID() int64 {
+	return job.ID
+}
+
 func (job *ReduceJob) Name() string {
 	return fmt.Sprintf("<%d,maple,%s>", job.ID, job.ReducerExe)
 }

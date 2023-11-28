@@ -18,6 +18,10 @@ type MapJob struct {
 	Args         []string
 }
 
+func (job *MapJob) GetID() int64 {
+	return job.ID
+}
+
 func (job *MapJob) Name() string {
 	return fmt.Sprintf("<%d,maple,%s>", job.ID, job.MapperExe)
 }

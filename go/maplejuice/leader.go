@@ -25,6 +25,13 @@ type Worker struct {
 	NumAcks      int
 }
 
+type JobStat struct {
+	Job       Job
+	StartTime int64
+	EndTime   int64
+	Status    bool
+}
+
 type Leader struct {
 	ID          int
 	Info        common.Node
@@ -37,6 +44,7 @@ type Leader struct {
 	Tasks       chan Task
 	JobFailure  chan bool
 	NodeFailure []chan int
+	JobStats    []*JobStat
 }
 
 const RPC_WORKER_ACK = "Leader.WorkerAck"
@@ -54,6 +62,7 @@ func NewLeader(info common.Node) *Leader {
 	leader.Tasks = make(chan Task)
 	leader.JobFailure = make(chan bool)
 	leader.NumTasks = 0
+	leader.JobStats = make([]*JobStat, 0)
 
 	leader.NodeFailure = make([]chan int, THREAD_POOL_SIZE)
 	for i := 0; i < THREAD_POOL_SIZE; i++ {
@@ -367,6 +376,13 @@ func (server *Leader) addJob(job Job) {
 	log.Info("job added:", job.Name())
 }
 
+func (s *Leader) addStat(jobStat *JobStat) {
+	s.Mutex.Lock()
+	defer s.Mutex.Unlock()
+	log.Println("Added job stat:", *jobStat)
+	s.JobStats = append(s.JobStats, jobStat)
+}
+
 // Run each job in the order they arrive
 func (server *Leader) runJobs() {
 	for {
@@ -378,11 +394,16 @@ func (server *Leader) runJobs() {
 
 			for i := 0; i < MAX_JOB_RETRY; i++ {
 				log.Warn("job started:", job.Name())
+				stat, err := server.runJob(job)
 
-				if err := server.runJob(job); err != nil {
+				if err != nil {
 					log.Warn("job failed:", err)
+					stat.Status = false
+					server.addStat(stat)
 				} else {
 					log.Warn("job finished:", job.Name())
+					stat.Status = true
+					server.addStat(stat)
 					break
 				}
 
@@ -400,45 +421,57 @@ func (server *Leader) runJobs() {
 }
 
 // Run the current job
-func (s *Leader) runJob(job Job) error {
+func (s *Leader) runJob(job Job) (*JobStat, error) {
+	stat := &JobStat{Job: job}
+	stat.StartTime = time.Now().UnixNano()
+
+	defer func() {
+		stat.EndTime = time.Now().UnixNano()
+	}()
+
+	// delete files from previous runs
 	if err := s.cleanup(job); err != nil {
-		return err
+		return stat, err
 	}
 
 	sdfsClient, err := s.getSDFSClient()
 	if err != nil {
-		return err
+		return stat, err
 	}
 
+	// initialises and allocate executors at each worker node
 	available := s.startJob(job)
 
 	if len(available) == 0 {
-		return errors.New("No workers are available")
+		return stat, errors.New("No workers are available")
 	}
 
 	tasks, err := job.GetTasks(sdfsClient)
 	if err != nil {
-		return err
+		return stat, err
 	}
 
+	// send all tasks
 	for _, task := range tasks {
 		s.Tasks <- task
 	}
 
 	if !s.wait() {
-		return errors.New("failed during wait()")
+		return stat, errors.New("failed during wait()")
 	}
 
+	// uploads all output files from worker nodes to sdfs
 	if err = s.finishJob(job); err != nil {
+		// TODO: Don't fail job, try rescheduling the tasks
 		s.wait()
-		return err
+		return stat, err
 	}
 
 	if !s.wait() {
-		return errors.New("failed during wait()")
+		return stat, errors.New("failed during wait()")
 	}
 
-	return nil
+	return stat, nil
 }
 
 // Initialise and allocate executors at each worker node.
