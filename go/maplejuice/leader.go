@@ -401,6 +401,10 @@ func (server *Leader) runJobs() {
 
 // Run the current job
 func (s *Leader) runJob(job Job) error {
+	if err := s.cleanup(job); err != nil {
+		return err
+	}
+
 	sdfsClient, err := s.getSDFSClient()
 	if err != nil {
 		return err
@@ -536,4 +540,29 @@ func (s *Leader) wait() bool {
 			}
 		}
 	}
+}
+
+func (s *Leader) cleanup(job Job) error {
+	log.Println("cleanup()")
+
+	sdfsClient, err := s.getSDFSClient()
+	if err != nil {
+		return err
+	}
+
+	switch job.(type) {
+	case *MapJob:
+		// delete prefix files
+		if err := sdfsClient.DeleteAll(job.(*MapJob).OutputPrefix); err != nil {
+			return err
+		}
+
+	case *ReduceJob:
+		// delete output file
+		if err := sdfsClient.DeleteAll(job.(*ReduceJob).OutputFile); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
