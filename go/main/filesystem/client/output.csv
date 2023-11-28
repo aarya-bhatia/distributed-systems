@@ -1,0 +1,15 @@
+4:dataset/customers.csv,4,Emily,Williams,ewill@example.com,Female,192.0.2.10,dataset/orders.csv,2,4,103,2023-11-05,29.95,Delivered
+4:dataset/customers.csv,4,Emily,Williams,ewill@example.com,Female,192.0.2.10,dataset/orders.csv,7,4,101,2023-11-25,49.99,Shipped
+4:dataset/customers.csv,4,Emily,Williams,ewill@example.com,Female,192.0.2.10,dataset/orders.csv,12,4,102,2023-12-10,99.50,Processing
+5:dataset/customers.csv,5,David,Brown,dbrown@example.com,Male,198.51.100.3,dataset/orders.csv,5,5,104,2023-11-20,149.00,Delivered
+5:dataset/customers.csv,5,David,Brown,dbrown@example.com,Male,198.51.100.3,dataset/orders.csv,10,5,105,2023-12-05,79.99,Shipped
+5:dataset/customers.csv,5,David,Brown,dbrown@example.com,Male,198.51.100.3,dataset/orders.csv,15,5,103,2023-12-18,29.95,Processing
+1:dataset/customers.csv,1,John,Doe,johndoe@example.com,Male,192.168.1.1,dataset/orders.csv,3,1,102,2023-11-10,99.50,Processing
+1:dataset/customers.csv,1,John,Doe,johndoe@example.com,Male,192.168.1.1,dataset/orders.csv,8,1,103,2023-11-28,29.95,Delivered
+1:dataset/customers.csv,1,John,Doe,johndoe@example.com,Male,192.168.1.1,dataset/orders.csv,13,1,104,2023-12-12,149.00,Shipped
+2:dataset/customers.csv,2,Alice,Smith,asmith@example.com,Female,10.0.0.1,dataset/orders.csv,1,2,101,2023-11-01,49.99,Shipped
+2:dataset/customers.csv,2,Alice,Smith,asmith@example.com,Female,10.0.0.1,dataset/orders.csv,6,2,104,2023-11-22,149.00,Processing
+2:dataset/customers.csv,2,Alice,Smith,asmith@example.com,Female,10.0.0.1,dataset/orders.csv,11,2,105,2023-12-08,79.99,Delivered
+3:dataset/customers.csv,3,Michael,Johnson,michaelj@example.com,Male,172.16.0.5,dataset/orders.csv,4,3,105,2023-11-15,79.99,Shipped
+3:dataset/customers.csv,3,Michael,Johnson,michaelj@example.com,Male,172.16.0.5,dataset/orders.csv,9,3,102,2023-12-01,99.50,Processing
+3:dataset/customers.csv,3,Michael,Johnson,michaelj@example.com,Male,172.16.0.5,dataset/orders.csv,14,3,101,2023-12-15,49.99,Delivered
