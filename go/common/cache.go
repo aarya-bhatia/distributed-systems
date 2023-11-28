@@ -29,6 +29,13 @@ func (pool *ConnectionPool) GetConnection(node int) (*rpc.Client, error) {
 	return pool.conn[node], nil
 }
 
+func (pool *ConnectionPool) RemoveConnection(node int) {
+	if conn, ok := pool.conn[node]; ok {
+		conn.Close()
+		delete(pool.conn, node)
+	}
+}
+
 func (pool *ConnectionPool) Close() {
 	for key, conn := range pool.conn {
 		conn.Close()
