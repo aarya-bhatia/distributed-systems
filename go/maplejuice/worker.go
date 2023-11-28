@@ -112,27 +112,29 @@ func (service *Service) free() {
 	service.NumExecutor = 0
 }
 
-func (server *Service) StartMapJob(param *MapParam, reply *bool) error {
+func (server *Service) StartMapJob(job *MapJob, reply *bool) error {
+	log.Println("StartMapJob()")
 	sdfsClient, err := server.getSDFSClient()
 	if err != nil {
 		return err
 	}
 	server.free()
-	server.allocate(param.NumMapper)
-	return server.downloadExecutable(sdfsClient, param.MapperExe)
+	server.allocate(job.NumMapper)
+	return server.downloadExecutable(sdfsClient, job.MapperExe)
 }
 
-func (server *Service) StartReduceJob(param *ReduceParam, reply *bool) error {
+func (server *Service) StartReduceJob(job *ReduceJob, reply *bool) error {
+	log.Println("StartReduceJob()")
 	sdfsClient, err := server.getSDFSClient()
 	if err != nil {
 		return err
 	}
 	server.free()
-	server.allocate(param.NumReducer)
-	return server.downloadExecutable(sdfsClient, param.ReducerExe)
+	server.allocate(job.NumReducer)
+	return server.downloadExecutable(sdfsClient, job.ReducerExe)
 }
 
-func (server *Service) FinishMapJob(outputPrefix *string, reply *bool) error {
+func (server *Service) FinishMapJob(job *MapJob, reply *bool) error {
 	log.Println("FinishMapJob()")
 
 	go func() {
@@ -147,7 +149,7 @@ func (server *Service) FinishMapJob(outputPrefix *string, reply *bool) error {
 		defer server.Mutex.Unlock()
 
 		for key, values := range server.Data {
-			outputFile := fmt.Sprintf("%s:%d:%s", *outputPrefix, server.ID, key)
+			outputFile := fmt.Sprintf("%s:%d:%s", job.OutputPrefix, server.ID, key)
 			lines := strings.Join(values, "\n") + "\n"
 			err := sdfsClient.WriteFile(client.NewByteReader([]byte(lines)), outputFile, common.FILE_APPEND)
 			if err != nil {
@@ -174,7 +176,7 @@ func (server *Service) FinishMapJob(outputPrefix *string, reply *bool) error {
 	return nil
 }
 
-func (server *Service) FinishReduceJob(outputFile *string, reply *bool) error {
+func (server *Service) FinishReduceJob(job *ReduceJob, reply *bool) error {
 	log.Println("FinishReduceJob()")
 
 	go func() {
@@ -197,8 +199,8 @@ func (server *Service) FinishReduceJob(outputFile *string, reply *bool) error {
 
 		if len(data) > 0 {
 			reader := client.NewByteReader([]byte(data))
-			*outputFile = fmt.Sprintf("%s:%d", *outputFile, server.ID)
-			err = sdfsClient.WriteFile(reader, *outputFile, common.FILE_APPEND)
+			outputFile := fmt.Sprintf("%s:%d", job.OutputFile, server.ID)
+			err = sdfsClient.WriteFile(reader, outputFile, common.FILE_APPEND)
 			if err != nil {
 				log.Fatal(err)
 			}

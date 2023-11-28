@@ -210,7 +210,7 @@ func (server *Leader) GetMapleJuiceNodes() []common.Node {
 }
 
 // Add map job
-func (server *Leader) MapleRequest(args *MapParam, reply *bool) error {
+func (server *Leader) MapleRequest(args *MapJob, reply *bool) error {
 	sdfsNodes := server.GetSDFSNodes()
 	workers := server.GetMapleJuiceNodes()
 
@@ -236,22 +236,12 @@ func (server *Leader) MapleRequest(args *MapParam, reply *bool) error {
 		return err
 	}
 
-	inputFiles, err := sdfsClient.ListDirectory(args.InputDir)
-	if err != nil {
-		return err
-	}
-
-	server.addJob(&MapJob{
-		ID:         time.Now().UnixNano(),
-		Param:      *args,
-		InputFiles: *inputFiles,
-	})
-
+	server.addJob(args)
 	return nil
 }
 
 // Add reduce job
-func (server *Leader) JuiceRequest(args *ReduceParam, reply *bool) error {
+func (server *Leader) JuiceRequest(args *ReduceJob, reply *bool) error {
 	sdfsNodes := server.GetSDFSNodes()
 	workers := server.GetMapleJuiceNodes()
 
@@ -277,38 +267,7 @@ func (server *Leader) JuiceRequest(args *ReduceParam, reply *bool) error {
 		return err
 	}
 
-	inputFiles, err := sdfsClient.ListDirectory(args.InputPrefix)
-	if err != nil {
-		return err
-	}
-
-	// filtered := []string{}
-
-	// // TODO
-	// for _, inputFile := range *inputFiles {
-	// 	tokens := strings.Split(inputFile, ":")
-	// 	if len(tokens) < 2 { // filename:workerID:...
-	// 		continue
-	// 	}
-	//
-	// 	workerID, err := strconv.Atoi(tokens[1])
-	// 	if err != nil {
-	// 		continue
-	// 	}
-	//
-	// 	for _, w := range workers {
-	// 		if w.ID == workerID {
-	// 			filtered = append(filtered, inputFile)
-	// 		}
-	// 	}
-	// }
-
-	server.addJob(&ReduceJob{
-		ID:         time.Now().UnixNano(),
-		Param:      *args,
-		InputFiles: *inputFiles,
-	})
-
+	server.addJob(args)
 	return nil
 }
 
@@ -481,6 +440,7 @@ func (s *Leader) runJob(job Job) error {
 // Initialise and allocate executors at each worker node.
 // Returns the worker nodes available
 func (s *Leader) startJob(job Job) []int {
+	log.Println("startJob()")
 	nodes := s.GetMapleJuiceNodes()
 
 	s.Mutex.Lock()
@@ -502,12 +462,12 @@ func (s *Leader) startJob(job Job) []int {
 
 		switch job.(type) {
 		case *MapJob:
-			if err := conn.Call(RPC_START_MAP_JOB, &job.(*MapJob).Param, &reply); err != nil {
+			if err := conn.Call(RPC_START_MAP_JOB, job.(*MapJob), &reply); err != nil {
 				log.Println(err)
 				continue
 			}
 		case *ReduceJob:
-			if err := conn.Call(RPC_START_REDUCE_JOB, &job.(*ReduceJob).Param, &reply); err != nil {
+			if err := conn.Call(RPC_START_REDUCE_JOB, job.(*ReduceJob), &reply); err != nil {
 				log.Println(err)
 				continue
 			}
@@ -515,6 +475,7 @@ func (s *Leader) startJob(job Job) []int {
 
 		s.Workers[node.ID] = &Worker{ID: node.ID, Tasks: make([]Task, 0), NumExecutors: job.GetNumWorkers()}
 		available = append(available, node.ID)
+		log.Println("Started job at worker", node.ID)
 	}
 
 	return available
@@ -539,17 +500,18 @@ func (server *Leader) finishJob(job Job) error {
 
 		switch job.(type) {
 		case *MapJob:
-			if err := conn.Call(RPC_FINISH_MAP_JOB, &job.(*MapJob).Param.OutputPrefix, &reply); err != nil {
+			if err := conn.Call(RPC_FINISH_MAP_JOB, job.(*MapJob), &reply); err != nil {
 				log.Println(err)
 				return err
 			}
 		case *ReduceJob:
-			if err := conn.Call(RPC_FINISH_REDUCE_JOB, &job.(*ReduceJob).Param.OutputFile, &reply); err != nil {
+			if err := conn.Call(RPC_FINISH_REDUCE_JOB, job.(*ReduceJob), &reply); err != nil {
 				log.Println(err)
 				return err
 			}
 		}
 
+		log.Println("Finishing job at worker", worker.ID)
 		server.NumTasks++
 	}
 

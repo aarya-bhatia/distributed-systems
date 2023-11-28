@@ -8,19 +8,10 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// The parameters set by client
-type MapParam struct {
-	NumMapper    int
-	MapperExe    string
-	OutputPrefix string
-	InputDir     string
-	Args         []string
-}
-
 // A map task is run by an executor on a worker node
 type MapTask struct {
 	ID       int64
-	Param    MapParam
+	Job      MapJob
 	Filename string
 	Offset   int
 	Length   int
@@ -43,13 +34,8 @@ func (task *MapTask) Run(sdfsClient *client.SDFSClient) (map[string][]string, er
 	}
 
 	lines := writer.String()
-
-	// if err := CleanInputLines(lines); err != nil {
-	// 	return nil, err
-	// }
-
-	args := append([]string{task.Filename}, task.Param.Args...)
-	output, err := ExecuteAndGetOutput("./"+task.Param.MapperExe, args, lines)
+	args := append([]string{task.Filename}, task.Job.Args...)
+	output, err := ExecuteAndGetOutput("./"+task.Job.MapperExe, args, lines)
 	if err != nil {
 		log.Warn("Error running map executable")
 		return nil, err
@@ -59,5 +45,5 @@ func (task *MapTask) Run(sdfsClient *client.SDFSClient) (map[string][]string, er
 }
 
 func (task *MapTask) GetExecutable() string {
-	return task.Param.MapperExe
+	return task.Job.MapperExe
 }

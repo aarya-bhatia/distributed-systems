@@ -7,19 +7,10 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// The parameters set by client
-type ReduceParam struct {
-	NumReducer  int
-	ReducerExe  string
-	InputPrefix string
-	OutputFile  string
-	Args        []string
-}
-
 // Each reduce task is run by N reducers at a single worker node
 type ReduceTask struct {
 	ID         int64
-	Param      ReduceParam
+	Job        ReduceJob
 	Key        string
 	InputFiles []string
 }
@@ -46,8 +37,8 @@ func (task *ReduceTask) Run(sdfsClient *client.SDFSClient) (map[string][]string,
 		lines += writer.String() + "\n"
 	}
 
-	args := append([]string{task.Key}, task.Param.Args...)
-	output, err := ExecuteAndGetOutput("./"+task.Param.ReducerExe, args, lines)
+	args := append([]string{task.Key}, task.Job.Args...)
+	output, err := ExecuteAndGetOutput("./"+task.Job.ReducerExe, args, lines)
 	if err != nil {
 		log.Warn("Error running reducer executable")
 		return nil, err
@@ -58,5 +49,5 @@ func (task *ReduceTask) Run(sdfsClient *client.SDFSClient) (map[string][]string,
 }
 
 func (task *ReduceTask) GetExecutable() string {
-	return task.Param.ReducerExe
+	return task.Job.ReducerExe
 }

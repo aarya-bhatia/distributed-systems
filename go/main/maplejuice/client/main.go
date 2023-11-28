@@ -4,6 +4,7 @@ import (
 	"cs425/common"
 	"cs425/maplejuice"
 	"fmt"
+	"math/rand"
 	"os"
 	"strconv"
 
@@ -41,7 +42,8 @@ func Maple(tokens []string) error {
 
 	args := tokens[5:]
 
-	param := maplejuice.MapParam{
+	param := maplejuice.MapJob{
+		ID:           rand.Int63(),
 		MapperExe:    maple_exe,
 		NumMapper:    num_maples,
 		OutputPrefix: sdfs_prefix,
@@ -71,7 +73,8 @@ func Juice(tokens []string) error {
 
 	args := tokens[5:]
 
-	param := maplejuice.ReduceParam{
+	param := maplejuice.ReduceJob{
+		ID:          rand.Int63(),
 		ReducerExe:  juice_exe,
 		NumReducer:  num_juices,
 		InputPrefix: sdfs_prefix,

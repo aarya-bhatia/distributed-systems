@@ -10,23 +10,31 @@ import (
 
 // A map job is a collection of map tasks
 type MapJob struct {
-	ID         int64
-	InputFiles []string
-	Param      MapParam
+	ID           int64
+	NumMapper    int
+	MapperExe    string
+	OutputPrefix string
+	InputDir     string
+	Args         []string
 }
 
 func (job *MapJob) Name() string {
-	return fmt.Sprintf("<%d,maple,%s>", job.ID, job.Param.MapperExe)
+	return fmt.Sprintf("<%d,maple,%s>", job.ID, job.MapperExe)
 }
 
 func (job *MapJob) GetNumWorkers() int {
-	return job.Param.NumMapper
+	return job.NumMapper
 }
 
 func (job *MapJob) GetTasks(sdfsClient *client.SDFSClient) ([]Task, error) {
 	res := []Task{}
 
-	for _, inputFile := range job.InputFiles {
+	inputFiles, err := sdfsClient.ListDirectory(job.InputDir)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, inputFile := range *inputFiles {
 		log.Println("Input File:", inputFile)
 
 		writer := client.NewByteWriter()
@@ -43,7 +51,7 @@ func (job *MapJob) GetTasks(sdfsClient *client.SDFSClient) ([]Task, error) {
 			mapTask := &MapTask{
 				ID:       rand.Int63(),
 				Filename: inputFile,
-				Param:    job.Param,
+				Job:      *job,
 				Offset:   line.Offset,
 				Length:   line.Length,
 			}
