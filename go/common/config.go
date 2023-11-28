@@ -141,9 +141,9 @@ func Setup() {
 	}
 
 	logrus.Println("Environment:", os.Getenv("environment"))
-	logrus.Println("SDFS cluster:", SDFSCluster)
-	logrus.Println("MapleJuice cluster:", MapleJuiceCluster)
-	logrus.Println("Introducer:", INTRODUCER_ADDRESS)
+	// logrus.Println("SDFS cluster:", SDFSCluster)
+	// logrus.Println("MapleJuice cluster:", MapleJuiceCluster)
+	// logrus.Println("Introducer:", INTRODUCER_ADDRESS)
 
 	customFormatter := new(logrus.TextFormatter)
 	customFormatter.TimestampFormat = "2006-01-02 15:04:05"
