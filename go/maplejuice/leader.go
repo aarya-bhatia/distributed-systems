@@ -6,8 +6,6 @@ import (
 	"cs425/filesystem/client"
 	"errors"
 	"net/rpc"
-	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -18,6 +16,7 @@ const RESET_CONNECTION_TIMEOUT = 120 * time.Second
 const THREAD_POOL_SIZE = 4
 const WAIT_INTERVAL = 100 * time.Millisecond
 const MAX_JOB_RETRY = 3
+const JOB_RETRY_INTERVAL = 1000 * time.Millisecond
 
 type Worker struct {
 	ID           int
@@ -37,15 +36,35 @@ type Leader struct {
 	NumTasks    int
 	Tasks       chan Task
 	JobFailure  chan bool
-	NodeFailure chan int
+	NodeFailure []chan int
 }
 
 const RPC_WORKER_ACK = "Leader.WorkerAck"
 const RPC_MAPLE_REQUEST = "Leader.MapleRequest"
 const RPC_JUICE_REQUEST = "Leader.JuiceRequest"
 
+// Initialise instance of leader server
+func NewLeader(info common.Node) *Leader {
+	leader := new(Leader)
+	leader.Info = info
+	leader.Jobs = make([]Job, 0)
+	leader.Nodes = make([]common.Node, 0)
+	leader.Workers = make(map[int]*Worker)
+	leader.FD = failuredetector.NewServer(info.Hostname, info.UDPPort, common.GOSSIP_PROTOCOL, leader)
+	leader.Tasks = make(chan Task)
+	leader.JobFailure = make(chan bool)
+	leader.NumTasks = 0
+
+	leader.NodeFailure = make([]chan int, THREAD_POOL_SIZE)
+	for i := 0; i < THREAD_POOL_SIZE; i++ {
+		leader.NodeFailure[i] = make(chan int)
+	}
+
+	return leader
+}
+
 // Returns list of worker node IDs
-func (s *Leader) GetAvailableWorkers() []int {
+func (s *Leader) getAvailableWorkers() []int {
 	s.Mutex.Lock()
 	defer s.Mutex.Unlock()
 	return common.GetKeys(s.Workers)
@@ -62,21 +81,6 @@ func (s *Leader) getSDFSClient() (*client.SDFSClient, error) {
 	sdfsClient := client.NewSDFSClient(common.GetAddress(serverNode.Hostname, serverNode.RPCPort))
 
 	return sdfsClient, nil
-}
-
-// Initialise instance of leader server
-func NewLeader(info common.Node) *Leader {
-	leader := new(Leader)
-	leader.Info = info
-	leader.Jobs = make([]Job, 0)
-	leader.Nodes = make([]common.Node, 0)
-	leader.Workers = make(map[int]*Worker)
-	leader.FD = failuredetector.NewServer(info.Hostname, info.UDPPort, common.GOSSIP_PROTOCOL, leader)
-	leader.Tasks = make(chan Task)
-	leader.JobFailure = make(chan bool)
-	leader.NumTasks = 0
-
-	return leader
 }
 
 // Add a new node
@@ -104,6 +108,10 @@ func (server *Leader) removeNode(node common.Node) {
 			server.Nodes = common.RemoveIndex(server.Nodes, i)
 			break
 		}
+	}
+
+	for i := 0; i < THREAD_POOL_SIZE; i++ {
+		server.NodeFailure[i] <- node.ID
 	}
 }
 
@@ -138,7 +146,7 @@ func (server *Leader) HandleNodeJoin(node *common.Node) {
 	server.addNode(*node)
 
 	if common.IsSDFSNode(*node) {
-		log.Debug("SDFS Node joined: ", *node)
+		log.Println("SDFS Node joined: ", *node)
 	} else if common.IsMapleJuiceNode(*node) {
 		log.Println("MapleJuice Node joined:", *node)
 	}
@@ -166,7 +174,7 @@ func (server *Leader) Start() {
 	go common.StartRPCServer(server.Info.Hostname, server.Info.RPCPort, server)
 
 	for i := 0; i < THREAD_POOL_SIZE; i++ {
-		go server.scheduler()
+		go server.scheduler(i)
 	}
 
 	go server.runJobs()
@@ -224,6 +232,10 @@ func (server *Leader) MapleRequest(args *MapParam, reply *bool) error {
 	serverNode := common.RandomChoice(sdfsNodes)
 	sdfsClient := client.NewSDFSClient(common.GetAddress(serverNode.Hostname, serverNode.RPCPort))
 
+	if _, err := sdfsClient.GetFile(args.MapperExe); err != nil {
+		return err
+	}
+
 	inputFiles, err := sdfsClient.ListDirectory(args.InputDir)
 	if err != nil {
 		return err
@@ -261,36 +273,40 @@ func (server *Leader) JuiceRequest(args *ReduceParam, reply *bool) error {
 	serverNode := common.RandomChoice(sdfsNodes)
 	sdfsClient := client.NewSDFSClient(common.GetAddress(serverNode.Hostname, serverNode.RPCPort))
 
+	if _, err := sdfsClient.GetFile(args.ReducerExe); err != nil {
+		return err
+	}
+
 	inputFiles, err := sdfsClient.ListDirectory(args.InputPrefix)
 	if err != nil {
 		return err
 	}
 
-	filtered := []string{}
+	// filtered := []string{}
 
-	// TODO
-	for _, inputFile := range *inputFiles {
-		tokens := strings.Split(inputFile, ":")
-		if len(tokens) < 2 { // filename:workerID:...
-			continue
-		}
-
-		workerID, err := strconv.Atoi(tokens[1])
-		if err != nil {
-			continue
-		}
-
-		for _, w := range workers {
-			if w.ID == workerID {
-				filtered = append(filtered, inputFile)
-			}
-		}
-	}
+	// // TODO
+	// for _, inputFile := range *inputFiles {
+	// 	tokens := strings.Split(inputFile, ":")
+	// 	if len(tokens) < 2 { // filename:workerID:...
+	// 		continue
+	// 	}
+	//
+	// 	workerID, err := strconv.Atoi(tokens[1])
+	// 	if err != nil {
+	// 		continue
+	// 	}
+	//
+	// 	for _, w := range workers {
+	// 		if w.ID == workerID {
+	// 			filtered = append(filtered, inputFile)
+	// 		}
+	// 	}
+	// }
 
 	server.addJob(&ReduceJob{
 		ID:         time.Now().UnixNano(),
 		Param:      *args,
-		InputFiles: filtered,
+		InputFiles: *inputFiles,
 	})
 
 	return nil
@@ -301,7 +317,6 @@ func (server *Leader) WorkerAck(args *int, reply *bool) error {
 	server.Mutex.Lock()
 	defer server.Mutex.Unlock()
 	if worker, ok := server.Workers[*args]; ok {
-		// log.Println("Ack")
 		worker.NumAcks++
 		server.NumTasks--
 	}
@@ -388,7 +403,7 @@ func assign(task Task, conn *rpc.Client) bool {
 
 // Attemps to send task to any one worker
 func (s *Leader) schedule(task Task, pool *common.ConnectionPool) bool {
-	available := s.GetAvailableWorkers()
+	available := s.getAvailableWorkers()
 
 	for len(available) > 0 {
 		hash := task.Hash() % len(available)
@@ -421,7 +436,7 @@ func (s *Leader) schedule(task Task, pool *common.ConnectionPool) bool {
 }
 
 // Sends available tasks to worker nodes
-func (s *Leader) scheduler() {
+func (s *Leader) scheduler(i int) {
 	pool := common.NewConnectionPool(common.MapleJuiceCluster)
 	log.Println("Started scheduler routine...")
 	for {
@@ -433,8 +448,10 @@ func (s *Leader) scheduler() {
 			}
 
 		case <-time.After(RESET_CONNECTION_TIMEOUT):
-			log.Warn("Reset connection pool")
 			pool.Close()
+
+		case ID := <-s.NodeFailure[i]:
+			pool.RemoveConnection(ID)
 		}
 	}
 }
@@ -467,7 +484,7 @@ func (server *Leader) runJobs() {
 				}
 
 				log.Println("Retrying job...")
-				time.Sleep(time.Second)
+				time.Sleep(JOB_RETRY_INTERVAL)
 			}
 
 			server.Mutex.Lock()
@@ -508,6 +525,7 @@ func (s *Leader) runJob(job Job) error {
 
 	err = s.finishJob(job)
 	if err != nil {
+		s.wait()
 		return err
 	}
 

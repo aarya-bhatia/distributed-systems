@@ -25,14 +25,12 @@ func RemoveElement[T comparable](array []T, target T) []T {
 }
 
 // Add element if not exists and return new slice
-func AddUniqueElement[T comparable](array []T, target T) []T {
-	for _, element := range array {
-		if element == target {
-			return array
-		}
+func AddElement[T comparable](array []T, target T) []T {
+	if !HasElement(array, target) {
+		array = append(array, target)
 	}
 
-	return append(array, target)
+	return array
 }
 
 func HasElement[T comparable](array []T, target T) bool {
