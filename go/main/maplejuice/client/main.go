@@ -4,9 +4,9 @@ import (
 	"cs425/common"
 	"cs425/maplejuice"
 	"fmt"
-	"math/rand"
 	"os"
 	"strconv"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -43,7 +43,7 @@ func Maple(tokens []string) error {
 	args := tokens[5:]
 
 	param := maplejuice.MapJob{
-		ID:           rand.Int63(),
+		ID:           time.Now().UnixNano(),
 		MapperExe:    maple_exe,
 		NumMapper:    num_maples,
 		OutputPrefix: sdfs_prefix,
@@ -74,7 +74,7 @@ func Juice(tokens []string) error {
 	args := tokens[5:]
 
 	param := maplejuice.ReduceJob{
-		ID:          rand.Int63(),
+		ID:          time.Now().UnixNano(),
 		ReducerExe:  juice_exe,
 		NumReducer:  num_juices,
 		InputPrefix: sdfs_prefix,
