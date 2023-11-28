@@ -323,62 +323,6 @@ func (server *Leader) WorkerAck(args *int, reply *bool) error {
 	return nil
 }
 
-// Initialise and allocate executors at each worker node.
-// Returns the worker nodes available
-func (s *Leader) allocate(numWorkers int) []int {
-	nodes := s.GetMapleJuiceNodes()
-
-	s.Mutex.Lock()
-	defer s.Mutex.Unlock()
-
-	s.NumTasks = 0
-	s.Workers = make(map[int]*Worker)
-	available := []int{}
-	reply := false
-
-	for _, node := range nodes {
-		conn, err := common.Connect(node.ID, common.MapleJuiceCluster)
-		if err != nil {
-			log.Println(err)
-			continue
-		}
-		defer conn.Close()
-		if err := conn.Call(RPC_ALLOCATE, &numWorkers, &reply); err != nil {
-			log.Println(err)
-			continue
-		}
-		log.Println("Allocated", numWorkers, "executors to worker", node.ID)
-		s.Workers[node.ID] = &Worker{ID: node.ID, Tasks: make([]Task, 0), NumExecutors: numWorkers}
-		available = append(available, node.ID)
-	}
-
-	return available
-}
-
-// Free executors on each worker node
-func (server *Leader) free() {
-	server.Mutex.Lock()
-	defer server.Mutex.Unlock()
-
-	for _, worker := range server.Workers {
-		reply := false
-		log.Println("deallocating workers at worker", worker.ID)
-		if worker.NumExecutors == 0 {
-			continue
-		}
-		conn, err := common.Connect(worker.ID, common.MapleJuiceCluster)
-		if err != nil {
-			log.Println(err)
-			continue
-		}
-		defer conn.Close()
-		if err := conn.Call(RPC_FREE, &worker.NumExecutors, &reply); err != nil {
-			log.Println(err)
-			continue
-		}
-	}
-}
-
 // Send task to given worker
 func assign(task Task, conn *rpc.Client) bool {
 	reply := false
@@ -498,16 +442,15 @@ func (server *Leader) runJobs() {
 
 // Run the current job
 func (s *Leader) runJob(job Job) error {
-	defer s.free()
-
-	available := s.allocate(job.GetNumWorkers())
-	if len(available) == 0 {
-		return errors.New("No workers are available")
-	}
-
 	sdfsClient, err := s.getSDFSClient()
 	if err != nil {
 		return err
+	}
+
+	available := s.startJob(job)
+
+	if len(available) == 0 {
+		return errors.New("No workers are available")
 	}
 
 	tasks, err := job.GetTasks(sdfsClient)
@@ -520,20 +463,61 @@ func (s *Leader) runJob(job Job) error {
 	}
 
 	if !s.wait() {
-		return errors.New("job failure")
+		return errors.New("failed during wait()")
 	}
 
-	err = s.finishJob(job)
-	if err != nil {
+	if err = s.finishJob(job); err != nil {
 		s.wait()
 		return err
 	}
 
 	if !s.wait() {
-		return errors.New("job failure")
+		return errors.New("failed during wait()")
 	}
 
 	return nil
+}
+
+// Initialise and allocate executors at each worker node.
+// Returns the worker nodes available
+func (s *Leader) startJob(job Job) []int {
+	nodes := s.GetMapleJuiceNodes()
+
+	s.Mutex.Lock()
+	defer s.Mutex.Unlock()
+
+	s.NumTasks = 0
+	s.Workers = make(map[int]*Worker)
+	available := []int{}
+	reply := false
+
+	for _, node := range nodes {
+		conn, err := common.Connect(node.ID, common.MapleJuiceCluster)
+		if err != nil {
+			log.Println(err)
+			continue
+		}
+
+		defer conn.Close()
+
+		switch job.(type) {
+		case *MapJob:
+			if err := conn.Call(RPC_START_MAP_JOB, &job.(*MapJob).Param, &reply); err != nil {
+				log.Println(err)
+				continue
+			}
+		case *ReduceJob:
+			if err := conn.Call(RPC_START_REDUCE_JOB, &job.(*ReduceJob).Param, &reply); err != nil {
+				log.Println(err)
+				continue
+			}
+		}
+
+		s.Workers[node.ID] = &Worker{ID: node.ID, Tasks: make([]Task, 0), NumExecutors: job.GetNumWorkers()}
+		available = append(available, node.ID)
+	}
+
+	return available
 }
 
 // Flush the final map/reduce data from workers to SDFS

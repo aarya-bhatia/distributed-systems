@@ -16,14 +16,13 @@ import (
 const EXECUTOR_POLL_INTERVAL = 20 * time.Millisecond
 
 const (
-	RPC_ALLOCATE    = "Service.Allocate"
-	RPC_FREE        = "Service.Free"
-	RPC_MAP_TRASK   = "Service.MapTask"
-	RPC_REDUCE_TASK = "Service.ReduceTask"
-	RPC_UPLOAD_TASK = "Service.UploadTask"
-
+	RPC_START_MAP_JOB     = "Service.StartMapJob"
+	RPC_START_REDUCE_JOB  = "Service.StartReduceJob"
 	RPC_FINISH_MAP_JOB    = "Service.FinishMapJob"
 	RPC_FINISH_REDUCE_JOB = "Service.FinishReduceJob"
+
+	RPC_MAP_TRASK   = "Service.MapTask"
+	RPC_REDUCE_TASK = "Service.ReduceTask"
 )
 
 type Message struct {
@@ -73,17 +72,16 @@ func merge(m1 map[string][]string, m2 map[string][]string) map[string][]string {
 	return m
 }
 
-func (service *Service) Allocate(args *int, reply *bool) error {
+func (service *Service) allocate(size int) {
 	service.Mutex.Lock()
 	defer service.Mutex.Unlock()
 
-	for i := 0; i < *args; i++ {
+	for i := 0; i < size; i++ {
 		go service.StartExecutor()
 	}
-	log.Println("Allocated", *args, "workers")
 
-	service.NumExecutor += *args
-	return nil
+	log.Println("Allocated", size, "workers")
+	service.NumExecutor += size
 }
 
 func (service *Service) AddTask(task Task) {
@@ -102,7 +100,7 @@ func (service *Service) ReduceTask(args *ReduceTask, reply *bool) error {
 	return nil
 }
 
-func (service *Service) Free(args *int, reply *bool) error {
+func (service *Service) free() {
 	service.Mutex.Lock()
 	defer service.Mutex.Unlock()
 
@@ -112,14 +110,34 @@ func (service *Service) Free(args *int, reply *bool) error {
 
 	log.Println("Deallocated", service.NumExecutor, "workers")
 	service.NumExecutor = 0
+}
 
-	return nil
+func (server *Service) StartMapJob(param *MapParam, reply *bool) error {
+	sdfsClient, err := server.getSDFSClient()
+	if err != nil {
+		return err
+	}
+	server.free()
+	server.allocate(param.NumMapper)
+	return server.downloadExecutable(sdfsClient, param.MapperExe)
+}
+
+func (server *Service) StartReduceJob(param *ReduceParam, reply *bool) error {
+	sdfsClient, err := server.getSDFSClient()
+	if err != nil {
+		return err
+	}
+	server.free()
+	server.allocate(param.NumReducer)
+	return server.downloadExecutable(sdfsClient, param.ReducerExe)
 }
 
 func (server *Service) FinishMapJob(outputPrefix *string, reply *bool) error {
 	log.Println("FinishMapJob()")
 
 	go func() {
+		defer server.free()
+
 		sdfsClient, err := server.getSDFSClient()
 		if err != nil {
 			log.Fatal(err)
@@ -160,6 +178,8 @@ func (server *Service) FinishReduceJob(outputFile *string, reply *bool) error {
 	log.Println("FinishReduceJob()")
 
 	go func() {
+		defer server.free()
+
 		sdfsClient, err := server.getSDFSClient()
 		if err != nil {
 			log.Fatal(err)
@@ -203,20 +223,24 @@ func (server *Service) FinishReduceJob(outputFile *string, reply *bool) error {
 	return nil
 }
 
-func (server *Service) downloadExecutable(sdfsClient *client.SDFSClient, filename string) {
+func (server *Service) downloadExecutable(sdfsClient *client.SDFSClient, filename string) error {
 	server.Mutex.Lock()
 	defer server.Mutex.Unlock()
 
 	if !common.FileExists(filename) {
 		fileWriter, err := client.NewFileWriterWithOpts(filename, client.DEFAULT_FILE_FLAGS, 0777)
 		if err != nil {
-			log.Fatal(err)
+			log.Warn(err)
+			return err
 		}
 
 		if err := sdfsClient.DownloadFile(fileWriter, filename); err != nil {
-			log.Fatal(err)
+			log.Warn(err)
+			return err
 		}
 	}
+
+	return nil
 }
 
 func (server *Service) StartExecutor() error {
@@ -250,8 +274,6 @@ func (server *Service) StartExecutor() error {
 			log.Println("Executor finished")
 			return nil
 		}
-
-		server.downloadExecutable(sdfsClient, message.Task.GetExecutable())
 
 		res, err := message.Task.Run(sdfsClient)
 		if err != nil {
