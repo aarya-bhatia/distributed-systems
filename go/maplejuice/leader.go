@@ -27,16 +27,17 @@ type Worker struct {
 }
 
 type Leader struct {
-	ID         int
-	Info       common.Node
-	Mutex      sync.Mutex
-	FD         *failuredetector.Server
-	Jobs       []Job
-	Nodes      []common.Node
-	Workers    map[int]*Worker
-	NumTasks   int
-	Tasks      chan Task
-	JobFailure chan bool
+	ID          int
+	Info        common.Node
+	Mutex       sync.Mutex
+	FD          *failuredetector.Server
+	Jobs        []Job
+	Nodes       []common.Node
+	Workers     map[int]*Worker
+	NumTasks    int
+	Tasks       chan Task
+	JobFailure  chan bool
+	NodeFailure chan int
 }
 
 const RPC_WORKER_ACK = "Leader.WorkerAck"
@@ -401,6 +402,7 @@ func (s *Leader) schedule(task Task, pool *common.ConnectionPool) bool {
 		}
 
 		if !assign(task, conn) {
+			pool.RemoveConnection(assignee)
 			available = common.RemoveElement(available, assignee)
 			continue
 		}

@@ -4,6 +4,8 @@ import (
 	"strings"
 )
 
+const BATCH_SIZE = 200
+
 type LineInfo struct {
 	Offset int
 	Length int
@@ -33,4 +35,21 @@ func ProcessFileContents(fileContents string) []LineInfo {
 	}
 
 	return lines
+}
+
+func GetLineGroups(lines []LineInfo, batchSize int) []LineInfo {
+	batches := make([]LineInfo, 0)
+	for len(lines) > 0 {
+		batch := lines
+		if len(lines) >= batchSize {
+			batch = lines[:batchSize]
+		}
+		lines = lines[len(batch):]
+		batchInfo := LineInfo{
+			Offset: batch[0].Offset,
+			Length: batch[len(batch)-1].Offset + batch[len(batch)-1].Length - batch[0].Offset,
+		}
+		batches = append(batches, batchInfo)
+	}
+	return batches
 }

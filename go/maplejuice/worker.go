@@ -130,8 +130,8 @@ func (server *Service) FinishMapJob(outputPrefix *string, reply *bool) error {
 
 		for key, values := range server.Data {
 			outputFile := fmt.Sprintf("%s:%d:%s", *outputPrefix, server.ID, key)
-			lines := strings.Join(values, "\n")
-			err := sdfsClient.WriteFile(client.NewByteReader([]byte(lines)), outputFile, common.FILE_TRUNCATE)
+			lines := strings.Join(values, "\n") + "\n"
+			err := sdfsClient.WriteFile(client.NewByteReader([]byte(lines)), outputFile, common.FILE_APPEND)
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -168,17 +168,17 @@ func (server *Service) FinishReduceJob(outputFile *string, reply *bool) error {
 		server.Mutex.Lock()
 		defer server.Mutex.Unlock()
 
-		data := []string{}
+		data := ""
 		for key, values := range server.Data {
 			for _, value := range values {
-				data = append(data, key+":"+value)
+				data += key + ":" + value + "\n"
 			}
 		}
 
 		if len(data) > 0 {
-			reader := client.NewByteReader([]byte(strings.Join(data, "\n")))
+			reader := client.NewByteReader([]byte(data))
 			*outputFile = fmt.Sprintf("%s:%d", *outputFile, server.ID)
-			err = sdfsClient.WriteFile(reader, *outputFile, common.FILE_TRUNCATE)
+			err = sdfsClient.WriteFile(reader, *outputFile, common.FILE_APPEND)
 			if err != nil {
 				log.Fatal(err)
 			}

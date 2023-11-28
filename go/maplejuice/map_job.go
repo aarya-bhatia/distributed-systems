@@ -8,8 +8,6 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-const BATCH_SIZE = 200
-
 // A map job is a collection of map tasks
 type MapJob struct {
 	ID         int64
@@ -25,23 +23,6 @@ func (job *MapJob) GetNumWorkers() int {
 	return job.Param.NumMapper
 }
 
-func getLineGroups(lines []LineInfo, batchSize int) []LineInfo {
-	batches := make([]LineInfo, 0)
-	for len(lines) > 0 {
-		batch := lines
-		if len(lines) >= batchSize {
-			batch = lines[:batchSize]
-		}
-		lines = lines[len(batch):]
-		batchInfo := LineInfo{
-			Offset: batch[0].Offset,
-			Length: batch[len(batch)-1].Offset + batch[len(batch)-1].Length - batch[0].Offset,
-		}
-		batches = append(batches, batchInfo)
-	}
-	return batches
-}
-
 func (job *MapJob) GetTasks(sdfsClient *client.SDFSClient) ([]Task, error) {
 	res := []Task{}
 
@@ -55,7 +36,7 @@ func (job *MapJob) GetTasks(sdfsClient *client.SDFSClient) ([]Task, error) {
 
 		fileSize := len(writer.String())
 		lines := ProcessFileContents(writer.String())
-		lineGroups := getLineGroups(lines, BATCH_SIZE)
+		lineGroups := GetLineGroups(lines, BATCH_SIZE)
 		log.Printf("File size: %d, Total lines: %d, Total batches: %d", fileSize, len(lines), len(lineGroups))
 
 		for _, line := range lineGroups {

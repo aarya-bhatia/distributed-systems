@@ -53,7 +53,8 @@ func (task *ReduceTask) Run(sdfsClient *client.SDFSClient) (map[string][]string,
 		return nil, err
 	}
 
-	return ParseKeyValuePairs(output), nil
+	res := ParseKeyValuePairs(output)
+	return res, nil
 }
 
 func (task *ReduceTask) GetExecutable() string {
