@@ -26,10 +26,12 @@ type Worker struct {
 }
 
 type JobStat struct {
-	Job       Job
-	StartTime int64
-	EndTime   int64
-	Status    bool
+	Job        Job
+	StartTime  int64
+	EndTime    int64
+	Status     bool
+	NumWorkers int
+	NumTasks   int
 }
 
 type Leader struct {
@@ -424,6 +426,7 @@ func (server *Leader) runJobs() {
 func (s *Leader) runJob(job Job) (*JobStat, error) {
 	stat := &JobStat{Job: job}
 	stat.StartTime = time.Now().UnixNano()
+	stat.NumWorkers = job.GetNumWorkers()
 
 	defer func() {
 		stat.EndTime = time.Now().UnixNano()
@@ -450,6 +453,8 @@ func (s *Leader) runJob(job Job) (*JobStat, error) {
 	if err != nil {
 		return stat, err
 	}
+
+	stat.NumTasks = len(tasks)
 
 	// send all tasks
 	for _, task := range tasks {
