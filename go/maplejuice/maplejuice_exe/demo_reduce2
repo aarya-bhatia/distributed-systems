@@ -1,0 +1,22 @@
+#!/usr/bin/env python3
+import sys
+
+if __name__ == "__main__":
+    total = 0
+    keys = {}
+
+    for line in sys.stdin:
+        line = line.strip()
+        if len(line) == 0:
+            continue
+        tokens = line.split(":")
+        if len(tokens) != 2:
+            continue
+        key = tokens[0].strip()
+        value = int(tokens[1].strip())
+        total += value
+        keys[key] = value
+
+    for key, value in keys.items():
+        percentage = round(float(100 * value) / float(total))
+        print(f"{key}:{percentage}")

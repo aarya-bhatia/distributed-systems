@@ -62,9 +62,10 @@ func leaderStdinHandler(info common.Node, server *maplejuice.Leader) {
 		case "stat":
 			server.Mutex.Lock()
 			for _, s := range server.JobStats {
-				fmt.Printf("%s: elapsed=%f sec\n",
+				fmt.Printf("%s: elapsed=%fs status=%s\n",
 					s.Job.Name(),
 					float64(s.EndTime-s.StartTime)*1e-9,
+					strconv.FormatBool(s.Status),
 				)
 			}
 			server.Mutex.Unlock()

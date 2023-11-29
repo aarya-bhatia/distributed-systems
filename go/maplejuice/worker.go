@@ -229,17 +229,15 @@ func (server *Service) downloadExecutable(sdfsClient *client.SDFSClient, filenam
 	server.Mutex.Lock()
 	defer server.Mutex.Unlock()
 
-	if !common.FileExists(filename) {
-		fileWriter, err := client.NewFileWriterWithOpts(filename, client.DEFAULT_FILE_FLAGS, 0777)
-		if err != nil {
-			log.Warn(err)
-			return err
-		}
+	fileWriter, err := client.NewFileWriterWithOpts(filename, client.DEFAULT_FILE_FLAGS, 0777)
+	if err != nil {
+		log.Warn(err)
+		return err
+	}
 
-		if err := sdfsClient.DownloadFile(fileWriter, filename); err != nil {
-			log.Warn(err)
-			return err
-		}
+	if err := sdfsClient.DownloadFile(fileWriter, filename); err != nil {
+		log.Warn(err)
+		return err
 	}
 
 	return nil

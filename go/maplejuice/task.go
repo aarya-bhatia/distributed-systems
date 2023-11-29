@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"cs425/filesystem/client"
 	"io"
+	"os"
 	"os/exec"
 	"regexp"
 	"strings"
@@ -59,6 +60,7 @@ func ExecuteAndGetOutput(executable string, args []string, inputLines string) ([
 
 	cmd.Stdin = stdinPipeReader
 	cmd.Stdout = stdoutPipeWriter
+	cmd.Stderr = os.Stderr
 
 	// Start the command
 	err := cmd.Start()
