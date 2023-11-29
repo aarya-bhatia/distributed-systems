@@ -4,6 +4,8 @@ import (
 	"cs425/common"
 	"cs425/filesystem/client"
 	"fmt"
+	"strings"
+
 	log "github.com/sirupsen/logrus"
 )
 
@@ -13,6 +15,40 @@ type ReduceTask struct {
 	Job        ReduceJob
 	Key        string
 	InputFiles []string
+}
+
+func (task *ReduceTask) RangeHash() int {
+	char := strings.ToLower(task.Key)[0]
+
+	if char >= 'a' && char < 'a'+3 {
+		return 0
+	}
+	if char >= 'a'+3 && char < 'a'+6 {
+		return 1
+	}
+	if char >= 'a'+6 && char < 'a'+9 {
+		return 2
+	}
+	if char >= 'a'+9 && char < 'a'+12 {
+		return 3
+	}
+	if char >= 'a'+12 && char < 'a'+15 {
+		return 4
+	}
+	if char >= 'a'+15 && char < 'a'+18 {
+		return 5
+	}
+	if char >= 'a'+18 && char < 'a'+21 {
+		return 6
+	}
+	if char >= 'a'+21 && char < 'a'+24 {
+		return 7
+	}
+	if char >= 'a'+24 && char < 'a'+27 {
+		return 8
+	}
+
+	return 9
 }
 
 func (task *ReduceTask) Hash() int {
