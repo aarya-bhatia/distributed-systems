@@ -1,0 +1,28 @@
+#!/usr/bin/env python3
+
+import sys
+import re
+
+# arg 1: filename
+# arg 2: column
+# arg 3: regex
+if __name__ == "__main__":
+    if len(sys.argv) < 4:
+        exit(1)
+
+    filename = sys.argv[1]
+    column = int(sys.argv[2])
+    filter = sys.argv[3]
+
+    for line in sys.stdin:
+        line = line.strip()
+        if len(line) == 0:
+            continue
+        tokens = line.split(",")
+        if column >= len(tokens):
+            continue
+        value = tokens[column].strip()
+        if value == "":
+            continue
+        if re.search(filter, value) != None:
+            print(f"{filename}:{line}")
