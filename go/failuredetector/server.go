@@ -245,14 +245,35 @@ func (s *Server) PrintMembershipTable() {
 
 	t := table.NewWriter()
 	t.SetOutputMirror(os.Stdout)
-	t.AppendHeader(table.Row{"ID", "ADDRESS", "COUNT", "UPDATED", "STATE"})
+	// t.AppendHeader(table.Row{"ID", "ADDRESS", "COUNT", "UPDATED", "STATE", "TYPE"})
+	t.AppendHeader(table.Row{"ID", "ADDRESS", "COUNT", "STATE", "TYPE"})
 
 	rows := []table.Row{}
 
 	for _, host := range s.Members {
-		rows = append(rows, table.Row{
-			host.ID, fmt.Sprintf("%s:%d", host.Hostname, host.Port),
-			host.Counter, host.UpdatedAt, StateToString(host.State),
+		Type := "Unknown"
+		ID := 0
+
+		if common.GetAddress(host.Hostname, host.Port) == common.INTRODUCER_ADDRESS {
+			Type = "Introducer"
+		} else {
+			node := common.GetNodeByAddress(host.Hostname, host.Port)
+			if node != nil {
+				if common.IsMapleJuiceNode(*node) {
+					Type = "MapleJuice"
+				} else if common.IsSDFSNode(*node) {
+					Type = "SDFS"
+				}
+
+				ID = node.ID
+			}
+		}
+
+		rows = append(rows, table.Row{ID,
+			common.GetAddress(host.Hostname, host.Port),
+			host.Counter,
+			StateToString(host.State),
+			Type,
 		})
 	}
 
