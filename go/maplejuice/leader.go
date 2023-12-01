@@ -182,6 +182,15 @@ func (server *Leader) HandleNodeLeave(node *common.Node) {
 	} else if common.IsMapleJuiceNode(*node) {
 		log.Println("MapleJuice Node left:", *node)
 		server.removeWorker(node.ID)
+
+		server.Mutex.Lock()
+		if len(server.Jobs) == 0 {
+			server.Mutex.Unlock()
+			return
+		}
+		job := server.Jobs[0]
+		server.Mutex.Unlock()
+		server.cleanupWorker(job, node.ID)
 	}
 }
 

@@ -24,5 +24,5 @@ if __name__ == "__main__":
         value = tokens[column].strip()
         if value == "":
             continue
-        if re.search(filter, value) != None:
+        if re.search(filter, value, re.IGNORECASE) != None:
             print(f"{filename}:{line}")

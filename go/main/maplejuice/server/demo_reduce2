@@ -18,5 +18,5 @@ if __name__ == "__main__":
         keys[key] = value
 
     for key, value in keys.items():
-        percentage = round(float(100 * value) / float(total))
+        percentage = float(100 * value) / float(total)
         print(f"{key}:{percentage}")
