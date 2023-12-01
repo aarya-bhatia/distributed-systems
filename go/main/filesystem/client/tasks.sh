@@ -16,6 +16,9 @@ go run . 1 put ./maplejuice_exe/demo_reduce2 demo_reduce2
 go run . 1 put ./maplejuice_exe/demo_sql_map demo_sql_map
 go run . 1 put ./maplejuice_exe/demo_sql_reduce demo_sql_reduce
 
+go run . 1 put ./maplejuice_exe/filter_mapper.py filter_mapper.py
+go run . 1 put ./maplejuice_exe/filter_reducer.py filter_reducer.py
+
 # exe_dir=./maplejuice_exe
 # for file in $(ls ${exe_dir}/*.py ${exe_dir}/demo*); do
 # 	go run . 1 put $file $(basename $file)
