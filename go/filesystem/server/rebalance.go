@@ -40,7 +40,7 @@ func (s *Server) startRebalanceRoutine() {
 	}
 }
 func (s *Server) sendRebalanceRequests(replica int, blocks []BlockMetadata) {
-	conn, err := common.Connect(replica, common.SDFSCluster)
+	conn, err := common.Connect(replica, common.SDFS_NODE)
 	if err != nil {
 		return
 	}
@@ -71,7 +71,7 @@ func (s *Server) startMetadataRebalanceRoutine() {
 
 func (s *Server) broadcastMetadata() {
 	for _, replica := range s.GetMetadataReplicaNodes(common.REPLICA_FACTOR - 1) {
-		client, err := common.Connect(replica, common.SDFSCluster)
+		client, err := common.Connect(replica, common.SDFS_NODE)
 		if err != nil {
 			continue
 		}

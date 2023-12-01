@@ -59,7 +59,7 @@ type Server struct {
 	GossipChannel   chan bool
 	ReceiverChannel chan ReceiverEvent
 	Protocol        int
-	Notifier        common.Notifier
+	Notifiers       []common.Notifier
 }
 
 func (s *Server) Start() {
@@ -129,7 +129,7 @@ func (server *Server) SetUniqueID() string {
 	return ID
 }
 
-func NewServer(Hostname string, Port int, Protocol int, Notifier common.Notifier) *Server {
+func NewServer(Hostname string, Port int, Protocol int, Notifiers []common.Notifier) *Server {
 	addr, err := net.ResolveUDPAddr("udp", fmt.Sprintf(":%d", Port))
 	if err != nil {
 		log.Fatal(err)
@@ -152,11 +152,39 @@ func NewServer(Hostname string, Port int, Protocol int, Notifier common.Notifier
 	server.GossipChannel = make(chan bool)
 	server.ReceiverChannel = make(chan ReceiverEvent)
 	server.Protocol = Protocol
-	server.Notifier = Notifier
+	server.Notifiers = Notifiers
 
 	server.SetUniqueID()
 
 	return server
+}
+
+func (server *Server) notifyJoin(node *common.Node) {
+	if node == nil || server.Notifiers == nil {
+		return
+	}
+
+	if common.GetAddress(node.Hostname, node.UDPPort) == common.INTRODUCER_ADDRESS {
+		return
+	}
+
+	for _, notifier := range server.Notifiers {
+		go notifier.HandleNodeJoin(common.GetNodeByAddress(node.Hostname, node.UDPPort))
+	}
+}
+
+func (server *Server) notifyLeave(node *common.Node) {
+	if node == nil || server.Notifiers == nil {
+		return
+	}
+
+	if common.GetAddress(node.Hostname, node.UDPPort) == common.INTRODUCER_ADDRESS {
+		return
+	}
+
+	for _, notifier := range server.Notifiers {
+		go notifier.HandleNodeLeave(common.GetNodeByAddress(node.Hostname, node.UDPPort))
+	}
 }
 
 func (server *Server) AddHost(Hostname string, Port int, ID string) (*Host, error) {
@@ -180,11 +208,7 @@ func (server *Server) AddHost(Hostname string, Port int, ID string) (*Host, erro
 	server.PrintMembershipTable()
 	server.MemberLock.Lock()
 
-	if server.Notifier != nil {
-		if common.GetAddress(Hostname, Port) != common.INTRODUCER_ADDRESS {
-			go server.Notifier.HandleNodeJoin(common.GetNodeByAddress(Hostname, Port))
-		}
-	}
+	server.notifyJoin(common.GetNodeByAddress(Hostname, Port))
 
 	return server.Members[ID], nil
 }
@@ -245,40 +269,27 @@ func (s *Server) PrintMembershipTable() {
 
 	t := table.NewWriter()
 	t.SetOutputMirror(os.Stdout)
-	// t.AppendHeader(table.Row{"ID", "ADDRESS", "COUNT", "UPDATED", "STATE", "TYPE"})
-	t.AppendHeader(table.Row{"ID", "ADDRESS", "COUNT", "STATE", "TYPE"})
+	t.AppendHeader(table.Row{"ID", "ADDRESS", "COUNT", "STATE"})
 
 	rows := []table.Row{}
 
 	for _, host := range s.Members {
-		Type := "Unknown"
 		ID := 0
 
-		if common.GetAddress(host.Hostname, host.Port) == common.INTRODUCER_ADDRESS {
-			Type = "Introducer"
-		} else {
-			node := common.GetNodeByAddress(host.Hostname, host.Port)
-			if node != nil {
-				if common.IsMapleJuiceNode(*node) {
-					Type = "MapleJuice"
-				} else if common.IsSDFSNode(*node) {
-					Type = "SDFS"
-				}
-
-				ID = node.ID
-			}
+		node := common.GetNodeByAddress(host.Hostname, host.Port)
+		if node != nil {
+			ID = node.ID
 		}
 
 		rows = append(rows, table.Row{ID,
 			common.GetAddress(host.Hostname, host.Port),
 			host.Counter,
 			StateToString(host.State),
-			Type,
 		})
 	}
 
 	t.SortBy([]table.SortBy{
-		{Name: "COUNT", Mode: table.DscNumeric},
+		{Name: "ID", Mode: table.AscNumeric},
 	})
 
 	t.AppendRows(rows)
@@ -470,11 +481,7 @@ func (s *Server) HandleTimeout(e timer.TimerEvent) {
 		if s.Protocol == common.GOSSIP_PROTOCOL {
 			log.Warnf("FAILURE DETECTED: (%d) Node %s is considered failed\n", timestamp, host.Signature)
 			host.State = common.NODE_FAILED
-			if s.Notifier != nil {
-				if common.GetAddress(host.Hostname, host.Port) != common.INTRODUCER_ADDRESS {
-					go s.Notifier.HandleNodeLeave(common.GetNodeByAddress(host.Hostname, host.Port))
-				}
-			}
+			go s.notifyLeave(common.GetNodeByAddress(host.Hostname, host.Port))
 		} else {
 			log.Warnf("FAILURE SUSPECTED: (%d) Node %s is suspected of failure\n", timestamp, host.Signature)
 			host.State = common.NODE_SUSPECTED
@@ -484,11 +491,7 @@ func (s *Server) HandleTimeout(e timer.TimerEvent) {
 		log.Warnf("FAILURE DETECTED: (%d) Node %s is considered failed\n", timestamp, host.Signature)
 		host.State = common.NODE_FAILED
 		s.RestartTimer(e.ID, host.State)
-		if s.Notifier != nil {
-			if common.GetAddress(host.Hostname, host.Port) != common.INTRODUCER_ADDRESS {
-				go s.Notifier.HandleNodeLeave(common.GetNodeByAddress(host.Hostname, host.Port))
-			}
-		}
+		go s.notifyLeave(common.GetNodeByAddress(host.Hostname, host.Port))
 	} else if host.State == common.NODE_FAILED {
 		log.Warn("Deleting node from membership list...", host.Signature)
 		delete(s.Members, e.ID)
@@ -580,8 +583,7 @@ func sendJoinRequest(s *Server) {
 	msg := s.GetJoinMessage()
 
 	if IsIntroducer(s) {
-		cluster := append(common.SDFSCluster, common.MapleJuiceCluster...)
-		for _, vm := range cluster {
+		for _, vm := range common.Cluster {
 			if vm.Hostname == s.Self.Hostname && vm.UDPPort == s.Self.Port {
 				continue
 			}

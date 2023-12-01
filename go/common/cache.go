@@ -6,20 +6,20 @@ import (
 )
 
 type ConnectionPool struct {
-	Cluster []Node
+	nodeType int
 	conn    map[int]*rpc.Client
 }
 
-func NewConnectionPool(cluster []Node) *ConnectionPool {
+func NewConnectionPool(nodeType int) *ConnectionPool {
 	pool := new(ConnectionPool)
-	pool.Cluster = cluster
+	pool.nodeType = nodeType
 	pool.conn = make(map[int]*rpc.Client)
 	return pool
 }
 
 func (pool *ConnectionPool) GetConnection(node int) (*rpc.Client, error) {
 	if _, ok := pool.conn[node]; !ok {
-		conn, err := Connect(node, pool.Cluster)
+		conn, err := Connect(node, pool.nodeType)
 		if err != nil {
 			log.Warn("Failed to connect:", node)
 			return nil, err

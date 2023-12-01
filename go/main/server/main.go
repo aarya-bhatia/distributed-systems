@@ -5,8 +5,8 @@ import (
 	"cs425/common"
 	"cs425/failuredetector"
 	"cs425/filesystem/server"
+	"cs425/maplejuice"
 	"fmt"
-	"github.com/jedib0t/go-pretty/v6/table"
 	"os"
 	"os/exec"
 	"path"
@@ -14,8 +14,21 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jedib0t/go-pretty/v6/table"
+
 	log "github.com/sirupsen/logrus"
 )
+
+func setupDB(dbDirectory string) {
+	if exec.Command("rm", "-rf", dbDirectory).Run() != nil {
+		log.Fatal("rm failed")
+	}
+
+	if exec.Command("mkdir", "-p", dbDirectory).Run() != nil {
+		log.Fatal("mkdir failed")
+	}
+
+}
 
 // Usage: go run . [ID]
 func main() {
@@ -26,44 +39,51 @@ func main() {
 		log.Fatal(err)
 	}
 
-	var dbDirectory string
 	var info common.Node
 
-	if len(os.Args) > 1 {
+	if len(os.Args) < 2 {
+		info = *common.GetCurrentNode()
+	} else {
 		id, err := strconv.Atoi(os.Args[1])
 		if err != nil {
 			log.Fatal(err)
 		}
-		dbDirectory = path.Join(path.Join(cwd, "db"), os.Args[1])
-		info = *common.GetNodeByID(id, common.SDFSCluster)
-	} else {
-		dbDirectory = path.Join(cwd, "db")
-		info = *common.GetCurrentNode(common.SDFSCluster)
+		info = *common.GetNodeByID(id)
 	}
 
-	if exec.Command("rm", "-rf", dbDirectory).Run() != nil {
-		log.Fatal("rm failed")
-	}
-
-	if exec.Command("mkdir", "-p", dbDirectory).Run() != nil {
-		log.Fatal("mkdir failed")
-	}
+	dbDirectory := path.Join(path.Join(cwd, "db"), fmt.Sprint(info.ID))
+	setupDB(dbDirectory)
 
 	log.Info("Data directory:", dbDirectory)
 	log.Debug("Node:", info)
 
-	master := server.NewServer(info, dbDirectory)
-	fd := failuredetector.NewServer(info.Hostname, info.UDPPort, common.GOSSIP_PROTOCOL, master)
+	sdfs := server.NewServer(info, dbDirectory)
 
-	go master.Start()
+	notifiers := []common.Notifier{sdfs}
+
+	var mjLeader *maplejuice.Leader = nil
+	var mjWorker *maplejuice.Service = nil
+
+	if info.ID == common.MAPLE_JUICE_LEADER_ID {
+		mjLeader = maplejuice.NewLeader(info)
+		go mjLeader.Start()
+		notifiers = append(notifiers, mjLeader)
+	} else {
+		mjWorker = maplejuice.NewService(info)
+		go mjWorker.Start()
+	}
+
+	go sdfs.Start()
+
+	fd := failuredetector.NewServer(info.Hostname, info.UDPPort, common.GOSSIP_PROTOCOL, notifiers)
 	go fd.Start()
 
-	go stdinListener(info, master, fd)
+	go stdinListener(info, sdfs, fd, mjLeader, mjWorker)
 
 	<-make(chan bool) // blocks
 }
 
-func stdinListener(info common.Node, fs *server.Server, fd *failuredetector.Server) {
+func stdinListener(info common.Node, fs *server.Server, fd *failuredetector.Server, mjLeader *maplejuice.Leader, mjWorker *maplejuice.Service) {
 	scanner := bufio.NewScanner(os.Stdin)
 	for scanner.Scan() {
 		command := strings.TrimSpace(scanner.Text())
@@ -116,7 +136,7 @@ func stdinListener(info common.Node, fs *server.Server, fd *failuredetector.Serv
 			files, err := common.GetFilesInDirectory(fs.Directory)
 			if err != nil {
 				log.Warn(err)
-				return
+				continue
 			}
 
 			t := table.NewWriter()
@@ -136,12 +156,42 @@ func stdinListener(info common.Node, fs *server.Server, fd *failuredetector.Serv
 			t.AppendSeparator()
 			t.Render()
 
+		case "jobs":
+			if mjLeader == nil || info.ID != common.MAPLE_JUICE_LEADER_ID {
+				continue
+			}
+
+			mjLeader.Mutex.Lock()
+			fmt.Println("NumTasks:", mjLeader.NumTasks)
+			for _, job := range mjLeader.Jobs {
+				fmt.Println(job.Name())
+			}
+			for id, worker := range mjLeader.Workers {
+				fmt.Printf("worker %d: %d executors, %d tasks\n", id, worker.NumExecutors, len(worker.Tasks))
+			}
+			mjLeader.Mutex.Unlock()
+
+		case "stat":
+			if mjLeader == nil || info.ID != common.MAPLE_JUICE_LEADER_ID {
+				continue
+			}
+
+			mjLeader.Mutex.Lock()
+			for _, s := range mjLeader.JobStats {
+				fmt.Printf("%s: duration=%fs status=%s num_workers=%d num_tasks=%d\n",
+					s.Job.Name(),
+					float64(s.EndTime-s.StartTime)*1e-9,
+					strconv.FormatBool(s.Status),
+					s.NumWorkers,
+					s.NumTasks,
+				)
+			}
+			mjLeader.Mutex.Unlock()
+
 		case "info":
 			fmt.Println("----------------------------------------------------------")
-			fmt.Printf("Node Address: %s\n", info.Hostname)
-			fmt.Printf("Ports: UDP %d, RPC %d\n", info.UDPPort, info.RPCPort)
+			fmt.Printf("Node: %v\n", info)
 			fmt.Println("Member ID:", fd.Self.ID)
-			fmt.Println("Node ID:", fs.ID)
 			fmt.Println("Total disk blocks", common.GetFileCountInDirectory(fs.Directory))
 			fmt.Println("----------------------------------------------------------")
 
@@ -158,6 +208,8 @@ func stdinListener(info common.Node, fs *server.Server, fd *failuredetector.Serv
 			fmt.Println("leader: Print leader node")
 			fmt.Println("files: Print file metadata")
 			// fmt.Println("queue: Print file queues status")
+			fmt.Println("jobs: list maplejuice jobs")
+			fmt.Println("stat: list maplejuice job stats")
 		}
 	}
 }

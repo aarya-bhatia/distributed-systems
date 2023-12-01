@@ -8,6 +8,9 @@ import (
 	"net/rpc"
 )
 
+const MAPLEJUICE_NODE = 0
+const SDFS_NODE = 1
+
 func GetAddress(hostname string, port int) string {
 	return fmt.Sprintf("%s:%d", hostname, port)
 }
@@ -34,11 +37,21 @@ func StartRPCServer(Hostname string, Port int, Service interface{}) {
 	}
 }
 
-func Connect(nodeID int, cluster []Node) (*rpc.Client, error) {
-	node := GetNodeByID(nodeID, cluster)
+func Connect(nodeID int, nodeType int) (*rpc.Client, error) {
+	node := GetNodeByID(nodeID)
 	if node == nil {
-		return nil, errors.New("Unknown Node")
+		return nil, errors.New("Unknown node ID")
 	}
-	addr := GetAddress(node.Hostname, node.RPCPort)
+
+	var addr string
+
+	if nodeType == MAPLEJUICE_NODE {
+		addr = GetAddress(node.Hostname, node.MapleJuiceRPCPort)
+	} else if nodeType == SDFS_NODE {
+		addr = GetAddress(node.Hostname, node.SDFSRPCPort)
+	} else {
+		return nil, errors.New("Unknown node type")
+	}
+
 	return rpc.Dial("tcp", addr)
 }

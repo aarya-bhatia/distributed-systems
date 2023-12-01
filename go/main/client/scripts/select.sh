@@ -10,9 +10,9 @@ column=$1
 regex=$2
 
 echo "sending map job"
-cmd="go run . maple demo_sql_map 1 prefix traffic $column $regex"
+cmd="go run . 1 maple demo_sql_map 1 prefix traffic $column $regex"
 echo $cmd && $cmd
 
 echo "sending reduce job"
-cmd="go run . juice demo_sql_reduce 1 prefix output"
+cmd="go run . 1 juice demo_sql_reduce 1 prefix output"
 echo $cmd && $cmd

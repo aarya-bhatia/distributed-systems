@@ -38,7 +38,7 @@ func (client *SDFSClient) GetLeader() (*rpc.Client, error) {
 		return nil, err
 	}
 
-	leaderConn, err := common.Connect(reply, common.SDFSCluster)
+	leaderConn, err := common.Connect(reply, common.SDFS_NODE)
 	if err != nil {
 		return nil, err
 	}

@@ -18,7 +18,7 @@ type Heartbeat struct {
 
 func NewHeartbeat(leader int, clientID string, interval time.Duration) (*Heartbeat, error) {
 	h := new(Heartbeat)
-	conn, err := common.Connect(leader, common.SDFSCluster)
+	conn, err := common.Connect(leader, common.SDFS_NODE)
 	if err != nil {
 		return nil, err
 	}

@@ -46,7 +46,7 @@ type Server struct {
 func NewServer(info common.Node, dbDirectory string) *Server {
 	server := new(Server)
 	server.Hostname = info.Hostname
-	server.Port = info.RPCPort
+	server.Port = info.SDFSRPCPort
 	server.ID = info.ID
 	server.Directory = dbDirectory
 	server.Files = make(map[string]File)
@@ -83,15 +83,9 @@ func (server *Server) Start() {
 			continue
 		}
 
-		// log.Debug("Connected:", conn.RemoteAddr())
 		go rpc.ServeConn(conn)
 	}
 }
-
-// func GetAddressByID(id int) string {
-// 	node := common.GetNodeByID(id, common.SDFSCluster)
-// 	return common.GetAddress(node.Hostname, node.RPCPort)
-// }
 
 func (s *Server) GetFiles() []File {
 	s.Mutex.Lock()
@@ -104,14 +98,14 @@ func (s *Server) GetFiles() []File {
 }
 
 func GetNodeHash(node int) int {
-	return node % len(common.SDFSCluster)
+	return node % len(common.Cluster)
 }
 
 // node with smallest ID
 func (server *Server) GetLeaderNode() int {
 	server.Mutex.Lock()
 	defer server.Mutex.Unlock()
-	for _, node := range common.SDFSCluster {
+	for _, node := range common.Cluster {
 		if _, ok := server.Nodes[node.ID]; ok {
 			return node.ID
 		}
@@ -124,7 +118,7 @@ func (s *Server) GetMetadataReplicaNodes(count int) []int {
 	s.Mutex.Lock()
 	defer s.Mutex.Unlock()
 	res := []int{}
-	for _, node := range common.SDFSCluster {
+	for _, node := range common.Cluster {
 		if node.ID == s.ID {
 			continue
 		}
@@ -140,7 +134,7 @@ func (s *Server) GetMetadataReplicaNodes(count int) []int {
 
 // Get the `count` nearest nodes to the file hash
 func GetReplicaNodes(nodes []int, filename string, count int) []int {
-	fileHash := common.GetHash(filename, len(common.SDFSCluster))
+	fileHash := common.GetHash(filename, len(common.Cluster))
 	pq := make(priqueue.PriorityQueue, 0)
 	heap.Init(&pq)
 
@@ -174,21 +168,14 @@ func (s *Server) HandleNodeJoin(info *common.Node) {
 		return
 	}
 
-	if common.IsMapleJuiceNode(*info) {
-		log.Println("MapleJuice Node joined:", *info)
-		return
-	}
-
+	log.Debug("Node joined: ", *info)
 	defer s.broadcastMetadata()
 
 	s.Mutex.Lock()
 	defer s.Mutex.Unlock()
 
-	if common.IsSDFSNode(*info) {
-		log.Debug("SDFS Node joined: ", *info)
-		s.Nodes[info.ID] = *info
-		s.Metadata.AddNode(info.ID)
-	}
+	s.Nodes[info.ID] = *info
+	s.Metadata.AddNode(info.ID)
 }
 
 func (s *Server) HandleNodeLeave(info *common.Node) {
@@ -196,22 +183,17 @@ func (s *Server) HandleNodeLeave(info *common.Node) {
 		return
 	}
 
-	if common.IsMapleJuiceNode(*info) {
-		log.Println("MapleJuice Node left:", *info)
-		return
-	}
+	log.Println("Node left:", *info)
 
 	defer s.broadcastMetadata()
 
 	s.Mutex.Lock()
 	defer s.Mutex.Unlock()
 
-	if common.IsSDFSNode(*info) {
-		log.Println("SDFS Node left:", *info)
-		s.Metadata.RemoveNode(info.ID)
-		delete(s.Nodes, info.ID)
-	}
+	s.Metadata.RemoveNode(info.ID)
+	delete(s.Nodes, info.ID)
 }
+
 func (server *Server) PrintFiles() {
 	server.Mutex.Lock()
 	defer server.Mutex.Unlock()

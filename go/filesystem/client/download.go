@@ -42,7 +42,7 @@ func (client *SDFSClient) TryReadFile(writer Writer, filename string, offset int
 
 	defer writer.Close()
 
-	pool := common.NewConnectionPool(common.SDFSCluster)
+	pool := common.NewConnectionPool(common.SDFS_NODE)
 	defer pool.Close()
 
 	leader, err := client.GetLeader()

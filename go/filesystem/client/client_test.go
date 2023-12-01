@@ -14,10 +14,13 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func init() {
+	common.Setup()
+}
+
 func getClient() *SDFSClient {
-	common.SDFSCluster = common.SDFSLocalCluster
-	node := common.SDFSCluster[0]
-	addr := common.GetAddress(node.Hostname, node.RPCPort)
+	node := common.Cluster[0]
+	addr := common.GetAddress(node.Hostname, node.SDFSRPCPort)
 	return NewSDFSClient(addr)
 }
 

@@ -2,9 +2,7 @@ package maplejuice
 
 import (
 	"cs425/common"
-	"cs425/failuredetector"
 	"cs425/filesystem/client"
-	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -31,14 +29,8 @@ type Message struct {
 }
 
 type Service struct {
-	ID       int
-	Hostname string
-	Port     int
-	Nodes    []common.Node
-	Mutex    sync.Mutex
-
-	FD *failuredetector.Server
-
+	Info        common.Node
+	Mutex       sync.Mutex
 	NumExecutor int
 	Tasks       []Message
 	Data        map[string][]string
@@ -46,22 +38,16 @@ type Service struct {
 
 func NewService(info common.Node) *Service {
 	service := new(Service)
-	service.ID = info.ID
-	service.Nodes = make([]common.Node, 0)
-	service.Hostname = info.Hostname
-	service.Port = info.RPCPort
+	service.Info = info
 	service.Tasks = make([]Message, 0)
 	service.Data = make(map[string][]string)
-	service.FD = failuredetector.NewServer(info.Hostname, info.UDPPort, common.GOSSIP_PROTOCOL, service)
 
 	return service
 }
 
 func (service *Service) Start() {
 	log.Info("Starting MapleJuice worker")
-	go common.StartRPCServer(service.Hostname, service.Port, service)
-	time.Sleep(time.Second)
-	go service.FD.Start()
+	go common.StartRPCServer(service.Info.Hostname, service.Info.MapleJuiceRPCPort, service)
 }
 
 func merge(m1 map[string][]string, m2 map[string][]string) map[string][]string {
@@ -114,10 +100,7 @@ func (service *Service) free() {
 
 func (server *Service) StartMapJob(job *MapJob, reply *bool) error {
 	log.Println("StartMapJob()")
-	sdfsClient, err := server.getSDFSClient()
-	if err != nil {
-		return err
-	}
+	sdfsClient := server.getSDFSClient()
 	server.free()
 	server.allocate(job.NumMapper)
 	return server.downloadExecutable(sdfsClient, job.MapperExe)
@@ -125,10 +108,7 @@ func (server *Service) StartMapJob(job *MapJob, reply *bool) error {
 
 func (server *Service) StartReduceJob(job *ReduceJob, reply *bool) error {
 	log.Println("StartReduceJob()")
-	sdfsClient, err := server.getSDFSClient()
-	if err != nil {
-		return err
-	}
+	sdfsClient := server.getSDFSClient()
 	server.free()
 	server.allocate(job.NumReducer)
 	return server.downloadExecutable(sdfsClient, job.ReducerExe)
@@ -140,16 +120,12 @@ func (server *Service) FinishMapJob(job *MapJob, reply *bool) error {
 	go func() {
 		defer server.free()
 
-		sdfsClient, err := server.getSDFSClient()
-		if err != nil {
-			log.Fatal(err)
-		}
-
+		sdfsClient := server.getSDFSClient()
 		server.Mutex.Lock()
 		defer server.Mutex.Unlock()
 
 		for key, values := range server.Data {
-			outputFile := fmt.Sprintf("%s:%d:%s", job.OutputPrefix, server.ID, key)
+			outputFile := fmt.Sprintf("%s:%d:%s", job.OutputPrefix, server.Info.ID, key)
 			lines := strings.Join(values, "\n") + "\n"
 			err := sdfsClient.WriteFile(client.NewByteReader([]byte(lines)), outputFile, common.FILE_APPEND)
 			if err != nil {
@@ -159,7 +135,7 @@ func (server *Service) FinishMapJob(job *MapJob, reply *bool) error {
 
 		server.Data = make(map[string][]string)
 
-		conn, err := common.Connect(common.MAPLE_JUICE_LEADER_ID, common.MapleJuiceCluster)
+		conn, err := common.Connect(common.MAPLE_JUICE_LEADER_ID, common.MAPLEJUICE_NODE)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -167,7 +143,7 @@ func (server *Service) FinishMapJob(job *MapJob, reply *bool) error {
 		defer conn.Close()
 
 		reply := false
-		if err = conn.Call(RPC_WORKER_ACK, &server.ID, &reply); err != nil {
+		if err = conn.Call(RPC_WORKER_ACK, &server.Info.ID, &reply); err != nil {
 			log.Fatal(err)
 		}
 
@@ -182,10 +158,7 @@ func (server *Service) FinishReduceJob(job *ReduceJob, reply *bool) error {
 	go func() {
 		defer server.free()
 
-		sdfsClient, err := server.getSDFSClient()
-		if err != nil {
-			log.Fatal(err)
-		}
+		sdfsClient := server.getSDFSClient()
 
 		server.Mutex.Lock()
 		defer server.Mutex.Unlock()
@@ -199,8 +172,8 @@ func (server *Service) FinishReduceJob(job *ReduceJob, reply *bool) error {
 
 		if len(data) > 0 {
 			reader := client.NewByteReader([]byte(data))
-			outputFile := fmt.Sprintf("%s:%d", job.OutputFile, server.ID)
-			err = sdfsClient.WriteFile(reader, outputFile, common.FILE_APPEND)
+			outputFile := fmt.Sprintf("%s:%d", job.OutputFile, server.Info.ID)
+			err := sdfsClient.WriteFile(reader, outputFile, common.FILE_APPEND)
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -208,7 +181,7 @@ func (server *Service) FinishReduceJob(job *ReduceJob, reply *bool) error {
 
 		server.Data = make(map[string][]string)
 
-		conn, err := common.Connect(common.MAPLE_JUICE_LEADER_ID, common.MapleJuiceCluster)
+		conn, err := common.Connect(common.MAPLE_JUICE_LEADER_ID, common.MAPLEJUICE_NODE)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -216,7 +189,7 @@ func (server *Service) FinishReduceJob(job *ReduceJob, reply *bool) error {
 		defer conn.Close()
 
 		reply := false
-		if err = conn.Call(RPC_WORKER_ACK, &server.ID, &reply); err != nil {
+		if err = conn.Call(RPC_WORKER_ACK, &server.Info.ID, &reply); err != nil {
 			log.Fatal(err)
 		}
 
@@ -245,17 +218,13 @@ func (server *Service) downloadExecutable(sdfsClient *client.SDFSClient, filenam
 
 func (server *Service) StartExecutor() error {
 	// Connect to leader
-	conn, err := common.Connect(common.MAPLE_JUICE_LEADER_ID, common.MapleJuiceCluster)
+	conn, err := common.Connect(common.MAPLE_JUICE_LEADER_ID, common.MAPLEJUICE_NODE)
 	if err != nil {
 		return err
 	}
 	defer conn.Close()
 
-	sdfsClient, err := server.getSDFSClient()
-	if err != nil {
-		return err
-	}
-
+	sdfsClient := server.getSDFSClient()
 	log.Println("Executor started")
 
 	for {
@@ -287,44 +256,13 @@ func (server *Service) StartExecutor() error {
 		}
 
 		reply := false
-		if err = conn.Call(RPC_WORKER_ACK, &server.ID, &reply); err != nil {
+		if err = conn.Call(RPC_WORKER_ACK, &server.Info.ID, &reply); err != nil {
 			log.Fatal(err)
 		}
 
 	}
 }
 
-func (server *Service) HandleNodeJoin(node *common.Node) {
-	server.Mutex.Lock()
-	defer server.Mutex.Unlock()
-
-	if node != nil && common.IsSDFSNode(*node) {
-		server.Nodes = append(server.Nodes, *node)
-	}
-}
-
-func (server *Service) HandleNodeLeave(node *common.Node) {
-	server.Mutex.Lock()
-	defer server.Mutex.Unlock()
-
-	if node != nil && common.IsSDFSNode(*node) {
-		for i, sdfsNode := range server.Nodes {
-			if sdfsNode.ID == node.ID {
-				server.Nodes = common.RemoveIndex(server.Nodes, i)
-				return
-			}
-		}
-	}
-}
-
-func (service *Service) getSDFSClient() (*client.SDFSClient, error) {
-	service.Mutex.Lock()
-	defer service.Mutex.Unlock()
-
-	if len(service.Nodes) == 0 {
-		return nil, errors.New("No SDFS nodes are available")
-	}
-	serverNode := common.RandomChoice(service.Nodes)
-	sdfsClient := client.NewSDFSClient(common.GetAddress(serverNode.Hostname, serverNode.RPCPort))
-	return sdfsClient, nil
+func (service *Service) getSDFSClient() *client.SDFSClient {
+	return client.NewSDFSClient(common.GetAddress(service.Info.Hostname, service.Info.SDFSRPCPort))
 }

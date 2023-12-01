@@ -175,7 +175,7 @@ func (server *Server) DeleteFile(args *DeleteArgs, reply *bool) error {
 			if node == server.ID {
 				continue
 			}
-			client, err := common.Connect(node, common.SDFSCluster)
+			client, err := common.Connect(node, common.SDFS_NODE)
 			if err != nil {
 				log.Println(err)
 				continue
@@ -208,7 +208,7 @@ func (s *Server) finishWrite(args *UploadStatus, reply *bool) error {
 
 	// update metadata at replicas
 	for _, addr := range s.GetMetadataReplicaNodes(common.REPLICA_FACTOR - 1) {
-		client, err := common.Connect(addr, common.SDFSCluster)
+		client, err := common.Connect(addr, common.SDFS_NODE)
 		if err != nil {
 			log.Println(err)
 			return err
@@ -336,7 +336,7 @@ func (server *Server) InternalDeleteFile(file *File, reply *bool) error {
 func (s *Server) InternalReplicateBlocks(blocks *[]BlockMetadata, reply *[]BlockMetadata) error {
 	*reply = make([]BlockMetadata, 0)
 
-	pool := common.NewConnectionPool(common.SDFSCluster)
+	pool := common.NewConnectionPool(common.SDFS_NODE)
 	defer pool.Close()
 
 	for _, block := range *blocks {

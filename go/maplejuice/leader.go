@@ -2,7 +2,6 @@ package maplejuice
 
 import (
 	"cs425/common"
-	"cs425/failuredetector"
 	"cs425/filesystem/client"
 	"errors"
 	"net/rpc"
@@ -40,7 +39,6 @@ type Leader struct {
 	ID          int
 	Info        common.Node
 	Mutex       sync.Mutex
-	FD          *failuredetector.Server
 	Jobs        []Job
 	Nodes       []common.Node
 	Workers     map[int]*Worker
@@ -62,7 +60,6 @@ func NewLeader(info common.Node) *Leader {
 	leader.Jobs = make([]Job, 0)
 	leader.Nodes = make([]common.Node, 0)
 	leader.Workers = make(map[int]*Worker)
-	leader.FD = failuredetector.NewServer(info.Hostname, info.UDPPort, common.GOSSIP_PROTOCOL, leader)
 	leader.Tasks = make(chan Task)
 	leader.JobFailure = make(chan bool)
 	leader.NumTasks = 0
@@ -84,31 +81,8 @@ func (s *Leader) getAvailableWorkers() []int {
 }
 
 // Returns a SDFS client using any available SDFS server node if any
-func (s *Leader) getSDFSClient() (*client.SDFSClient, error) {
-	sdfsNodes := s.GetSDFSNodes()
-	if len(sdfsNodes) == 0 {
-		return nil, errors.New("No SDFS nodes available")
-	}
-
-	serverNode := common.RandomChoice(sdfsNodes)
-	sdfsClient := client.NewSDFSClient(common.GetAddress(serverNode.Hostname, serverNode.RPCPort))
-
-	return sdfsClient, nil
-}
-
-// Add a new node
-func (server *Leader) addNode(node common.Node) {
-	server.Mutex.Lock()
-	defer server.Mutex.Unlock()
-
-	// check if node exists
-	for _, cur := range server.Nodes {
-		if cur.ID == node.ID {
-			return
-		}
-	}
-
-	server.Nodes = append(server.Nodes, node)
+func (s *Leader) getSDFSClient() *client.SDFSClient {
+	return client.NewSDFSClient(common.GetAddress(s.Info.Hostname, s.Info.SDFSRPCPort))
 }
 
 // Remove the failed node from list
@@ -161,13 +135,19 @@ func (server *Leader) HandleNodeJoin(node *common.Node) {
 	if node == nil {
 		return
 	}
-	server.addNode(*node)
 
-	if common.IsSDFSNode(*node) {
-		log.Println("SDFS Node joined: ", *node)
-	} else if common.IsMapleJuiceNode(*node) {
-		log.Println("MapleJuice Node joined:", *node)
+	server.Mutex.Lock()
+	defer server.Mutex.Unlock()
+
+	// check if node exists
+	for _, cur := range server.Nodes {
+		if cur.ID == node.ID {
+			return
+		}
 	}
+
+	server.Nodes = append(server.Nodes, *node)
+	log.Println("Node joined: ", *node)
 }
 
 // Callback for node failure
@@ -175,90 +155,54 @@ func (server *Leader) HandleNodeLeave(node *common.Node) {
 	if node == nil {
 		return
 	}
+
 	server.removeNode(*node)
+	log.Println("Node leave: ", *node)
 
-	if common.IsSDFSNode(*node) {
-		log.Println("SDFS Node left:", *node)
-	} else if common.IsMapleJuiceNode(*node) {
-		log.Println("MapleJuice Node left:", *node)
-		server.removeWorker(node.ID)
+	server.removeWorker(node.ID)
 
-		server.Mutex.Lock()
-		if len(server.Jobs) == 0 {
-			server.Mutex.Unlock()
-			return
-		}
-		job := server.Jobs[0]
+	server.Mutex.Lock()
+	if len(server.Jobs) == 0 {
 		server.Mutex.Unlock()
-		server.cleanupWorker(job, node.ID)
+		return
 	}
+	job := server.Jobs[0]
+	server.Mutex.Unlock()
+	server.cleanupWorker(job, node.ID)
 }
 
 // Starts RPC server, failure detector and other routines
 func (server *Leader) Start() {
-	log.Infof("MapleJuice leader is running at %s:%d...\n", server.Info.Hostname, server.Info.RPCPort)
-
-	go common.StartRPCServer(server.Info.Hostname, server.Info.RPCPort, server)
+	log.Infof("MapleJuice leader is running at %s:%d...\n", server.Info.Hostname, server.Info.MapleJuiceRPCPort)
+	go common.StartRPCServer(server.Info.Hostname, server.Info.MapleJuiceRPCPort, server)
 
 	for i := 0; i < THREAD_POOL_SIZE; i++ {
 		go server.scheduler(i)
 	}
 
 	go server.runJobs()
-	go server.FD.Start()
 }
 
-// Returns the current sdfs nodes
-func (server *Leader) GetSDFSNodes() []common.Node {
+func (server *Leader) GetNodes() []common.Node {
 	server.Mutex.Lock()
 	defer server.Mutex.Unlock()
 
 	res := []common.Node{}
 	for _, node := range server.Nodes {
-		if common.IsSDFSNode(node) {
-			res = append(res, node)
-		}
-	}
-	return res
-}
-
-// Returns the current maplejuice nodes
-func (server *Leader) GetMapleJuiceNodes() []common.Node {
-	server.Mutex.Lock()
-	defer server.Mutex.Unlock()
-
-	res := []common.Node{}
-	for _, node := range server.Nodes {
-		if common.IsMapleJuiceNode(node) {
-			res = append(res, node)
-		}
+		res = append(res, node)
 	}
 	return res
 }
 
 // Add map job
 func (server *Leader) MapleRequest(args *MapJob, reply *bool) error {
-	sdfsNodes := server.GetSDFSNodes()
-	workers := server.GetMapleJuiceNodes()
-
-	if len(sdfsNodes) == 0 {
-		return errors.New("No SDFS nodes are available")
-	}
-
-	if len(workers) == 0 {
-		return errors.New("No MapleJuice workers are available")
-	}
+	log.Println("Received maple request")
 
 	if args.NumMapper <= 0 {
 		return errors.New("Number of workers must be greater than 0")
 	}
 
-	log.Println("sdfs nodes:", sdfsNodes)
-	log.Println("maplejuice workers:", workers)
-
-	serverNode := common.RandomChoice(sdfsNodes)
-	sdfsClient := client.NewSDFSClient(common.GetAddress(serverNode.Hostname, serverNode.RPCPort))
-
+	sdfsClient := server.getSDFSClient()
 	if _, err := sdfsClient.GetFile(args.MapperExe); err != nil {
 		return err
 	}
@@ -269,27 +213,13 @@ func (server *Leader) MapleRequest(args *MapJob, reply *bool) error {
 
 // Add reduce job
 func (server *Leader) JuiceRequest(args *ReduceJob, reply *bool) error {
-	sdfsNodes := server.GetSDFSNodes()
-	workers := server.GetMapleJuiceNodes()
-
-	if len(sdfsNodes) == 0 {
-		return errors.New("No SDFS nodes are available")
-	}
-
-	if len(workers) == 0 {
-		return errors.New("No MapleJuice workers are available")
-	}
+	log.Println("Received juice request")
 
 	if args.NumReducer <= 0 {
 		return errors.New("Number of workers must be greater than 0")
 	}
 
-	log.Println("sdfs nodes:", sdfsNodes)
-	log.Println("maplejuice workers:", workers)
-
-	serverNode := common.RandomChoice(sdfsNodes)
-	sdfsClient := client.NewSDFSClient(common.GetAddress(serverNode.Hostname, serverNode.RPCPort))
-
+	sdfsClient := server.getSDFSClient()
 	if _, err := sdfsClient.GetFile(args.ReducerExe); err != nil {
 		return err
 	}
@@ -367,7 +297,7 @@ func (s *Leader) schedule(task Task, pool *common.ConnectionPool) bool {
 
 // Sends available tasks to worker nodes
 func (s *Leader) scheduler(i int) {
-	pool := common.NewConnectionPool(common.MapleJuiceCluster)
+	pool := common.NewConnectionPool(common.MAPLEJUICE_NODE)
 	log.Println("Started scheduler routine...")
 	for {
 		select {
@@ -453,10 +383,7 @@ func (s *Leader) runJob(job Job) (*JobStat, error) {
 		return stat, err
 	}
 
-	sdfsClient, err := s.getSDFSClient()
-	if err != nil {
-		return stat, err
-	}
+	sdfsClient := s.getSDFSClient()
 
 	// initialises and allocate executors at each worker node
 	available := s.startJob(job)
@@ -499,7 +426,7 @@ func (s *Leader) runJob(job Job) (*JobStat, error) {
 // Returns the worker nodes available
 func (s *Leader) startJob(job Job) []int {
 	log.Println("startJob()")
-	nodes := s.GetMapleJuiceNodes()
+	nodes := s.GetNodes()
 
 	s.Mutex.Lock()
 	defer s.Mutex.Unlock()
@@ -510,7 +437,7 @@ func (s *Leader) startJob(job Job) []int {
 	reply := false
 
 	for _, node := range nodes {
-		conn, err := common.Connect(node.ID, common.MapleJuiceCluster)
+		conn, err := common.Connect(node.ID, common.MAPLEJUICE_NODE)
 		if err != nil {
 			log.Println(err)
 			continue
@@ -548,7 +475,7 @@ func (server *Leader) finishJob(job Job) error {
 	reply := false
 
 	for _, worker := range server.Workers {
-		conn, err := common.Connect(worker.ID, common.MapleJuiceCluster)
+		conn, err := common.Connect(worker.ID, common.MAPLEJUICE_NODE)
 		if err != nil {
 			log.Println(err)
 			continue
@@ -599,10 +526,7 @@ func (s *Leader) wait() bool {
 func (s *Leader) cleanup(job Job) error {
 	log.Println("cleanup()")
 
-	sdfsClient, err := s.getSDFSClient()
-	if err != nil {
-		return err
-	}
+	sdfsClient := s.getSDFSClient()
 
 	switch job.(type) {
 	case *MapJob:
@@ -628,10 +552,7 @@ func (s *Leader) cleanupWorker(job Job, worker int) error {
 	var list *[]string
 	var err error
 
-	sdfsClient, err := s.getSDFSClient()
-	if err != nil {
-		return err
-	}
+	sdfsClient := s.getSDFSClient()
 
 	switch job.(type) {
 	case *MapJob:
