@@ -425,7 +425,7 @@ func (server *Leader) runJobs() {
 		}
 
 		server.Mutex.Unlock()
-		time.Sleep(time.Second)
+		time.Sleep(time.Millisecond * 100)
 	}
 }
 
