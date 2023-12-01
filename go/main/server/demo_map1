@@ -18,7 +18,5 @@ if __name__ == "__main__":
         tokens = line.split(",")
         detection = tokens[9].strip()
         interconn = tokens[10].strip()
-        if detection == "" or interconn == "":
-            continue
         if interconn.lower() == param.lower():
             print(f"{detection}:1")

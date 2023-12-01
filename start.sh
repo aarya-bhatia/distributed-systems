@@ -1,5 +1,5 @@
 #!/bin/bash
-GIT_BRANCH=main
+GIT_BRANCH=mp4demo
 SHELL_PORT=3000
 FDPORT=4000
 
@@ -22,7 +22,7 @@ fi
 
 # restart sdfs and maplejuice server
 if fuser ${FDPORT}/udp; then
-	kill -9 \$(lsof -t -i:${FDPORT})
+	kill -9 $(lsof -t -i:${FDPORT})
 	echo "node killed"
 fi
 
