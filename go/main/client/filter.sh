@@ -8,6 +8,6 @@ fi
 filename=$1
 regex=$2
 
-go run . 1 maple filter_mapper.py 1 prefix $filename $regex
+go run . 1 maple filter_mapper.py 4 prefix $filename $regex
 go run . 1 juice filter_reducer.py 1 prefix output
 
