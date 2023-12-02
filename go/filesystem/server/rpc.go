@@ -335,6 +335,7 @@ func (server *Server) InternalDeleteFile(file *File, reply *bool) error {
 // To replicate given blocks at current node
 func (s *Server) InternalReplicateBlocks(blocks *[]BlockMetadata, reply *[]BlockMetadata) error {
 	*reply = make([]BlockMetadata, 0)
+	aliveNodes := s.GetAliveNodes()
 
 	pool := common.NewConnectionPool(common.SDFS_NODE)
 	defer pool.Close()
@@ -346,19 +347,49 @@ func (s *Server) InternalReplicateBlocks(blocks *[]BlockMetadata, reply *[]Block
 			continue
 		}
 
-		// download block from replica
+		if len(block.Replicas) == 0 {
+			log.Warn("No replicas alive for ", block.Block)
+			continue
+		}
 
-		source := common.RandomChoice[int](block.Replicas)
-		conn, err := pool.GetConnection(source)
+		shuffled := common.Shuffle(block.Replicas)
+
+		if s.tryReplicate(filename, block, shuffled, pool) {
+			// update metadata
+			aliveReplicas := common.Intersect(block.Replicas, aliveNodes)
+
+			s.Mutex.Lock()
+			block.Replicas = append(aliveReplicas, s.ID)
+			s.Metadata.UpdateBlockMetadata(block)
+			s.Mutex.Unlock()
+
+			*reply = append(*reply, block)
+			log.Println("block replicated:", block)
+
+		} else {
+			log.Warn("failed to replicate block:", block)
+		}
+	}
+
+	return nil
+}
+
+func (s *Server) tryReplicate(filename string, block BlockMetadata, replicas []int, pool *common.ConnectionPool) bool {
+	for _, replica := range replicas {
+		conn, err := pool.GetConnection(replica)
 		if err != nil {
 			log.Println(err)
+			pool.RemoveConnection(replica)
 			continue
 		}
 
 		blockReply := Block{}
 		args := DownloadBlockArgs{Block: block.Block, Size: block.Size, Offset: 0}
+
+		// read block from replica
 		if err = conn.Call(RPC_READ_BLOCK, args, &blockReply); err != nil {
 			log.Println(err)
+			pool.RemoveConnection(replica)
 			continue
 		}
 
@@ -368,17 +399,10 @@ func (s *Server) InternalReplicateBlocks(blocks *[]BlockMetadata, reply *[]Block
 			continue
 		}
 
-		s.Mutex.Lock()
-		block.Replicas = append(block.Replicas, s.ID)
-		s.Metadata.UpdateBlockMetadata(block)
-		s.Mutex.Unlock()
-
-		*reply = append(*reply, block)
-
-		log.Println("block replicated:", block)
+		return true
 	}
 
-	return nil
+	return false
 }
 
 func (s *Server) WriteBlock(args *WriteBlockArgs, reply *bool) error {

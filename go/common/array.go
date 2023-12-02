@@ -41,3 +41,26 @@ func HasElement[T comparable](array []T, target T) bool {
 	}
 	return false
 }
+
+// Remove elements in target from array
+func Subtract[T comparable](array []T, targets []T) []T {
+	res := []T{}
+	set := MakeSet(targets)
+	for _, e := range array {
+		if _, ok := set[e]; !ok {
+			res = append(res, e)
+		}
+	}
+	return res
+}
+
+func Intersect[T comparable](a []T, b []T) []T {
+	res := []T{}
+	set := MakeSet(b)
+	for _, e := range a {
+		if _, ok := set[e]; ok {
+			res = append(res, e)
+		}
+	}
+	return res
+}

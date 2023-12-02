@@ -147,7 +147,7 @@ func (server *Leader) HandleNodeJoin(node *common.Node) {
 	}
 
 	server.Nodes = append(server.Nodes, *node)
-	log.Println("Node joined: ", *node)
+	// log.Println("Node joined: ", *node)
 }
 
 // Callback for node failure
@@ -157,7 +157,7 @@ func (server *Leader) HandleNodeLeave(node *common.Node) {
 	}
 
 	server.removeNode(*node)
-	log.Println("Node leave: ", *node)
+	// log.Println("Node leave: ", *node)
 
 	server.removeWorker(node.ID)
 

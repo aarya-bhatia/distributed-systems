@@ -10,35 +10,43 @@ import (
 func (s *Server) startRebalanceRoutine() {
 	log.Debug("Starting rebalance routine")
 	for {
-		aliveNodes := s.GetAliveNodes()
-		replicaTasks := make(map[int][]BlockMetadata)
-
-		for _, file := range s.GetFiles() {
-			metadata := FileMetadata{}
-			s.GetFileMetadata(&file.Filename, &metadata)
-			// TODO: Delete extra replicas
-
-			for _, block := range metadata.Blocks {
-				current := common.MakeSet(block.Replicas)
-				// get the replicas missing this block
-				for _, replica := range GetReplicaNodes(aliveNodes, block.Block, common.REPLICA_FACTOR) {
-					if _, ok := current[replica]; !ok {
-						replicaTasks[replica] = append(replicaTasks[replica], block)
-					}
-				}
-			}
-		}
-
-		delete(replicaTasks, s.ID)
-
-		for replica, tasks := range replicaTasks {
-			log.Infof("Sending %d replication tasks to node %d:%v", len(tasks), replica, tasks)
-			s.sendRebalanceRequests(replica, tasks)
-		}
-
+		s.rebalance()
 		time.Sleep(common.REBALANCE_INTERVAL)
 	}
 }
+
+func (s *Server) rebalance() {
+	if s.ID != s.GetLeaderNode() {
+		return
+	}
+
+	aliveNodes := s.GetAliveNodes()
+	replicaTasks := make(map[int][]BlockMetadata)
+
+	for _, file := range s.GetFiles() {
+		metadata := FileMetadata{}
+		s.GetFileMetadata(&file.Filename, &metadata)
+		// TODO: Delete extra replicas
+
+		for _, block := range metadata.Blocks {
+			expectedReplicas := GetReplicaNodes(aliveNodes, block.Block, common.REPLICA_FACTOR)
+			// log.Printf("Block %s: current replicas: %v, expected replicas: %v", block.Block, block.Replicas, expectedReplicas)
+			// get the replicas missing this block
+			pendingReplicas := common.Subtract(expectedReplicas, block.Replicas)
+			for _, replica := range pendingReplicas {
+				replicaTasks[replica] = append(replicaTasks[replica], block)
+			}
+		}
+	}
+
+	// delete(replicaTasks, s.ID)
+
+	for replica, tasks := range replicaTasks {
+		log.Infof("To replicate %d blocks at node %d", len(tasks), replica)
+		s.sendRebalanceRequests(replica, tasks)
+	}
+}
+
 func (s *Server) sendRebalanceRequests(replica int, blocks []BlockMetadata) {
 	conn, err := common.Connect(replica, common.SDFS_NODE)
 	if err != nil {
@@ -53,10 +61,14 @@ func (s *Server) sendRebalanceRequests(replica int, blocks []BlockMetadata) {
 		return
 	}
 
+	aliveNodes := s.GetAliveNodes()
+
 	s.Mutex.Lock()
 	defer s.Mutex.Unlock()
 
 	for _, block := range reply {
+		block.Replicas = common.Intersect(block.Replicas, aliveNodes)
+		log.Printf("New replicas for block %s: %v", block.Block, block.Replicas)
 		s.Metadata.UpdateBlockMetadata(block)
 	}
 }
@@ -70,17 +82,33 @@ func (s *Server) startMetadataRebalanceRoutine() {
 }
 
 func (s *Server) broadcastMetadata() {
-	for _, replica := range s.GetMetadataReplicaNodes(common.REPLICA_FACTOR - 1) {
-		client, err := common.Connect(replica, common.SDFS_NODE)
-		if err != nil {
-			continue
-		}
-		defer client.Close()
+	leader := s.GetLeaderNode()
+	if s.ID != leader {
+		s.sendMetadata(leader)
+		return
+	}
 
-		for _, file := range s.GetFiles() {
-			metadata := FileMetadata{}
-			s.GetFileMetadata(&file.Filename, &metadata)
-			client.Call(RPC_INTERNAL_SET_FILE_METADATA, &metadata, new(bool))
+	for _, replica := range s.GetMetadataReplicaNodes(common.REPLICA_FACTOR - 1) {
+		s.sendMetadata(replica)
+	}
+}
+
+func (s *Server) sendMetadata(node int) {
+	client, err := common.Connect(node, common.SDFS_NODE)
+	if err != nil {
+		return
+	}
+
+	defer client.Close()
+
+	for _, file := range s.GetFiles() {
+		metadata := FileMetadata{}
+		s.GetFileMetadata(&file.Filename, &metadata)
+		err = client.Call(RPC_INTERNAL_SET_FILE_METADATA, &metadata, new(bool))
+		if err != nil {
+			return
 		}
 	}
+
+	// log.Debug("sent metadata to ", node)
 }

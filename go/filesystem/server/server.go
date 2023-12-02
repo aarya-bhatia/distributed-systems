@@ -168,7 +168,7 @@ func (s *Server) HandleNodeJoin(info *common.Node) {
 		return
 	}
 
-	log.Debug("Node joined: ", *info)
+	// log.Debug("Node joined: ", *info)
 	defer s.broadcastMetadata()
 
 	s.Mutex.Lock()
@@ -183,8 +183,7 @@ func (s *Server) HandleNodeLeave(info *common.Node) {
 		return
 	}
 
-	log.Println("Node left:", *info)
-
+	// log.Println("Node left:", *info)
 	defer s.broadcastMetadata()
 
 	s.Mutex.Lock()

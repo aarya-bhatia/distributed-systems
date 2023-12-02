@@ -15,7 +15,7 @@ const (
 
 	POLL_INTERVAL               = 10 * time.Millisecond
 	REBALANCE_INTERVAL          = 5 * time.Second
-	METADATA_REBALANCE_INTERVAL = 20 * time.Second
+	METADATA_REBALANCE_INTERVAL = 5 * time.Second
 
 	CLIENT_HEARTBEAT_INTERVAL = time.Second
 	CLIENT_TIMEOUT            = 5 * time.Second

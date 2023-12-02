@@ -202,11 +202,7 @@ func (server *Server) AddHost(Hostname string, Port int, ID string) (*Host, erro
 	}
 
 	server.Members[ID] = NewHost(Hostname, Port, ID, addr)
-	log.Warnf("Added new host: %s\n", server.Members[ID].Signature)
-
-	server.MemberLock.Unlock()
-	server.PrintMembershipTable()
-	server.MemberLock.Lock()
+	log.Warn("NODE JOIN:", server.Members[ID].Signature)
 
 	server.notifyJoin(common.GetNodeByAddress(Hostname, Port))
 
@@ -479,16 +475,16 @@ func (s *Server) HandleTimeout(e timer.TimerEvent) {
 
 	if host.State == common.NODE_ALIVE {
 		if s.Protocol == common.GOSSIP_PROTOCOL {
-			log.Warnf("FAILURE DETECTED: (%d) Node %s is considered failed\n", timestamp, host.Signature)
+			log.Warnf("FAILURE DETECTED: (%d) %s\n", timestamp, host.Signature)
 			host.State = common.NODE_FAILED
 			go s.notifyLeave(common.GetNodeByAddress(host.Hostname, host.Port))
 		} else {
-			log.Warnf("FAILURE SUSPECTED: (%d) Node %s is suspected of failure\n", timestamp, host.Signature)
+			log.Warnf("FAILURE SUSPECTED: (%d) %s\n", timestamp, host.Signature)
 			host.State = common.NODE_SUSPECTED
 		}
 		s.RestartTimer(e.ID, host.State)
 	} else if host.State == common.NODE_SUSPECTED {
-		log.Warnf("FAILURE DETECTED: (%d) Node %s is considered failed\n", timestamp, host.Signature)
+		log.Warnf("FAILURE DETECTED: (%d) %s\n", timestamp, host.Signature)
 		host.State = common.NODE_FAILED
 		s.RestartTimer(e.ID, host.State)
 		go s.notifyLeave(common.GetNodeByAddress(host.Hostname, host.Port))
@@ -496,10 +492,6 @@ func (s *Server) HandleTimeout(e timer.TimerEvent) {
 		log.Warn("Deleting node from membership list...", host.Signature)
 		delete(s.Members, e.ID)
 	}
-
-	s.MemberLock.Unlock()
-	s.PrintMembershipTable()
-	s.MemberLock.Lock()
 }
 
 // This routine gossips the membership list every GossipPeriod.
