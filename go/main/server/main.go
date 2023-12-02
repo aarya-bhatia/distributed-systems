@@ -188,6 +188,25 @@ func stdinListener(info common.Node, fs *server.Server, fd *failuredetector.Serv
 			}
 			mjLeader.Mutex.Unlock()
 
+		case "save":
+			f, err := os.OpenFile("job_stat.csv", os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0666)
+			if err != nil {
+				log.Println(err)
+				continue
+			}
+			mjLeader.Mutex.Lock()
+			for _, s := range mjLeader.JobStats {
+				line := fmt.Sprintf("%s,%f,%s\n", s.Job.Name(), float64(s.EndTime-s.StartTime)*1e-9, strconv.FormatBool(s.Status))
+				f.Write([]byte(line))
+			}
+			mjLeader.Mutex.Unlock()
+			f.Close()
+
+		case "clear":
+			mjLeader.Mutex.Lock()
+			mjLeader.JobStats = make([]*maplejuice.JobStat, 0)
+			mjLeader.Mutex.Unlock()
+
 		case "info":
 			fmt.Println("----------------------------------------------------------")
 			fmt.Printf("Node: %v\n", info)
@@ -210,6 +229,8 @@ func stdinListener(info common.Node, fs *server.Server, fd *failuredetector.Serv
 			// fmt.Println("queue: Print file queues status")
 			fmt.Println("jobs: list maplejuice jobs")
 			fmt.Println("stat: list maplejuice job stats")
+			fmt.Println("clear: clear maplejuice job stats")
+			fmt.Println("save: save maplejuice job stats to file")
 		}
 	}
 }
