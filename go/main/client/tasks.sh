@@ -4,6 +4,10 @@ go run . 1 rmdir /
 go run . 1 put data/sample sample
 go run . 1 put data/traffic.csv traffic
 
+for file in $(ls data/customers*.csv data/orders*.csv); do
+	go run . 1 put $file $file
+done
+
 # go run . 1 put data/vm1 vm1
 # go run . 1 put data/test1 test1
 # go run . 1 put data/test2 test2

@@ -3,13 +3,20 @@ import os
 import random
 from datetime import datetime, timedelta
 import humanize
+import sys
 
-num_customers = 1000
-num_orders = 1000
-num_products = 2e3
+if len(sys.argv) < 2:
+    print(f"Usage: {sys.argv[0]} num_rows")
+    exit(1)
 
-customers_file = "../data/customers.csv"
-orders_file = "../data/orders.csv"
+n = int(sys.argv[1])
+
+num_customers = n
+num_orders = n
+num_products = 1000
+
+customers_file = f"../data/customers_{n}.csv"
+orders_file = f"../data/orders_{n}.csv"
 
 
 def get_random_ip():
