@@ -364,6 +364,12 @@ func (s *Server) processRow(tokens []string) {
 		return
 	}
 
+	// failure detected through peer
+	if state == common.NODE_FAILED {
+		log.Warn("NODE FAILED: ", host, ":", port)
+		go s.notifyLeave(common.GetNodeByAddress(host, port))
+	}
+
 	// higher count overrides alive or suspected state
 	if found.Counter < count {
 		found.Counter = count
@@ -473,21 +479,21 @@ func (s *Server) HandleTimeout(e timer.TimerEvent) {
 
 	if host.State == common.NODE_ALIVE {
 		if s.Protocol == common.GOSSIP_PROTOCOL {
-			log.Warnf("FAILURE DETECTED: %s\n", host.Signature)
+			log.Warn("FAILURE DETECTED:", host.Signature)
 			host.State = common.NODE_FAILED
 			go s.notifyLeave(common.GetNodeByAddress(host.Hostname, host.Port))
 		} else {
-			log.Warnf("FAILURE SUSPECTED: %s\n", host.Signature)
+			log.Warn("FAILURE SUSPECTED:", host.Signature)
 			host.State = common.NODE_SUSPECTED
 		}
 		s.RestartTimer(e.ID, host.State)
 	} else if host.State == common.NODE_SUSPECTED {
-		log.Warnf("FAILURE DETECTED: %s\n", host.Signature)
+		log.Warn("FAILURE DETECTED:", host.Signature)
 		host.State = common.NODE_FAILED
 		s.RestartTimer(e.ID, host.State)
 		go s.notifyLeave(common.GetNodeByAddress(host.Hostname, host.Port))
 	} else if host.State == common.NODE_FAILED {
-		go s.notifyLeave(common.GetNodeByAddress(host.Hostname, host.Port))
+		// go s.notifyLeave(common.GetNodeByAddress(host.Hostname, host.Port))
 		log.Warn("Deleting node from membership list...", host.Signature)
 		delete(s.Members, e.ID)
 	}
