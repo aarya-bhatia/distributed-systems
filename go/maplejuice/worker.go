@@ -73,6 +73,9 @@ func (service *Service) allocate(size int) {
 func (service *Service) AddTask(task Task) {
 	service.Mutex.Lock()
 	defer service.Mutex.Unlock()
+	if service.NumExecutor == 0 {
+		log.Fatal("No executors are available for this task:", task)
+	}
 	service.Tasks = append(service.Tasks, Message{Task: task, Finish: false})
 }
 

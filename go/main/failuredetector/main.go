@@ -1,10 +1,12 @@
 package main
 
 import (
+	"bufio"
 	"cs425/common"
 	"cs425/failuredetector"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/sirupsen/logrus"
 )
@@ -27,5 +29,22 @@ func main() {
 		logrus.Fatal(err)
 	}
 
-	failuredetector.NewServer(hostname, port, common.GOSSIP_PROTOCOL, nil).Start()
+	fd := failuredetector.NewServer(hostname, port, common.GOSSIP_PROTOCOL, nil)
+	go fd.Start()
+	go stdinListener(fd)
+
+	// TODO Add command to force kill nodes
+
+	<-make(chan bool) // blocks
+}
+
+func stdinListener(fd *failuredetector.Server) {
+	scanner := bufio.NewScanner(os.Stdin)
+	for scanner.Scan() {
+		tokens := strings.Fields(scanner.Text())
+		switch tokens[0] {
+		case "ls":
+			fd.PrintMembershipTable()
+		}
+	}
 }

@@ -4,8 +4,8 @@ import random
 from datetime import datetime, timedelta
 import humanize
 
-num_customers = 5e4
-num_orders = 1e5
+num_customers = 1000
+num_orders = 1000
 num_products = 2e3
 
 customers_file = "../data/customers.csv"

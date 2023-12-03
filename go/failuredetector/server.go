@@ -471,24 +471,23 @@ func (s *Server) HandleTimeout(e timer.TimerEvent) {
 		return
 	}
 
-	timestamp := time.Now().UnixMilli()
-
 	if host.State == common.NODE_ALIVE {
 		if s.Protocol == common.GOSSIP_PROTOCOL {
-			log.Warnf("FAILURE DETECTED: (%d) %s\n", timestamp, host.Signature)
+			log.Warnf("FAILURE DETECTED: %s\n", host.Signature)
 			host.State = common.NODE_FAILED
 			go s.notifyLeave(common.GetNodeByAddress(host.Hostname, host.Port))
 		} else {
-			log.Warnf("FAILURE SUSPECTED: (%d) %s\n", timestamp, host.Signature)
+			log.Warnf("FAILURE SUSPECTED: %s\n", host.Signature)
 			host.State = common.NODE_SUSPECTED
 		}
 		s.RestartTimer(e.ID, host.State)
 	} else if host.State == common.NODE_SUSPECTED {
-		log.Warnf("FAILURE DETECTED: (%d) %s\n", timestamp, host.Signature)
+		log.Warnf("FAILURE DETECTED: %s\n", host.Signature)
 		host.State = common.NODE_FAILED
 		s.RestartTimer(e.ID, host.State)
 		go s.notifyLeave(common.GetNodeByAddress(host.Hostname, host.Port))
 	} else if host.State == common.NODE_FAILED {
+		go s.notifyLeave(common.GetNodeByAddress(host.Hostname, host.Port))
 		log.Warn("Deleting node from membership list...", host.Signature)
 		delete(s.Members, e.ID)
 	}

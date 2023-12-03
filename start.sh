@@ -26,7 +26,7 @@ if fuser ${FDPORT}/udp; then
 	echo "node killed"
 fi
 
-cd $HOME/cs425/go/main/server
-nohup go run . >$HOME/log 2>&1 &
+# cd $HOME/cs425/go/main/server
+# nohup go run . >$HOME/log 2>&1 &
 echo node $(hostname) is online
 

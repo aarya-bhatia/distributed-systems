@@ -344,6 +344,11 @@ func (server *Leader) runJobs() {
 				log.Warn("job started:", job.Name())
 				stat, err := server.runJob(job)
 
+				server.Mutex.Lock()
+				server.NumTasks = 0
+				server.Workers = make(map[int]*Worker)
+				server.Mutex.Unlock()
+
 				if err != nil {
 					log.Warn("job failed:", err)
 					stat.Status = false

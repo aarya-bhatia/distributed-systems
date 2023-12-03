@@ -90,6 +90,9 @@ func stdinListener(info common.Node, fs *server.Server, fd *failuredetector.Serv
 
 		switch strings.ToLower(command) {
 
+		case "ls":
+			fallthrough
+
 		case "list_mem":
 			fd.PrintMembershipTable()
 

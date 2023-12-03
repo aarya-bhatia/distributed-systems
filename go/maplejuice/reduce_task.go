@@ -5,6 +5,7 @@ import (
 	"cs425/filesystem/client"
 	"fmt"
 	"strings"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -73,12 +74,18 @@ func (task *ReduceTask) Run(sdfsClient *client.SDFSClient) (map[string][]string,
 		lines += writer.String() + "\n"
 	}
 
+	startTime := time.Now().UnixNano()
+
 	args := append([]string{task.Key}, task.Job.Args...)
 	output, err := ExecuteAndGetOutput("./"+task.Job.ReducerExe, args, lines)
 	if err != nil {
 		log.Warn("Error running reducer executable")
 		return nil, err
 	}
+
+	endTime := time.Now().UnixNano()
+	elapsedSec := float64(endTime-startTime) * 1e-9
+	log.Println("Executable ", task.Job.ReducerExe, " took ", elapsedSec, "sec")
 
 	res := ParseKeyValuePairs(output)
 	return res, nil

@@ -4,11 +4,6 @@ import sys
 # System args:
 # arg 1: current filename
 
-# User args:
-# arg 2: column
-# arg 4: file2
-# arg 5: column2
-
 # Goal:
 # To join file1.column1 with file2.column2
 

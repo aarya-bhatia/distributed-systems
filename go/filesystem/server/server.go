@@ -183,7 +183,6 @@ func (s *Server) HandleNodeLeave(info *common.Node) {
 		return
 	}
 
-	// log.Println("Node left:", *info)
 	defer s.broadcastMetadata()
 
 	s.Mutex.Lock()
