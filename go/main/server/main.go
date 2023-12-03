@@ -75,7 +75,7 @@ func main() {
 
 	go sdfs.Start()
 
-	fd := failuredetector.NewServer(info.Hostname, info.UDPPort, common.GOSSIP_PROTOCOL, notifiers)
+	fd := failuredetector.NewServer(info.Hostname, info.UDPPort, common.GOSPSIP_SUSPICION_PROTOCOL, notifiers)
 	go fd.Start()
 
 	go stdinListener(info, sdfs, fd, mjLeader, mjWorker)

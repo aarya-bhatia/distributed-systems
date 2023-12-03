@@ -1,5 +1,5 @@
 #!/bin/bash
-GIT_BRANCH=mp4demo
+GIT_BRANCH=main
 SHELL_PORT=3000
 FDPORT=4000
 

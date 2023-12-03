@@ -29,7 +29,7 @@ func main() {
 		logrus.Fatal(err)
 	}
 
-	fd := failuredetector.NewServer(hostname, port, common.GOSSIP_PROTOCOL, nil)
+	fd := failuredetector.NewServer(hostname, port, common.GOSPSIP_SUSPICION_PROTOCOL, nil)
 	go fd.Start()
 	go stdinListener(fd)
 
