@@ -1,4 +1,0 @@
-<maple,n:4,exe:join_mapper.py,input:data,output:prefix>,0.673348,true
-<juice,n:4,exe:join_reducer.py,input:prefix,output:output>,0.435838,true
-<maple,n:4,exe:join_mapper.py,input:data,output:prefix>,0.266340,true
-<juice,n:4,exe:join_reducer.py,input:prefix,output:output>,0.226815,true

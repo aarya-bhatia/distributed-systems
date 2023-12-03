@@ -4,6 +4,8 @@ import (
 	"cs425/common"
 	"cs425/filesystem/client"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -204,6 +206,16 @@ func (server *Service) FinishReduceJob(job *ReduceJob, reply *bool) error {
 func (server *Service) downloadExecutable(sdfsClient *client.SDFSClient, filename string) error {
 	server.Mutex.Lock()
 	defer server.Mutex.Unlock()
+
+	// Get the directory of the file
+	dir := filepath.Dir(filename)
+
+	// Create all directories in the path
+	err := os.MkdirAll(dir, os.ModePerm)
+	if err != nil {
+		log.Warn("Error creating directories:", err)
+		return err
+	}
 
 	fileWriter, err := client.NewFileWriterWithOpts(filename, client.DEFAULT_FILE_FLAGS, 0777)
 	if err != nil {
