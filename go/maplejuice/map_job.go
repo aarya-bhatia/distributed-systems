@@ -23,7 +23,7 @@ func (job *MapJob) GetID() int64 {
 }
 
 func (job *MapJob) Name() string {
-	return fmt.Sprintf("<%d,maple,%s>", job.ID, job.MapperExe)
+	return fmt.Sprintf("<maple,n:%d,exe:%s,input:%s,output:%s>", job.NumMapper, job.MapperExe, job.InputDir, job.OutputPrefix)
 }
 
 func (job *MapJob) GetNumWorkers() int {

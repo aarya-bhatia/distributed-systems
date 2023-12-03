@@ -1,12 +1,4 @@
-<1701621468546373316,maple,join_mapper.py>,3.354333,true
-<1701621481325881284,maple,join_reducer.py>,2.588789,true
-<1701622051614588224,maple,join_mapper.py>,4.480394,true
-<1701622052497701949,maple,join_reducer.py>,3.038061,true
-<1701622055213324217,maple,join_mapper.py>,6.997794,true
-<1701622056014635145,maple,join_reducer.py>,5.776583,true
-<1701622059950183076,maple,join_mapper.py>,9.782539,true
-<1701622060925920946,maple,join_reducer.py>,6.851976,true
-<1701622063959241793,maple,join_mapper.py>,13.407274,true
-<1701622064939990851,maple,join_reducer.py>,10.144170,true
-<1701622069441563618,maple,join_mapper.py>,18.419320,true
-<1701622071060957066,maple,join_reducer.py>,12.662213,true
+<maple,n:4,exe:join_mapper.py,input:data,output:prefix>,0.673348,true
+<juice,n:4,exe:join_reducer.py,input:prefix,output:output>,0.435838,true
+<maple,n:4,exe:join_mapper.py,input:data,output:prefix>,0.266340,true
+<juice,n:4,exe:join_reducer.py,input:prefix,output:output>,0.226815,true

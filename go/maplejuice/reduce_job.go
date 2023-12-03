@@ -24,7 +24,7 @@ func (job *ReduceJob) GetID() int64 {
 }
 
 func (job *ReduceJob) Name() string {
-	return fmt.Sprintf("<%d,maple,%s>", job.ID, job.ReducerExe)
+	return fmt.Sprintf("<juice,n:%d,exe:%s,input:%s,output:%s>", job.NumReducer, job.ReducerExe, job.InputPrefix, job.OutputFile)
 }
 
 func (job *ReduceJob) GetNumWorkers() int {

@@ -181,11 +181,10 @@ func stdinListener(info common.Node, fs *server.Server, fd *failuredetector.Serv
 
 			mjLeader.Mutex.Lock()
 			for _, s := range mjLeader.JobStats {
-				fmt.Printf("%s: duration=%fs status=%s num_workers=%d num_tasks=%d\n",
+				fmt.Printf("%s,duration=%fs,status=%s,num_tasks=%d\n",
 					s.Job.Name(),
 					float64(s.EndTime-s.StartTime)*1e-9,
 					strconv.FormatBool(s.Status),
-					s.NumWorkers,
 					s.NumTasks,
 				)
 			}
