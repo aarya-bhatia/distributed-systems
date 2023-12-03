@@ -9,8 +9,7 @@ os.system(f"go run . 1 put {exe_dir}/join_reducer.py join_reducer.py")
 map_exe = "join_mapper.py"
 reduce_exe = "join_reducer.py"
 
-# for i in [20, 100, 200, 500]:
-for i in [500]:
+for i in [100, 200, 500]:
     file1 = f"data/customers_{i}.csv"
     file2 = f"data/orders_{i}.csv"
 
