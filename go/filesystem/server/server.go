@@ -163,7 +163,7 @@ func (s *Server) GetAliveNodes() []int {
 	return res
 }
 
-func (s *Server) HandleNodeJoin(info *common.Node) {
+func (s *Server) HandleNodeJoin(info *common.Node, memberID string) {
 	if info == nil {
 		return
 	}
@@ -178,7 +178,7 @@ func (s *Server) HandleNodeJoin(info *common.Node) {
 	s.Metadata.AddNode(info.ID)
 }
 
-func (s *Server) HandleNodeLeave(info *common.Node) {
+func (s *Server) HandleNodeLeave(info *common.Node, memberID string) {
 	if info == nil {
 		return
 	}

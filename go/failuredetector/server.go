@@ -159,7 +159,7 @@ func NewServer(Hostname string, Port int, Protocol int, Notifiers []common.Notif
 	return server
 }
 
-func (server *Server) notifyJoin(node *common.Node) {
+func (server *Server) notifyJoin(node *common.Node, ID string) {
 	if node == nil || server.Notifiers == nil {
 		return
 	}
@@ -169,11 +169,11 @@ func (server *Server) notifyJoin(node *common.Node) {
 	}
 
 	for _, notifier := range server.Notifiers {
-		go notifier.HandleNodeJoin(common.GetNodeByAddress(node.Hostname, node.UDPPort))
+		go notifier.HandleNodeJoin(common.GetNodeByAddress(node.Hostname, node.UDPPort), ID)
 	}
 }
 
-func (server *Server) notifyLeave(node *common.Node) {
+func (server *Server) notifyLeave(node *common.Node, ID string) {
 	if node == nil || server.Notifiers == nil {
 		return
 	}
@@ -183,7 +183,7 @@ func (server *Server) notifyLeave(node *common.Node) {
 	}
 
 	for _, notifier := range server.Notifiers {
-		go notifier.HandleNodeLeave(common.GetNodeByAddress(node.Hostname, node.UDPPort))
+		go notifier.HandleNodeLeave(common.GetNodeByAddress(node.Hostname, node.UDPPort), ID)
 	}
 }
 
@@ -204,7 +204,7 @@ func (server *Server) AddHost(Hostname string, Port int, ID string) (*Host, erro
 	server.Members[ID] = NewHost(Hostname, Port, ID, addr)
 	log.Warn("NODE JOIN:", server.Members[ID].Signature)
 
-	server.notifyJoin(common.GetNodeByAddress(Hostname, Port))
+	server.notifyJoin(common.GetNodeByAddress(Hostname, Port), ID)
 
 	return server.Members[ID], nil
 }
@@ -367,7 +367,7 @@ func (s *Server) processRow(tokens []string) {
 	// failure detected through peer
 	if state == common.NODE_FAILED {
 		log.Warn("NODE FAILED: ", host, ":", port)
-		go s.notifyLeave(common.GetNodeByAddress(host, port))
+		go s.notifyLeave(common.GetNodeByAddress(host, port), found.ID)
 	}
 
 	// higher count overrides alive or suspected state
@@ -481,7 +481,7 @@ func (s *Server) HandleTimeout(e timer.TimerEvent) {
 		if s.Protocol == common.GOSSIP_PROTOCOL {
 			log.Warn("FAILURE DETECTED:", host.Signature)
 			host.State = common.NODE_FAILED
-			go s.notifyLeave(common.GetNodeByAddress(host.Hostname, host.Port))
+			go s.notifyLeave(common.GetNodeByAddress(host.Hostname, host.Port), host.ID)
 		} else {
 			log.Warn("FAILURE SUSPECTED:", host.Signature)
 			host.State = common.NODE_SUSPECTED
@@ -491,7 +491,7 @@ func (s *Server) HandleTimeout(e timer.TimerEvent) {
 		log.Warn("FAILURE DETECTED:", host.Signature)
 		host.State = common.NODE_FAILED
 		s.RestartTimer(e.ID, host.State)
-		go s.notifyLeave(common.GetNodeByAddress(host.Hostname, host.Port))
+		go s.notifyLeave(common.GetNodeByAddress(host.Hostname, host.Port), host.ID)
 	} else if host.State == common.NODE_FAILED {
 		// go s.notifyLeave(common.GetNodeByAddress(host.Hostname, host.Port))
 		log.Warn("Deleting node from membership list...", host.Signature)

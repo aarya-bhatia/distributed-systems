@@ -131,7 +131,7 @@ func (server *Leader) removeWorker(workerID int) {
 }
 
 // Callback for node join
-func (server *Leader) HandleNodeJoin(node *common.Node) {
+func (server *Leader) HandleNodeJoin(node *common.Node, memberID string) {
 	if node == nil {
 		return
 	}
@@ -151,7 +151,7 @@ func (server *Leader) HandleNodeJoin(node *common.Node) {
 }
 
 // Callback for node failure
-func (server *Leader) HandleNodeLeave(node *common.Node) {
+func (server *Leader) HandleNodeLeave(node *common.Node, memberID string) {
 	if node == nil {
 		return
 	}

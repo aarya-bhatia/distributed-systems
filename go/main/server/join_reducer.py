@@ -6,9 +6,7 @@ import sys
 
 # User args:
 # arg 2: file1
-# arg 3: column1
-# arg 4: file2
-# arg 5: column2
+# arg 3: file2
 
 if __name__ == "__main__":
     if len(sys.argv) < 4:

@@ -9,8 +9,8 @@ import (
 )
 
 type Notifier interface {
-	HandleNodeJoin(node *Node)
-	HandleNodeLeave(node *Node)
+	HandleNodeJoin(node *Node, memberID string)
+	HandleNodeLeave(node *Node, memberID string)
 }
 
 func RandomChoice[T comparable](arr []T) T {
