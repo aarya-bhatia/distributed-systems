@@ -18,7 +18,7 @@
 To start each server manually on VMs:
 
 ```
-cd ./go/main/filesystem/server
+cd go/main/server
 go run .
 ```
 
@@ -29,47 +29,58 @@ cd go/shell
 ./stopall.sh
 ```
 
-## Tail all log files on VMs
-
-```
-cd go/shell
-./watch.sh
-```
-
-**NOTE**: To restart server, please run stop first.
-
 ## Run locally
 
 ```
-cd ./go/main/filesystem/server
+cd ./go/main/server
 go run . <ID>
 ```
 
 Notes:
 
-- Id can be any number from 1 to 10
-- Id 1 is the introducer
-- Introducer must be alive for new nodes to join
+- ID can be any number from 1 to 10
 - You can run commands on *stdin* (type "help")
+- Introducer must be alive for new nodes to join
+
+## Start Introducer
+
+- Development
+
+```
+cd go/main/failuredetector
+go run . localhost 34000
+```
+
+- Production: Login to vm1 and run the following:
+
+```
+cd go/main/failuredetector
+go run . $(hostname) 34000
+```
 
 ## Client
 
 ```
-cd go/main/filesystem/client
+cd go/main/client
 go run . <server_id> <command> <args>...
 
 ```
 
 ## Client Commands
 
-- list file replicas: `ls <file>`
-- download file from sdfs to disk: `get <remote> <local>`
-- upload file from disk to sdfs: `put <local> <remote>`
-- delete file from sdfs: `delete <remote>`
-
-## Config
-
-Config parameters can be changed in [here](./go/common/config.go)
+- to print usage: Run without any args
+- To list file replicas: `ls <file>`
+- To download file from sdfs to disk: `get <remote> <local>`
+- To upload file from disk to sdfs: `put <local> <remote>`
+- To delete file from sdfs: `delete <remote>`
+- To append file: `append <local> <remote>`
+- To concatenate files in directory (prefix): `cat <prefix> <output>`
+- To list files in directory: `lsdir <directory>`
+- To remove directory: `rmdir <directory>`
+- To list all files: `lsdir /`
+- To delete all files: `rmdir /`
+- Run map command (see usage): `maple ...`
+- Run reduce command (see usage): `juice ...`
 
 ## Server Commands
 
@@ -85,3 +96,8 @@ These commands can be sent by stdin to SDFS servers.
 - `leader`: Print leader node
 - `files`: Print file metadata
 - `queue`: Print file queues status
+
+## Config
+
+Config parameters can be changed in [here](./go/common/config.go)
+
