@@ -26,20 +26,20 @@ func (s *Server) rebalance() {
 	for _, file := range s.GetFiles() {
 		metadata := FileMetadata{}
 		s.GetFileMetadata(&file.Filename, &metadata)
-		// TODO: Delete extra replicas
 
 		for _, block := range metadata.Blocks {
-			expectedReplicas := GetReplicaNodes(aliveNodes, block.Block, common.REPLICA_FACTOR)
-			// log.Printf("Block %s: current replicas: %v, expected replicas: %v", block.Block, block.Replicas, expectedReplicas)
-			// get the replicas missing this block
-			pendingReplicas := common.Subtract(expectedReplicas, block.Replicas)
-			for _, replica := range pendingReplicas {
+			if len(block.Replicas) >= common.REPLICA_FACTOR {
+				continue
+			}
+
+			nonReplicas := common.Subtract(aliveNodes, block.Replicas)
+			newReplicas := GetReplicaNodes(nonReplicas, block.Block, common.REPLICA_FACTOR-len(block.Replicas))
+
+			for _, replica := range newReplicas {
 				replicaTasks[replica] = append(replicaTasks[replica], block)
 			}
 		}
 	}
-
-	// delete(replicaTasks, s.ID)
 
 	for replica, tasks := range replicaTasks {
 		log.Infof("To replicate %d blocks at node %d", len(tasks), replica)
