@@ -1,0 +1,15 @@
+<juice,n:1,exe:maplejuice_exe/filter_reducer.py,input:prefix,output:output>,0.301414,true
+<juice,n:1,exe:maplejuice_exe/filter_reducer.py,input:prefix,output:output>,0.301965,true
+<juice,n:1,exe:maplejuice_exe/filter_reducer.py,input:prefix,output:output>,0.307745,true
+
+<juice,n:1,exe:maplejuice_exe/filter_reducer.py,input:prefix,output:output>,0.319496,true
+<juice,n:1,exe:maplejuice_exe/filter_reducer.py,input:prefix,output:output>,0.326285,true
+<juice,n:1,exe:maplejuice_exe/filter_reducer.py,input:prefix,output:output>,5.339857,true
+
+<maple,n:4,exe:maplejuice_exe/filter_mapper.py,input:data/traffic.csv,output:prefix>,0.314609,true
+<maple,n:4,exe:maplejuice_exe/filter_mapper.py,input:data/traffic.csv,output:prefix>,0.373076,true
+<maple,n:4,exe:maplejuice_exe/filter_mapper.py,input:data/traffic.csv,output:prefix>,0.379344,true
+
+<maple,n:4,exe:maplejuice_exe/filter_mapper.py,input:data/traffic.csv,output:prefix>,0.541314,true
+<maple,n:4,exe:maplejuice_exe/filter_mapper.py,input:data/traffic.csv,output:prefix>,5.371497,true
+<maple,n:4,exe:maplejuice_exe/filter_mapper.py,input:data/traffic.csv,output:prefix>,5.379579,true
