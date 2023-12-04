@@ -10,4 +10,7 @@ if __name__ == "__main__":
     key = sys.argv[1]
 
     for line in sys.stdin:
+        line = line.strip()
+        if len(line) == 0:
+            continue
         print(f"{key}:{line}")

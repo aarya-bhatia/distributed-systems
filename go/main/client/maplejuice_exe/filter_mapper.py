@@ -14,5 +14,7 @@ if __name__ == "__main__":
 
     for line in sys.stdin:
         line = line.strip()
+        if len(line) == 0:
+            continue
         if re.search(reg, line, re.IGNORECASE) != None:
             print(f"{filename}:{line}")
