@@ -2,11 +2,12 @@
 # map <output> <input>
 # juice <input> <output>
 
-param=Fiber
-
-if [ ! -z $1 ]; then
-	param=$1
+if [[ $# -lt 1 ]]; then
+	echo "Usage: $0 interconne"
+	exit 1
 fi
+
+param="$1"
 
 map_exe1=maplejuice_exe/demo_map1
 map_exe2=maplejuice_exe/demo_map2
@@ -24,7 +25,7 @@ echo "uploading input file..."
 go run . 1 put $filename $filename
 
 echo "sending map job 1 (input=traffic, output=prefix1)"
-go run . 1 maple ${map_exe1} 1 prefix1 ${filename} ${param}
+go run . 1 maple ${map_exe1} 1 prefix1 ${filename} "${param}"
 
 echo "sending reduce job 1 (input=prefix1, output=output1)"
 go run . 1 juice ${reduce_exe1} 1 prefix1 output1

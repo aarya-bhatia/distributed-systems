@@ -16,7 +16,13 @@ if __name__ == "__main__":
         if len(line) == 0:
             continue
         tokens = line.split(",")
-        detection = tokens[9].strip()
-        interconn = tokens[10].strip()
+        detection = tokens[9]
+        interconn = tokens[10]
+
+        if detection == "":
+            detection = "NULL"
+        elif detection == " ":
+            detection = "SPACE"
+
         if interconn.lower() == param.lower():
             print(f"{detection}:1")
